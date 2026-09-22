@@ -3044,6 +3044,48 @@ both the documented pre-existing pair (`menus-contract` needs `rg`; the
 **packaged-run receipts** — one image pasted in the agent composer arriving in the OMP
 turn, `/` completing a real skill, and a compaction run from the UI.
 
+### One window-chrome policy and the bundle status bar (2026-09-22)
+
+Closes §10 item 55 (half in the desktop checkout, half in the bundle).
+
+**Desktop half — the base already shares the policy, so the work was proving it.**
+Both windows are one `CodeWindow` class (`windowImpl.ts:784` the only
+`new BrowserWindow`); title-bar policy is the shared `defaultBrowserWindowOptions`
+in `windows.ts:210-215` (`titleBarStyle: hidden` whenever the setting is not native —
+no per-window branch); zoom defaults are shared (`zoomLevelToZoomFactor` on the same
+window settings); menus are the global `Menubar` service (`menubar.ts`) fed by each
+focused renderer — the sessions renderer registers the base's own sessions menu set
+(`sessions/browser/parts/menubar.contribution.ts`: File/Edit/Selection/View/Go/Terminal/Help/Preferences)
+through `NativeMenubarControl`, so patch `0002`'s retirement stays correct and **no
+per-window menu-hiding patch remains alive**. Patch surgery per §6.1: the live
+checkout's three chrome patches were diffed hunk-by-hunk against `0056`/`0057`/`0058`
+and each live hunk maps 1:1 (0056 bridge + URL fork + single-window reuse; 0057
+navigation owner; 0058 zoom handlers + traffic-light geometry) — no orphan drift, no
+re-cut needed. `desktop-patch-set.test.ts` passes against the live tree (byte-identical
+mirror), so "shared zoom behaviour and menu source by construction" is already true
+and stays pinned.
+
+**Bundle half — the status bar is new.** `components/cediaStatusBar.tsx` (Cedia-owned,
+recorded in `upstream.json` adaptations) reads the focused thread through the vendor
+store selectors and paints host · model · session · branch on the shared
+`statusBar.*` tokens — model via `resolveThreadModelSummary` (same label the sidebar
+hover card shows), session from the adapter's `sessionStatus` projection
+(error/connecting honest), branch from the thread, host `live` (the bridge is
+installed or the route tree would not render). `_chat.tsx` mounts it at the foot of
+the content column under every route; hidden in the IDE dock (the IDE owns its own
+bar) and null without a thread. Deviation recorded: no new main-process chrome
+module was created — the policy the item asked to extract is already one shared
+code path in the base, so a Cedia module would have been a second owner of the
+same decision.
+
+Receipt: root + vendor `tsc` clean; agent-window `bun test test/` **82 pass / 0 fail**
+(6 new status-bar value cases in `test/cedia-status-bar.test.ts` incl. the
+`statusBar.*` token contract); `vite build` clean; `desktop-patch-set.test.ts` green;
+root suite 969 pass / 2 fail — both the documented pre-existing pair; `ci-validate`
+CI-OK. Still owed per plan: the **measured-on-screen receipt** — the agent status
+bar photographed with live values in a packaged run (rides the next `package:mac`
+with items 54/60/61/62).
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

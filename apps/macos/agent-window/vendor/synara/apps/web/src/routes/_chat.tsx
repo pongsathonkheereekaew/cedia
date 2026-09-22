@@ -10,6 +10,7 @@ import {
 } from "../appNavigation";
 import ShortcutsDialog from "../components/ShortcutsDialog";
 import { RecentViewSwitcher } from "../components/RecentViewSwitcher";
+import { CediaStatusBar } from "../components/cediaStatusBar";
 import { shouldRenderTerminalWorkspace } from "../components/ChatView.logic";
 import ThreadSidebar from "../components/Sidebar";
 import {
@@ -682,13 +683,18 @@ function ChatRouteLayout() {
       // glass window; in Cedia's opaque window any pixel it leaves uncovered paints
       // black, which flashed on every sidebar close in light mode. Opaque in light,
       // glass in dark. (Cedia addition.)
+      // Cedia §10 item 55: the bundle-drawn status bar lives at the foot of this
+      // column so it spans the content width under every route; hidden in the IDE
       className={resolvedTheme === "dark" ? "bg-[var(--app-shell-background)]" : "bg-background"}
       data-sidebar-side="left"
     >
       <ThreadRetentionMaintenanceToast />
       <ChatRouteGlobalShortcuts />
       {sidebarElement}
-      {mainContentShell}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {mainContentShell}
+        {isIdeEmbedded ? null : <CediaStatusBar />}
+      </div>
       {isElectron && !isIdeEmbedded ? shellNavigationControls : null}
     </SidebarProvider>
   );
