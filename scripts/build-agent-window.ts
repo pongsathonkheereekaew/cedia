@@ -34,7 +34,11 @@ await run("bun", ["run", "build"], agentWindowRoot);
 
 await mkdir(outputRoot, { recursive: true });
 const bridgeResult = await Bun.build({
-  entrypoints: [path.join(repoRoot, "apps/macos/src/agent-window-main.ts")],
+  // The Electron-main half only. Bundling `agent-window-main.ts` here would pull
+  // the shared gateway into an entrypoint that does not need it; bundling it into
+  // the *extension* (which `apps/macos/src/extension.ts` does through
+  // `agent-ide-webview.ts`) is what this split exists to prevent.
+  entrypoints: [path.join(repoRoot, "apps/macos/src/agent-window-bridge.ts")],
   outdir: outputRoot,
   naming: "main.cjs",
   target: "node",

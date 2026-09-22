@@ -3793,6 +3793,46 @@ suite **87 pass / 0 fail**; `apps/macos` **702 tests / 2 fail** — `menus-contr
 root `tsc --noEmit` unchanged (10 pre-existing errors); `ci-validate` CI-OK;
 `upstream.json` records the deviation.
 
+### `package:mac` builds again: the Electron half left the extension bundle (2026-09-23)
+
+Not a §10 item — a build break found by running the packaged path, and fixed
+because every owed packaged receipt depended on it. `bun run package:mac` failed
+at the extension bundle:
+
+```
+error: Could not resolve: "electron"
+    at apps/macos/src/agent-window-main.ts:240:34
+```
+
+**Cause.** `apps/macos/src/extension.ts` imports `agent-ide-webview.ts`, which
+imports `createAgentWindowHandler` from `agent-window-main.ts` — and that module
+also held `registerCediaAgentWindowBridge`, the Electron-main half, with a
+runtime `require("electron")` inside it. The extension bundle therefore carried a
+require that can never resolve there (`external: ["vscode"]` only), while the
+main-process bundle (`scripts/build-agent-window.ts`) had it right all along with
+`external: ["electron"]`.
+
+**Fix.** The Electron half moved to `apps/macos/src/agent-window-bridge.ts`
+(the registration entrypoint plus the theme publisher that needs
+`app.getPath("userData")` and `nativeTheme`), and
+`scripts/build-agent-window.ts` bundles *that* as `main.cjs` — the filename and
+the `registerCediaAgentWindowBridge` export the patched desktop main process
+requires are unchanged (patch `0056`). `agent-window-main.ts` is now the shared,
+Electron-free handler/gateway both the extension and the bridge import.
+
+Also from the same pass: `HostMethod`, `GatewayOptions` and `HandlerOptions` are
+exported instead of restated by callers (the temporary-thread receipt test needed
+the method union), and `agent-ide-webview.ts` builds the git service with the
+client accessor the git workstream introduced.
+
+Receipt: `bun run package:mac` → `EXIT=0`, `Stamped packaged product.json: cedia
+patch set ef27a10163b7 (15 patches)`, `Prepared local ad-hoc signed app (not
+notarized)`; `bun run check:packaged` → every digest `OK` including `packaged
+Cedia.app matches the current patch set`; `node -e "require('./dist/agent-window/main.cjs')"`
+→ exports `registerCediaAgentWindowBridge` (a function); root `tsc --noEmit`
+unchanged at the 10 pre-existing errors; agent-window `86 → 87` tests, `apps/macos`
+702 tests with only the two known failures; host 156 pass.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.
