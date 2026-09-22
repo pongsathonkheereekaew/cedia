@@ -710,26 +710,6 @@ describe("ide-native workbench surface", () => {
 		expect(stubState.config.get("workbench.activityBar.location")).not.toBe("hidden");
 		expect(stubState.config.get("workbench.statusBar.visible")).not.toBe(false);
 	});
-	it("places the customization entry points in the Agents sidebar, not the composer", async () => {
-		// Section 3 of the plan lists `Customize` in the Agents sidebar. The base
-		// already carries the switch between the two real placements, so Cedia flips
-		// that default instead of adding a second entry point. This is the one
-		// Cedia patch that touches src/vs/workbench/**; every consumer of the setting
-		// lives under src/vs/sessions/**, so the IDE window is not affected.
-		const fileName = "0019-cedia-customize-in-sidebar.patch";
-		const patchText = readFileSync(join(import.meta.dir, "..", "..", "..", "patches", "desktop", fileName), "utf8");
-		expect(patchText).toContain("[ChatConfiguration.CustomizationEntryPoints]: {");
-		expect(patchText).toContain(`-			default: product.quality !== 'stable',`);
-		expect(patchText).toContain("+			default: false,");
-		// Exactly one file, and it is the settings registry.
-		expect(patchText.match(/^diff --git /gm)?.length).toBe(1);
-		expect(patchText).toContain("chat.shared.contribution.ts");
-
-		const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "..", "patches", "desktop", "manifest.json"), "utf8")) as { patches: { file: string; sha256: string }[] };
-		const entry = manifest.patches.find(item => item.file === fileName);
-		expect(entry).toBeTruthy();
-		expect(createHash("sha256").update(patchText).digest("hex")).toBe(entry!.sha256);
-	});
 	it("only enables proposed APIs that the pinned product.json allows", async () => {
 		// VS Code disables an extension outright when it declares a proposal the
 		// product does not allow, so the two declarations are pinned together.
@@ -756,33 +736,6 @@ describe("ide-native workbench surface", () => {
 		const registry = readFileSync(join(import.meta.dir, "..", "src", "task-commands.ts"), "utf8");
 		expect(registry).toContain(`{ id: "cedia.session.delete"`);
 		expect(registry).toContain("provider.deleteChatSessions(hint)");
-	});
-	it("keeps the Copilot-flavoured composer controls out of the Agents window", async () => {
-		// Three plan chrome decisions: the tool picker, the permission picker and the
-		// "Configure Custom Agents..." entry all describe Copilot-chat behaviour, and this
-		// window runs on OMP. Each is scoped out with the sessions-window context key, so the
-		// IDE window keeps it.
-		const root = join(import.meta.dir, "..", "..", "..");
-		const patchText = readFileSync(join(root, "patches", "desktop", "0033-cedia-agents-no-copilot-composer-controls.patch"), "utf8");
-		// Hunk 1 (the permission-picker gate in chatExecuteActions.ts) retired with
-		// item 56: the base carries that exact gate upstream now, so the patch no
-		// longer touches the file. The tool-picker and custom-agents gates stay.
-		for (const needle of [
-			"chatToolActions.ts",
-			"chatModeActions.ts",
-			"Cedia: this configures the base's tool set",
-			"Cedia: custom agents are a Copilot-chat concept",
-		]) {
-			expect(patchText).toContain(needle);
-		}
-		expect(patchText).not.toContain("chatExecuteActions.ts");
-		expect(patchText.match(/^\+.*IsSessionsWindowContext\.toNegated\(\)/gm)?.length).toBe(3);
-		expect(patchText).not.toContain("src/vs/sessions/");
-
-		const manifest = JSON.parse(readFileSync(join(root, "patches", "desktop", "manifest.json"), "utf8")) as { patches: { file: string; sha256: string }[] };
-		const entry = manifest.patches.find(item => item.file === "0033-cedia-agents-no-copilot-composer-controls.patch");
-		expect(entry).toBeTruthy();
-		expect(createHash("sha256").update(patchText).digest("hex")).toBe(entry!.sha256);
 	});
 	it("does not start the base Agent Host in the Agents window", async () => {
 		// The Agent Host utility process hosts the Copilot/Claude/Codex harnesses, and
@@ -1095,25 +1048,6 @@ describe("ide-native workbench surface", () => {
 		await stubState.commands.get("cedia.keepAgentEdit")!();
 		expect(invalidations).toBe(2);
 		expect(lensProvider.provideCodeLenses(editor.document)).toEqual([]);
-	});
-	it("names the Agents window's add-tab control the way the reference does", () => {
-		// The reference's `+` in the Agents window reads "Open new tab menu" (its own aria-label
-		// in the glass bundle). The base hardcoded "Add Tab" for both windows, so the patch has
-		// to branch on the sessions-window context and keep the base wording for the IDE.
-		const fileName = "0027-cedia-agents-open-new-tab-menu.patch";
-		const patchText = readFileSync(join(import.meta.dir, "..", "..", "..", "patches", "desktop", fileName), "utf8");
-		expect(patchText).toContain(`localize('cedia.openNewTabMenu', "Open new tab menu")`);
-		expect(patchText).toContain("IsSessionsWindowContext.getValue(this.contextKeyService)");
-		// The IDE branch survives: the base wording is still there for that window.
-		expect(patchText).toContain(`localize('addTab', "Add Tab")`);
-		// One of the few Cedia patches that reaches into src/vs/workbench/**, which is only safe
-		// because every decision is guarded by the sessions-window context key.
-		expect(patchText).toContain("a/src/vs/workbench/browser/parts/editor/editorTabsControl.ts");
-
-		const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "..", "patches", "desktop", "manifest.json"), "utf8")) as { patches: { file: string; sha256: string }[] };
-		const entry = manifest.patches.find(item => item.file === fileName);
-		expect(entry).toBeTruthy();
-		expect(createHash("sha256").update(patchText).digest("hex")).toBe(entry!.sha256);
 	});
 	it("retires no patch by leaving a stale file behind", () => {
 		// The Apps-panel browser-visibility fix could not ship as its own later patch:

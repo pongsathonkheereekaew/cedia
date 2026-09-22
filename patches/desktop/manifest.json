@@ -30,24 +30,8 @@
       "sha256": "40080292f1aec4533e33a500c7e9661204317fecf5d41830f8a493f7c243198a"
     },
     {
-      "file": "0019-cedia-customize-in-sidebar.patch",
-      "sha256": "3d7bd1af74a7be6844595a52f7c1f922d839a1a78836441c923372c9ba34caf1"
-    },
-    {
-      "file": "0027-cedia-agents-open-new-tab-menu.patch",
-      "sha256": "f50b072ee3c7e24042e3a3cd4ea2e19843ad8ce1248511d8e0ba9d6066557445"
-    },
-    {
-      "file": "0028-cedia-inline-react-in-client-bundles.patch",
-      "sha256": "9173233ec9a78614b2acef54ca20d9f4154db681231aa7386cb9625a18db6573"
-    },
-    {
       "file": "0032-cedia-no-base-agent-host.patch",
       "sha256": "8790cee9917ed9563b985cfbe07ca9d33e04b0918bf98397bb52d66c1bbdf3a7"
-    },
-    {
-      "file": "0033-cedia-agents-no-copilot-composer-controls.patch",
-      "sha256": "25241ed4ecdb62240dee946c96dc5c9da9023b30a584c626ddb194ac452b33e3"
     },
     {
       "file": "0034-cedia-drop-agent-workbench-shell.patch",
