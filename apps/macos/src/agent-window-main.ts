@@ -14,7 +14,8 @@ import { startAgentThemePublisher } from "./agent-window-theme-publisher.ts";
 import { AGENTS_WINDOW_WORKSPACE } from "./workbench-mode.ts";
 import { defaultKeybindingsFile, readKeybindingsFile, writeKeybindingRule } from "./agent-window-keybindings.ts";
 
-export const AGENT_WINDOW_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL } from "./bridge-contract.ts";
+export { AGENT_WINDOW_CHANNEL };
 type HostMethod = "GET" | "POST" | "PATCH" | "DELETE";
 export interface IdeTarget { cwd: string; path?: string; line?: number }
 interface HandlerOptions {

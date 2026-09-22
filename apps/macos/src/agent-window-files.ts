@@ -574,7 +574,14 @@ export function createAgentFilesService(): AgentFilesService {
 				case "projects.searchLocalEntries": return searchLocalEntries(input);
 				case "projects.searchContent": return searchContent(input);
 				case "projects.readFile": return readFileContents(input);
-				case "projects.writeFile": return writeFileContents(input);
+				case "projects.writeFile": {
+					// Item 63d: workspace writes go through OMP turns and the guarded
+					// editor bridge only. The bundle's direct file-write surface
+					// (plan downloads, task toggles, editor saves) has no guard to
+					// check against here, so it stays unavailable until a guarded
+					// path exists for it — never a silent write.
+					throw new AgentFilesError("Workspace writes are applied through OMP turns and the guarded editor bridge.", "AGENT_FILES_WRITE_GUARD");
+				}
 				case "filesystem.browse": return browseFilesystem(input);
 				case "projects.subscribeFileChange": return subscribe(event, input);
 				case "projects.unsubscribeFileChange": {

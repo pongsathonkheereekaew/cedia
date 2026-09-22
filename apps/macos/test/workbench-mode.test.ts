@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { AGENTS_EDITOR_SHOW_TABS, AGENTS_WINDOW_SUPPORT_SETTING, allThemeProvidingExtensionIds, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, isCediaAgentsWindow, isCopilotAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, themeProvidingExtensionIds } from "../src/workbench-mode.ts";
 import { createInitialTaskState, reduceTaskState } from "../src/state.ts";
-import { parseWebviewMessage } from "../src/messages.ts";
 import type { Project, Session } from "../../../packages/protocol/src/index.ts";
 
 const project = (id: string): Project => ({ id, name: id, path: `/${id}`, archived: false, pinned: false, createdAt: "now" });
@@ -181,14 +180,6 @@ describe("Agent ↔ IDE workbench mode", () => {
 		expect(normalizeIdeLayout({ statusBarVisible: false }, { ...DEFAULT_IDE_LAYOUT, statusBarVisible: false }).statusBarVisible).toBe(false);
 	});
 
-	it("accepts only agents/ide mode messages", () => {
-		expect(parseWebviewMessage({ type: "set_workbench_mode", mode: "ide" })).toEqual({ type: "set_workbench_mode", mode: "ide" });
-		expect(parseWebviewMessage({ type: "set_workbench_mode", mode: "cloud" })).toBeUndefined();
-		expect(parseWebviewMessage({ type: "persist_draft", draft: "keep" })).toEqual({ type: "persist_draft", draft: "keep" });
-		expect(parseWebviewMessage({ type: "persist_scroll", offset: 120, followLatest: false, eventId: "evt-1" })).toEqual({
-			type: "persist_scroll", offset: 120, followLatest: false, eventId: "evt-1",
-		});
-	});
 	it("keeps applying chrome commands after one rejects", async () => {
 		const ran: string[] = [];
 		await runWorkbenchCommands(async (command) => {

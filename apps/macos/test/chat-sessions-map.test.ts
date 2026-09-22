@@ -506,6 +506,13 @@ describe("OMP model catalog projection (fixtures only)", () => {
 		// Without a provider the id stays ambiguous, exactly as before.
 		expect(projectOmpModelSnapshot(models, "deepseek/deepseek-v4.1-flash").selectedModelProvider).toBeUndefined();
 	});
+	it("feeds the guarded send from get_state (item 63c)", () => {
+		// The guard reads `selectedModel`; production never set it, so the refusal
+		// reached zero views. `refreshOmpState` now feeds it from the same answer
+		// that owns the runtime model — this pins the reader side of that feed.
+		expect(currentModelFromOmpState({ data: { model: { id: "probe-model", provider: "probe" } } })?.id).toBe("probe-model");
+		expect(currentModelFromOmpState({ data: {} })).toBeUndefined();
+	});
 
 	it("keeps every provider's row when a model id is advertised more than once", () => {
 		// Live 2026-09-18: the catalogue advertises ids like `gpt-5.6-luna` from more than one

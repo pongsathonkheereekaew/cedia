@@ -10,7 +10,7 @@ import type {
 	ThreadBrowserState,
 } from "@synara/contracts";
 
-const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 const BROWSER_STATE_CHANNEL = "vscode:cediaAgentBrowser";
 const BROWSER_COPY_LINK_CHANNEL = "vscode:cediaAgentBrowserCopyLink";
 

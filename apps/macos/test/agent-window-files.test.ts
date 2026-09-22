@@ -39,29 +39,23 @@ describe("Cedia Agent files service", () => {
 		}
 	});
 
-	it("writes atomically and rejects a stale expected version", async () => {
+	it("refuses direct workspace writes: OMP turns and the guarded editor bridge own them (item 63d)", async () => {
 		const root = await fixture();
 		const service = createAgentFilesService();
 		try {
+			// Reads still work; only the write path is restricted.
 			const loaded = await service.handle({}, "projects.readFile", { cwd: root, relativePath: "src/hello.ts" }) as { version: string };
-			const saved = await service.handle({}, "projects.writeFile", {
+			expect(loaded.version).toMatch(/^sha256:[0-9a-f]{64}$/);
+			await expect(service.handle({}, "projects.writeFile", {
 				cwd: root,
 				relativePath: "src/hello.ts",
 				contents: "const hello = false;\n",
 				expectedVersion: loaded.version,
 				encoding: "utf8",
 				lineEnding: "lf",
-			}) as { version: string };
-			expect(saved.version).not.toBe(loaded.version);
-			expect(await readFile(join(root, "src", "hello.ts"), "utf8")).toBe("const hello = false;\n");
-			await expect(service.handle({}, "projects.writeFile", {
-				cwd: root,
-				relativePath: "src/hello.ts",
-				contents: "stale\n",
-				expectedVersion: loaded.version,
-				encoding: "utf8",
-				lineEnding: "lf",
-			})).rejects.toMatchObject({ code: "WORKSPACE_FILE_CONFLICT" });
+			})).rejects.toMatchObject({ code: "AGENT_FILES_WRITE_GUARD" });
+			// The file is untouched: no silent write happened.
+			expect(await readFile(join(root, "src", "hello.ts"), "utf8")).toBe("const hello = true;\n");
 		} finally {
 			service.dispose();
 			await rm(root, { recursive: true, force: true });
@@ -74,8 +68,7 @@ describe("Cedia Agent files service", () => {
 		const events: unknown[] = [];
 		try {
 			await service.handle({ sender: { send: (_channel: string, event: unknown) => events.push(event) } }, "projects.subscribeFileChange", { cwd: root, relativePath: "README.md" });
-			const loaded = await service.handle({}, "projects.readFile", { cwd: root, relativePath: "README.md" }) as { version: string };
-			await service.handle({}, "projects.writeFile", { cwd: root, relativePath: "README.md", contents: "", expectedVersion: loaded.version, encoding: "utf8", lineEnding: "lf" });
+			await writeFile(join(root, "README.md"), "");
 			expect(await readFile(join(root, "README.md"), "utf8")).toBe("");
 			await new Promise(resolve => setTimeout(resolve, 80));
 			events.length = 0;
@@ -109,7 +102,7 @@ describe("Cedia Agent files service", () => {
 				cwd: root,
 				relativePath: "secret.txt",
 				contents: "overwrite",
-			})).rejects.toThrow();
+			})).rejects.toMatchObject({ code: "AGENT_FILES_WRITE_GUARD" });
 		} finally {
 			service.dispose();
 			await rm(root, { recursive: true, force: true });

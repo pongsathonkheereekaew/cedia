@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -77,18 +77,12 @@ describe("executed command ids", () => {
  * extension neither parses nor handles is a button that does nothing: the
  * click posts, nothing throws, and the user sees no effect.
  */
+// Item 63a: the hand-drawn task shell (webview.ts) is deleted, so there is no
+// posted-message surface left to cover. The bundle talks to the extension
+// through the bridge contract instead (bridge-contract.test.ts asserts those
+// kind sets stay equal).
 describe("webview message coverage", () => {
-	const webviewSource = readFileSync(join(here, "../src/webview.ts"), "utf8");
-	const messagesSource = readFileSync(join(here, "../src/messages.ts"), "utf8");
-	const posted = new Set([...webviewSource.matchAll(/post\(\{\s*type:\s*'([a-z_]+)'/g)].map(match => match[1]!));
-	const handled = new Set([...extensionSource.matchAll(/case "([a-z_]+)":/g)].map(match => match[1]!));
-	const parsed = new Set([...messagesSource.matchAll(/case "([a-z_]+)":/g)].map(match => match[1]!));
-
-	it("posts messages the extension parses and handles", () => {
-		expect(posted.size).toBeGreaterThan(50);
-		const unparsed = [...posted].filter(type => !parsed.has(type));
-		const unhandled = [...posted].filter(type => !handled.has(type));
-		expect(unparsed).toEqual([]);
-		expect(unhandled).toEqual([]);
+	it("retired the task shell: no posted-message surface remains", () => {
+		expect(existsSync(join(here, "..", "src", "webview.ts"))).toBe(false);
 	});
 });

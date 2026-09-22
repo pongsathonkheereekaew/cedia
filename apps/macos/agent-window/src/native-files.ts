@@ -17,7 +17,7 @@ import type {
 	ProjectWriteFileResult,
 } from "../vendor/synara/packages/contracts/src/index.ts";
 
-const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 const CEDIA_FILES_EVENT_CHANNEL = "vscode:cediaAgentFiles";
 
 export interface NativeFilesBridge {

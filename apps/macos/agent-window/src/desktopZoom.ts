@@ -8,7 +8,8 @@
  */
 
 export const CEDIA_ZOOM_EVENT = "vscode:cediaZoomFactor";
-export const CEDIA_ZOOM_REQUEST = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL } from "../../src/bridge-contract.ts";
+export const CEDIA_ZOOM_REQUEST = AGENT_WINDOW_CHANNEL;
 
 export interface DesktopZoomIpc {
 	invoke(channel: string, input?: unknown): Promise<unknown>;

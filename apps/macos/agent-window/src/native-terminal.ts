@@ -10,7 +10,7 @@ import type {
 	TerminalWriteInput,
 } from "../vendor/synara/packages/contracts/src/terminal.ts";
 
-export const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 export const CEDIA_AGENT_TERMINAL_CHANNEL = "vscode:cediaAgentTerminal";
 
 export interface NativeTerminalBridge {

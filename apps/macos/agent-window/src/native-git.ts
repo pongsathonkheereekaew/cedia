@@ -1,7 +1,7 @@
 import type { NativeApi } from "../vendor/synara/packages/contracts/src/ipc.ts";
 import type { GitActionProgressEvent } from "../vendor/synara/packages/contracts/src/git.ts";
 
-export const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 export const CEDIA_AGENT_GIT_EVENT_CHANNEL = "vscode:cediaAgentGit";
 
 export interface NativeGitBridge {

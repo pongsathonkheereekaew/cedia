@@ -273,6 +273,14 @@ const appliedEditSummary = {
 };
 
 function lastSnapshotDraft(): string {
+	// Item 63a: the snapshot post is gone with the task shell — read the draft
+	// from the controller's live state instead of a posted message.
+	if (legacyController) {
+		try {
+			const state = (legacyController as { getStateForTest?: () => { draft?: string } }).getStateForTest?.();
+			if (typeof state?.draft === "string") return state.draft;
+		} catch { /* fall through to the posted-message scan */ }
+	}
 	for (const message of [...stubState.posted].reverse()) {
 		const value = message as { type?: string; state?: { draft?: string } };
 		if (value?.type === "snapshot" && typeof value.state?.draft === "string") return value.state.draft;
@@ -543,10 +551,12 @@ describe("ide-native workbench surface", () => {
 		await activateAndSettle();
 		resolveViews();
 		await stubState.commands.get("cedia.showDiff")!();
-		const latest = [...stubState.posted].reverse().find((message): message is { type: string; state: any } => (message as { type?: string }).type === "snapshot");
-		expect(latest).toBeDefined();
-		expect(latest!.state.workPanel.open).toBe(true);
-		expect(latest!.state.workPanel.activeTab).toBe("changes");
+		// Item 63a: the snapshot post is gone with the task shell — read the live
+		// work-panel state from the controller instead of a posted message.
+		const panel = (ensureLegacyController() as { getWorkPanelForTest?: () => { open: boolean; activeTab: string } }).getWorkPanelForTest?.();
+		expect(panel).toBeDefined();
+		expect(panel!.open).toBe(true);
+		expect(panel!.activeTab).toBe("changes");
 	});
 	it("refuses a review target outside the task workspace", async () => {
 		await activateAndSettle();
@@ -679,18 +689,13 @@ describe("ide-native workbench surface", () => {
 		// Archive and no Delete even though the host route existed. Both surfaces now go
 		// through the same extension path, and the dock's own item confirms first because
 		// the host delete removes the record and the transcript it wrote.
-		const shell = readFileSync(join(import.meta.dir, "..", "src", "webview.ts"), "utf8");
-		expect(shell).toContain(`['Delete', 'delete']`);
-		expect(shell).toContain(`else if (kind === 'delete') post({ type: 'delete_session', sessionId: sid });`);
-
-		const messages = readFileSync(join(import.meta.dir, "..", "src", "messages.ts"), "utf8");
-		expect(messages).toContain(`{ readonly type: "delete_session"; readonly sessionId?: string }`);
-		expect(messages).toContain(`case "delete_session": {`);
-
+		// Item 63a: the hand-drawn shell (webview.ts) and its message union are
+		// deleted;
+		// the Delete path lives on as the dock menu → deleteChatSessions route
+		// (the registered `cedia.session.delete` command, wired in activate()).
 		const extension = readFileSync(join(import.meta.dir, "..", "src", "extension.ts"), "utf8");
-		expect(extension).toContain(`case "delete_session": {`);
-		expect(extension).toContain("This action cannot be undone.");
-		expect(extension).toContain("await this.deleteChatSessions([session.id]);");
+		expect(extension).toContain(`vscode.commands.registerCommand("cedia.session.delete"`);
+		expect(extension).toContain("provider.deleteChatSessions(hint)");
 	});
 	it("keeps the Copilot-flavoured composer controls out of the Agents window", async () => {
 		// Three plan chrome decisions: the tool picker, the permission picker and the

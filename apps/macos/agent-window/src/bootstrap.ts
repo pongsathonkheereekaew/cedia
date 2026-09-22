@@ -8,6 +8,7 @@
  */
 
 import { createCediaDesktopBridge, createCediaNativeApi, type AgentWindowBridge } from "./cedia-adapter";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 import { CEDIA_ZOOM_REQUEST } from "./desktopZoom";
 import { openNativeAgentIntent } from "./native-handoff";
 import { installNativeDeviceFrameSource } from "./native-device";
@@ -88,7 +89,7 @@ async function boot(): Promise<void> {
 		}
 	};
 	window.addEventListener("keydown", onZoomShortcut, true);
-	const environment = await preload.ipcRenderer.invoke("vscode:cediaAgent", { kind: "bootstrap" }) as {
+	const environment = await preload.ipcRenderer.invoke(CEDIA_AGENT_CHANNEL, { kind: "bootstrap" }) as {
 		homeDir: string;
 		cwd?: string | null;
 		sessionId?: string;
@@ -106,7 +107,7 @@ async function boot(): Promise<void> {
 	const notifyActiveSession = (): void => {
 		const sessionId = decodeSessionIdFromHash(window.location.hash);
 		if (!sessionId) return;
-		void preload.ipcRenderer?.invoke("vscode:cediaAgent", { kind: "activeSession", sessionId }).catch(() => undefined);
+		void preload.ipcRenderer?.invoke(CEDIA_AGENT_CHANNEL, { kind: "activeSession", sessionId }).catch(() => undefined);
 	};
 	const onHashChange = (): void => {
 		notifyActiveSession();

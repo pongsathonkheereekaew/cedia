@@ -16,7 +16,7 @@ import { openNativeAgentIntent } from "./native-handoff";
 import { decodeSessionIdFromHash, openAgentsWindowFromIde } from "../vendor/synara/apps/web/src/ide-mode";
 import type { DesktopBridge, NativeApi } from "@synara/contracts";
 
-const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 const RESPONSE_TIMEOUT_MS = 60_000;
 
 interface VsCodeWebviewApi {

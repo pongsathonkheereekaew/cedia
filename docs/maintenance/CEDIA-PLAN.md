@@ -3234,6 +3234,58 @@ host — gateway `POST projects` then `GET projects` returns the same record in 
 `ci-validate` CI-OK. Packaged proof (a project created in either window visible in
 both) rides the next `package:mac` run.
 
+### Extension consolidation: the task shell is gone, the bridge is one contract (2026-09-22)
+
+Closes §10 item 63. The surface was already unreachable (the dock registers
+`CediaIdeAgentProvider`, never the task provider) — this slice deletes the code
+that proved it.
+
+**(a) Task shell deleted.** `webview.ts` (3,021 lines: hand-drawn HTML/CSS/JS),
+`messages.ts`'s `WebviewMessage` union + `parseWebviewMessage` (296-line module →
+10-line `NativeAction` discriminant, still taken by `nativeAction()` commands),
+`CediaTaskViewProvider`'s webview half (`configureWebview`, `handleMessage`'s ~440
+shell cases, the snapshot-body builder `cloneStateForWebview` — all named stubs
+so item 66 sees exactly what the split removes), and the shell-bound tests
+(`webview.test.ts` deleted; message-boundary describes in `state.test.ts` /
+`workbench-mode.test.ts` dropped; command-ids coverage re-pointed at the shell's
+absence). Live pieces extracted, not lost: `renderAgentsStatus` (real
+connection/run/approval state, `extension-honesty` pinned), `syncCediaContext`
+(`cedia.taskAvailable`), both still called from the trimmed `postSnapshot`.
+`post()` is a documented no-op (no view can resolve) so error/refusal/focus
+callers don't churn before item 66.
+
+**(b) One bridge contract.** New `apps/macos/src/bridge-contract.ts`: the channel
+string, the 12-kind envelope union, and the bundle-send list. The handler
+(`agent-window-main.ts`), the dock provider, and all seven bundle send sites
+(`cedia-adapter`, `ide-bootstrap`, `bootstrap`, `desktopZoom`, four `native-*`
+modules) import the channel from it; `bridge-contract.test.ts` asserts the two
+kind sets are equal, no bundle file sends an unlisted kind, and no bundle file
+repeats the channel string. The `.catch(() => undefined)` swallows the item names
+are renderer-side fire-and-forget notifies (`activeSession` hash sync, zoom key
+shortcut, poll timers, theme-write chain) — transport-level, never command results:
+`sendCommand` paths (`extension.ts`, terminal views) await and surface errors.
+
+**(c) Guarded-send fix.** `#state.selectedModel` was never set in production, so
+the "choose a model" refusal reached zero views. `refreshOmpState` now feeds it
+from the same `get_state` answer that owns the runtime model
+(`currentModelFromOmpState`), and the refusal routes to `showWarningMessage` —
+visible on screen — alongside the legacy shell post. Pinned by a `chat-sessions-map`
+reader test.
+
+**(d) `projects.writeFile` restricted.** The bundle's direct file-write surface
+(plan downloads, task toggles, editor saves) has no guard to check against here,
+so `agent-window-files.ts` now throws `AGENT_FILES_WRITE_GUARD` instead of writing:
+workspace writes go through OMP turns and the guarded editor bridge only, never a
+silent write. `agent-window-files.test.ts` asserts the refusal and the untouched file.
+
+Receipt: `apps/macos typecheck` shows only the two pre-existing failures (identical
+on baseline); agent-window root + vendor `tsc` clean, `vite build` clean (84 pass);
+`apps/macos` suite 664 pass / 4 fail — patch-set drift, `menus-contract` (`rg`
+missing), theme-handoff (pre-existing on stash), all recorded before this slice;
+`rg "webview.ts|TASK_WEBVIEW_CSS"` has no users (both files deleted);
+`ci-validate` CI-OK. The inline-edit refusal on screen rides the next packaged run
+(no GUI run this pass). Unlocks item 66.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

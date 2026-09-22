@@ -7,7 +7,7 @@ import type {
 import { decodeDeviceFrame } from '../vendor/synara/packages/shared/src/deviceFrame.ts';
 import type { AgentWindowBridge } from './cedia-adapter';
 
-export const CEDIA_AGENT_CHANNEL = 'vscode:cediaAgent';
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 export const CEDIA_AGENT_DEVICE_EVENT_CHANNEL = 'vscode:cediaAgentDevice';
 export const CEDIA_AGENT_DEVICE_FRAME_CHANNEL = 'vscode:cediaAgentDeviceFrames';
 

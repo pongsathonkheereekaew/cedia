@@ -29,7 +29,7 @@ import { createNativeDeviceApi } from "./native-device";
 import { createDesktopZoomController } from "./desktopZoom";
 import { createCediaContextMenuPresenter } from "./cedia-context-menu";
 
-export const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
+import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 /** UI-only value used until OMP reports a current model. Never sent to OMP. */
 export const OMP_UNRESOLVED_MODEL = "cedia:unresolved";
 

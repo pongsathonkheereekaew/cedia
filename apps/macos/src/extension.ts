@@ -16,13 +16,12 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { CediaHostClient, HostDescriptorError, HostHttpError, HostRequestTimeoutError } from "./api.ts";
-import { parseWebviewMessage, type NativeAction, type WebviewMessage } from "./messages.ts";
+import type { NativeAction } from "./messages.ts";
 import { createInitialTaskState, normalizeSlashCommands, parseCediaUiRequest, reduceTaskState, type LoginProviderOption, type ModelOption, type TaskState } from "./state.ts";
-import { createTaskWebviewHtml } from "./webview.ts";
 import { CediaIdeAgentProvider } from "./agent-ide-webview.ts";
 import { writeAgentThemeSnapshot } from "./agent-theme.ts";
 import { fetchGlobalOmpModelSnapshot, fetchOmpModelRoles } from "./omp-catalog.ts";
-import { modelRoleLabel, sessionIdFromUri, setModelRoleRequest } from "./chat-sessions-map.ts";
+import { currentModelFromOmpState, modelRoleLabel, sessionIdFromUri, setModelRoleRequest } from "./chat-sessions-map.ts";
 import { canAnswer } from "./approval-runtime.ts";
 import { approvalCanSubmit, approvalDisplayStatus } from "./approval-view.ts";
 import type { ArtifactReceipt } from "./artifact-transfer.ts";
@@ -197,262 +196,13 @@ class ConfiguredHostProcess {
 	}
 }
 
-function cloneStateForWebview(state: TaskState, extras: {
-	readonly attachments?: readonly Attachment[];
-	readonly review?: ReviewSnapshot;
-	readonly devices?: readonly { id: string; name: string; role: string; revokedAt?: string }[];
-	readonly devicesError?: string;
-	readonly lastHostSyncAt?: string;
-	readonly search?: SearchPaletteState;
-	readonly prefs?: ProductPrefs;
-	readonly terminals?: readonly { id: string; title: string; ended: boolean; truncated: boolean; text: string; kind?: "user" | "agent"; cwd?: string }[];
-	readonly artifacts?: readonly ArtifactReceipt[];
-	readonly artifactsError?: string;
-	readonly gitBranch?: string;
-	readonly markedUnread?: boolean;
-	readonly sidebarFilters?: SidebarFilters;
-	readonly lastSentDraft?: string;
-	readonly settingsRevision?: number;
-	readonly settingsDraft?: SettingsSectionDraft;
-	readonly settingsApplyError?: string;
-	readonly settingsResetPreview?: ResetOverridePreview;
-	readonly routeError?: RouteErrorPage;
-	readonly historyNote?: string;
-	readonly lastGoodByName?: Readonly<Record<string, ArtifactPreview>>;
-	readonly viewport?: { readonly width: number; readonly height: number };
-	readonly retention?: ReturnType<typeof retentionReceipt>;
-	readonly inlinePreview?: { readonly sha256: string; readonly dataUrl?: string; readonly text?: string; readonly kind: string };
-	readonly mentionContext?: { readonly hasSelection: boolean; readonly selectionPreview?: string };
-	readonly mentions?: readonly { readonly id: string; readonly kind: string; readonly label: string; readonly insert?: string; readonly enabled: boolean; readonly reason?: string; readonly action: string }[];
-	readonly settingsRows?: readonly { readonly id: string; readonly section: string; readonly label: string; readonly value: string; readonly source: string; readonly scope: string; readonly writable: boolean; readonly reason?: string }[];
-	readonly thinking?: ThinkingParams;
-	readonly hasParent?: boolean;
-	readonly parentSession?: string;
-	readonly olderPagesAdvertised?: boolean;
-	readonly olderPageCount?: number;
-	readonly ompPlan?: PlanProjection;
-	readonly queueCollapsed?: boolean;
-	readonly draftPersistOk?: boolean;
-	readonly branches?: readonly BranchHit[];
-	readonly draftBranchRef?: string;
-	readonly cediaVersion?: string;
-	readonly extensionVersion?: string;
-	readonly codeOssVersion?: string;
-	readonly welcome?: ReturnType<typeof projectsWelcomeModel>;
-	readonly userPtys?: ReturnType<typeof userPtyRows>;
-	readonly layout?: unknown;
-	readonly layoutPanes?: readonly PaneView[];
-	readonly layoutAxis?: "single" | "row" | "column";
-	readonly layoutRatio?: number;
-	readonly paneMaximized?: boolean;
-	readonly canMoveLeft?: boolean;
-	readonly canMoveRight?: boolean;
-	readonly canMoveUp?: boolean;
-	readonly canMoveDown?: boolean;
-	readonly layoutBoxes?: readonly { readonly viewId: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[];
-	readonly layoutSashes?: readonly { readonly orientation: "row" | "column"; readonly x: number; readonly y: number; readonly length: number; readonly thickness: 2; readonly firstViewId: string }[];
-	readonly browserBridge?: boolean;
-	readonly shortcutRows?: readonly { readonly id: string; readonly command: string; readonly title: string; readonly keybinding: string }[];
-	readonly scrollKey?: string;
-	readonly routeKind?: "projects" | "task";
-	readonly canRouteBack?: boolean;
-	readonly canRouteForward?: boolean;
-	readonly worktreeReceipt?: WorktreeReceipt;
-} = {}): unknown {
-	const clone = JSON.parse(JSON.stringify(state)) as Record<string, unknown>;
-	const attachments = extras.attachments ?? [];
-	const axes = composerAxesFromTask(state, attachmentCounts(attachments));
-	const connection = state.connection === "connecting" ? "reconnecting" : state.connection === "connected" || state.connection === "running" ? "online" : state.connection === "unknown" ? "offline" : "offline";
-	const mappedArtifacts = mapArtifactsForWebview(extras.artifacts ?? [], extras.lastGoodByName ?? {});
-	const sidebarFilters = extras.sidebarFilters ?? DEFAULT_SIDEBAR_FILTERS;
-	const projectedSessions = state.sessions.map(session => projectSessionFilterFields(session));
-	const visibleSessions = applySessionFilters(projectedSessions, sidebarFilters, {
-		drafts: state.drafts,
-		selectedSessionId: state.session?.id,
-	});
-	return {
-		...clone,
-		composer: resolveComposerControls(axes),
-		recovery: recoveryBanner({
-			connection,
-			draftSaved: extras.draftPersistOk === true,
-			outcomeUnknown: state.connection === "unknown" || Object.values(state.pendingCommands).some(command => command.status === "unknown"),
-			pendingApprovals: state.uiRequests.length,
-		}),
-		workTabs: [...WORK_PANEL_TABS],
-		visibleResources: visibleWorkResources(state.workPanel),
-		settingsSections: [...SETTINGS_SECTIONS],
-		catalog: ompSettingsCatalog({
-			models: state.models.map(model => ({ id: model.id, label: model.label, provider: model.provider, authenticated: model.available !== false })),
-			loginProviders: state.loginProviders,
-			browserBridge: false,
-			voice: false,
-			cloud: false,
-			automations: false,
-		}),
-		attachments,
-		uiRequests: state.uiRequests.map(item => {
-			const displayStatus = approvalDisplayStatus({
-				token: item.token,
-				requestId: item.request.id,
-				sessionId: item.sessionId,
-				incarnation: item.incarnation,
-				method: item.request.method,
-				cwd: item.cwd,
-				tool: item.tool,
-				target: item.target,
-				timeout: "timeout" in item.request ? item.request.timeout : undefined,
-				receivedAt: item.receivedAt,
-				status: item.status,
-			}, {
-				sessionId: state.session?.id,
-				incarnation: state.session?.incarnation,
-				connection: state.connection,
-			});
-			return {
-				...item,
-				displayStatus,
-				canSubmit: approvalCanSubmit(displayStatus, state.connection),
-			};
-		}),
-		review: (() => {
-			const review = extras.review ?? emptyReview(state.session?.cwd ?? state.project?.path ?? "");
-			return {
-				...review,
-				summary: reviewSummary(review.files, review.hunks),
-				workspaceLabel: reviewWorkspaceLabel(review.cwd, extras.gitBranch),
-				commit: reviewCommitPreview({
-					branch: extras.gitBranch,
-					files: review.files,
-				}),
-			};
-		})(),
-		plan: extras.ompPlan?.advertised === true
-			? { ...extras.ompPlan, subagentTree: buildSubagentTree(extras.ompPlan.subagents) }
-			: emptyPlan(),
-		devices: extras.devices ?? [],
-		devicesError: extras.devicesError,
-		lastHostSyncAt: extras.lastHostSyncAt,
-		// Provider marks for the dock's model picker (see provider-icons.ts): static data, so the
-		// webview never fetches an icon and never parses markup for one.
-		providerGlyphs: providerGlyphMap(),
-		hostReachable: state.connection === "connected" || state.connection === "running",
-		relayStatus: "unknown",
-		destinations: destinationOptions({
-			hasGit: Boolean(extras.gitBranch),
-			hostReachable: state.connection === "connected" || state.connection === "running",
-			relayStatus: "unknown",
-			projectName: state.project?.name,
-		}),
-		search: extras.search ?? emptySearchPalette(),
-		prefs: extras.prefs ?? DEFAULT_PRODUCT_PREFS,
-		terminals: extras.terminals ?? [],
-		artifacts: mappedArtifacts.artifacts,
-		artifactsError: extras.artifactsError,
-		gitBranch: extras.gitBranch,
-		branches: extras.branches ?? [],
-		draftBranchRef: extras.draftBranchRef,
-		about: aboutIdentity({
-			cediaVersion: extras.cediaVersion,
-			extensionVersion: extras.extensionVersion,
-			codeOssVersion: extras.codeOssVersion,
-			connection: state.connection,
-		}),
-		markedUnread: extras.markedUnread === true,
-		sidebarFilters,
-		visibleSessions,
-		filterChips: filterChips(sidebarFilters),
-		markAllRead: markAllAsReadScope(visibleSessions.length),
-		filterEmpty: filterEmptyCopy(state.sessions.length > 0, visibleSessions.length),
-		lastSentDraft: extras.lastSentDraft || "",
-		project: state.project ? { ...(clone.project as object), ...(extras.gitBranch ? { branch: extras.gitBranch } : {}) } : null,
-		headerMeta: taskHeaderMeta({
-			projectName: state.project?.name,
-			path: state.project?.path,
-			branch: extras.draftBranchRef || extras.gitBranch,
-			cwd: state.session?.cwd ?? state.project?.path,
-			parentSession: extras.hasParent ? extras.parentSession : undefined,
-		}),
-		a11ySummary: announceSummary({
-			connection: state.connection === "connecting" ? "reconnecting" : state.connection === "connected" || state.connection === "running" ? "online" : "offline",
-			run: a11yRun(state),
-		}),
-		settingsRevision: extras.settingsRevision ?? 0,
-		settingsDraft: extras.settingsDraft,
-		settingsApplyError: extras.settingsApplyError,
-		settingsResetPreview: extras.settingsResetPreview,
-		settingsSource: settingsSourcePath("global"),
-		settingsScope: extras.settingsDraft?.scope ?? "global",
-		olderPagesAdvertised: extras.olderPagesAdvertised === true,
-		olderPageCount: extras.olderPageCount ?? 0,
-		thinking: extras.thinking ?? emptyThinkingParams(),
-		historyNote: extras.historyNote,
-		routeError: extras.routeError,
-		motion: motionTokens(extras.prefs?.reduceMotion === true),
-		lastGoodPreview: mappedArtifacts.artifacts.find((item) => item.retainedLastGood)?.preview
-			?? mappedArtifacts.artifacts.find((item) => item.preview.viewer === "inline")?.preview,
-		welcome: extras.welcome ?? projectsWelcomeModel(),
-		userPtys: extras.userPtys ?? [],
-		userPtyOpenReason: newUserPtyPlan().reason,
-		userPtyFocusReason: focusUserPtyPlan().reason,
-		browserBridge: extras.browserBridge === true,
-		layout: extras.layout,
-		layoutPanes: extras.layoutPanes ?? [],
-		layoutAxis: extras.layoutAxis ?? "single",
-		layoutRatio: extras.layoutRatio ?? 1,
-		paneMaximized: extras.paneMaximized === true,
-		layoutBoxes: extras.layoutBoxes ?? [],
-		layoutSashes: extras.layoutSashes ?? [],
-		moreActions: moreMenuActions({
-			hasSession: Boolean(state.session),
-			pinned: state.session?.pinned,
-			archived: state.session?.archived,
-			recoveryRequired: state.session?.status === "recovery_required",
-			hasParent: extras.hasParent === true,
-			hasDraft: state.draft.trim().length > 0,
-			canSplitRight: canSplit({ direction: "right", availablePx: extras.viewport?.width ?? 1200, paneCount: extras.layoutPanes?.length ?? 1 }).ok,
-			canSplitDown: canSplit({ direction: "down", availablePx: extras.viewport?.height ?? 800, paneCount: extras.layoutPanes?.length ?? 1 }).ok,
-			paneCount: extras.layoutPanes?.length ?? 1,
-			paneMaximized: extras.paneMaximized === true,
-			canMoveLeft: extras.canMoveLeft === true,
-			canMoveRight: extras.canMoveRight === true,
-			canMoveUp: extras.canMoveUp === true,
-			canMoveDown: extras.canMoveDown === true,
-		}),
-		shellLayout: resolveShellLayout({
-			contentWidth: extras.viewport?.width ?? 1200,
-			contentHeight: extras.viewport?.height ?? 800,
-			preferredSidebarWidth: extras.prefs?.sidebarWidth ?? 260,
-			preferredPanelWidth: state.workPanel.preferredWidth,
-			preferredPanelHeight: state.workPanel.preferredHeight,
-			panelOpen: state.workPanel.open,
-			panelPosition: extras.prefs?.panelPosition ?? state.workPanel.position,
-		}),
-		retention: extras.retention,
-		diagnosticsPreview: redactedDiagnostics({
-			connection: state.connection,
-			sessionId: state.session?.id,
-			projectId: state.project?.id,
-			pending: Object.keys(state.pendingCommands).length,
-			approvals: state.uiRequests.length,
-			lastHostSyncAt: extras.lastHostSyncAt,
-			relayStatus: "unknown",
-		}),
-		inlinePreview: extras.inlinePreview,
-		mentionContext: extras.mentionContext ?? { hasSelection: false },
-		mentions: extras.mentions ?? [],
-		settingsRows: extras.settingsRows ?? [],
-		shortcutRows: extras.shortcutRows ?? [],
-		scrollKey: extras.scrollKey,
-		routeKind: extras.routeKind ?? "task",
-		canRouteBack: extras.canRouteBack === true,
-		canRouteForward: extras.canRouteForward === true,
-		sessions: projectedSessions,
-		worktreeReceipt: extras.worktreeReceipt ?? idleWorktreeReceipt(),
-		connectionBadge: state.connection === "running" ? "connected" : state.connection,
-		runStatus: a11yRun(state),
-		queueCollapsed: extras.queueCollapsed === true,
-	};
+// Item 63a: deleted with the hand-drawn task shell — the dock renders the shared
+// bundle through CediaIdeAgentProvider now. Kept as a named stub so item 66 can see
+// exactly what the split removes (no other callers remain).
+function cloneStateForWebview(_state: unknown, _extras: unknown = {}): unknown {
+	void _state;
+	void _extras;
+	throw new Error("Cedia task shell was removed (item 63a)");
 }
 
 function editorMentionContext(): { hasSelection: boolean; selectionPreview?: string } {
@@ -727,29 +477,23 @@ export class CediaTaskViewProvider {
 		}
 	}
 
-	resolveWebviewView(view: vscode.WebviewView): void {
-		this.#views.add(view);
-		view.onDidDispose(() => { this.#views.remove(view); }, undefined, this.#context.subscriptions);
-		this.configureWebview(view.webview);
-		if (this.#pendingComposerFocus.claim()) this.post({ type: "focus_composer" });
-		void this.refresh().catch(error => this.reportError(error));
+	/** Test hook: read live state without a snapshot post (item 63a removed it). */
+	getStateForTest(): { draft: string } {
+		return { draft: this.#state.draft };
 	}
 
-	private configureWebview(webview: vscode.Webview): void {
-		webview.options = {
-			enableScripts: true,
-			localResourceRoots: [this.#context.extensionUri],
-		};
-		webview.html = createTaskWebviewHtml(webview, extensionNonce());
-		webview.onDidReceiveMessage((value: unknown) => {
-			const message = parseWebviewMessage(value);
-			if (!message) {
-				this.reportError(new Error("Cedia ignored an invalid webview message"));
-				return;
-			}
-			void this.handleMessage(message).catch(error => this.reportError(error));
-		}, undefined, this.#context.subscriptions);
-		this.postSnapshot();
+	getWorkPanelForTest(): { open: boolean; activeTab: string } {
+		return { open: this.#state.workPanel.open, activeTab: this.#state.workPanel.activeTab };
+	}
+
+	resolveWebviewView(view: vscode.WebviewView): void {
+		// Item 63a: the hand-drawn task shell is deleted — the dock renders the
+		// shared bundle through CediaIdeAgentProvider now. The view registry stays:
+		// status-bar and context-key updates are live pieces with no bundle path.
+		this.#views.add(view);
+		view.onDidDispose(() => { this.#views.remove(view); }, undefined, this.#context.subscriptions);
+		if (this.#pendingComposerFocus.claim()) this.post({ type: "focus_composer" });
+		void this.refresh().catch(error => this.reportError(error));
 	}
 
 	openAgentsWindow(): void {
@@ -1301,94 +1045,20 @@ export class CediaTaskViewProvider {
 	}
 
 	private post(message: unknown): void {
+		// Item 63a: no task-shell view can resolve (its registration is gone), so
+		// there are no targets — kept so live callers (errors, refusals, focus)
+		// don't churn before item 66's split. The argument is still typechecked.
+		void message;
 		const targets = this.#views.targets().map(view => view.webview);
 		for (const target of targets) void target.postMessage(message);
 	}
 
 	private postSnapshot(): void {
+		// Item 63a: the snapshot post fed the dead shell — dropped. Status bar
+		// and context keys are the live pieces and stay.
 		this.renderAgentsStatus();
 		this.syncCediaContext();
-		this.#lastGoodByName = mapArtifactsForWebview(this.#artifacts, this.#lastGoodByName).lastGoodByName;
-		this.post({
-			type: "snapshot",
-			state: cloneStateForWebview(this.#state, {
-				attachments: this.#attachments,
-				review: this.#review,
-				devices: this.#devices,
-				devicesError: this.#devicesError,
-				lastHostSyncAt: this.#lastHostSyncAt,
-				search: this.#search,
-				prefs: this.#prefs,
-				terminals: [
-					...this.#userPtys.map(item => ({ ...item.preview, kind: "user" as const, truncated: false, text: "" })),
-					...(this.#state.session
-						? this.#terminals.preview(this.#state.session.id, this.#state.session.incarnation).map(item => ({
-							...item,
-							kind: "agent" as const,
-							cwd: this.#state.session?.cwd,
-						}))
-						: []),
-				],
-				artifacts: this.#artifacts,
-				artifactsError: this.#artifactsError,
-				gitBranch: this.#gitBranch,
-				branches: this.#branches,
-				draftBranchRef: this.#draftBranchRef,
-				welcome: this.welcomeModel(),
-				userPtys: userPtyRows(this.#userPtys.map(item => item.preview)),
-				layout: serializeLayout(this.#layout),
-				layoutAxis: this.#layout.root.type === "split" && !this.#layout.maximizedViewId ? this.#layout.root.orientation : "single",
-				layoutRatio: this.#layout.root.type === "split" ? this.#layout.root.ratio : 1,
-				paneMaximized: Boolean(this.#layout.maximizedViewId),
-				canMoveLeft: moveActive(this.#layout, "left") !== this.#layout,
-				canMoveRight: moveActive(this.#layout, "right") !== this.#layout,
-				canMoveUp: moveActive(this.#layout, "up") !== this.#layout,
-				canMoveDown: moveActive(this.#layout, "down") !== this.#layout,
-				layoutBoxes: layoutBoxes(this.#layout, this.#viewport.width, this.#viewport.height),
-				layoutSashes: layoutSashes(this.#layout, this.#viewport.width, this.#viewport.height),
-				layoutPanes: buildPaneViews({
-					tree: this.#layout,
-					cache: this.#paneTranscripts,
-					drafts: this.#state.drafts,
-					activeDraft: this.#state.draft,
-					sessions: this.#state.sessions,
-				}),
-				browserBridge: false,
-				cediaVersion: vscode.version,
-				extensionVersion: typeof this.#context.extension.packageJSON?.version === "string" ? this.#context.extension.packageJSON.version : undefined,
-				codeOssVersion: vscode.version,
-				markedUnread: this.#markedUnread,
-				sidebarFilters: this.#sidebarFilters,
-				lastSentDraft: this.#lastSentDraft,
-				settingsRevision: this.#settingsRevision,
-				settingsDraft: this.#settingsDraft,
-				settingsApplyError: this.#settingsApplyError,
-				settingsResetPreview: this.#settingsResetPreview,
-				routeError: this.#routeError,
-				historyNote: this.#historyNote,
-				thinking: this.#thinking,
-				hasParent: Boolean(this.#parentSession),
-				parentSession: this.#parentSession,
-				olderPagesAdvertised: this.#olderPagesAdvertised,
-				olderPageCount: this.#olderPageCount,
-				ompPlan: this.#ompPlan,
-				queueCollapsed: this.#queueCollapsed,
-				draftPersistOk: this.#draftPersistOk,
-				lastGoodByName: this.#lastGoodByName,
-				viewport: this.#viewport,
-				inlinePreview: this.#inlinePreview,
-				mentionContext: editorMentionContext(),
-				mentions: this.currentMentions(),
-				settingsRows: this.currentSettingsRows(),
-				shortcutRows: shortcutRowsFromContributes(this.#context.extension.packageJSON?.contributes),
-				scrollKey: this.activeScrollKey(),
-				routeKind: this.#projectsRoute ? "projects" : "task",
-				canRouteBack: canRouteBack(this.#routeHistory),
-				worktreeReceipt: this.#worktreeReceipt,
-				canRouteForward: canRouteForward(this.#routeHistory),
-				retention: retentionReceipt(this.#retentionBefore, this.retentionSnapshot(this.#state.workbenchMode === "ide" ? "ide" : "agents")),
-			}),
-		});
+		// Item 63a: snapshot body deleted with the shell — see the method note.
 		this.applyWindowTitle();
 	}
 
@@ -1791,6 +1461,14 @@ export class CediaTaskViewProvider {
 		this.#thinking = thinkingFromOmpState(data);
 		this.#parentSession = parentSessionFromOmpState(data);
 		this.#ompPlan = planFromOmpState(data);
+		// Item 63c: the guarded send reads `#state.selectedModel`, which nothing
+		// in production ever set — so the "choose a model" refusal reached zero
+		// views. Feed it from the same `get_state` answer that owns the runtime
+		// model, so the guard and the runtime agree.
+		const current = currentModelFromOmpState(data);
+		if (current?.id && current.id !== this.#state.selectedModel) {
+			this.setState({ type: "models", models: this.#state.models, selectedModel: current.id });
+		}
 		this.postSnapshot();
 	}
 
@@ -1835,12 +1513,15 @@ export class CediaTaskViewProvider {
 		}
 		await this.refreshOmpState();
 	}
-
 	private async sendCommand(command: string, payload: Record<string, Json>): Promise<void> {
 		const client = await this.ensureClient();
 		const session = await this.ensureSession(client);
 		if (command === "prompt" || command === "steer" || command === "follow_up") {
 			if (!this.#state.selectedModel) {
+				// Item 63c: `refreshOmpState` feeds this from `get_state`, so reaching
+				// here means OMP itself named no model — a warning the user can act
+				// on, not a silent post into the dead webview shell.
+				void vscode.window.showWarningMessage("Choose a model before sending. Cedia does not pick a billed fallback.");
 				this.post({ type: "error", text: "Choose a model before sending. Cedia does not pick a billed fallback.", status: this.#state.connection });
 				return;
 			}
@@ -2874,448 +2555,11 @@ export class CediaTaskViewProvider {
 		if (this.#state.project) await this.loadProjectSessions(client, this.#state.project);
 	}
 
-	private async handleMessage(message: WebviewMessage): Promise<void> {
-		switch (message.type) {
-			case "send_prompt":
-				await this.activatePane(message.viewId);
-				await this.sendCommand("prompt", { message: message.text });
-				break;
-			case "steer":
-				await this.activatePane(message.viewId);
-				await this.sendCommand("steer", { message: message.text });
-				break;
-			case "follow_up":
-				await this.activatePane(message.viewId);
-				await this.sendCommand("follow_up", { message: message.text });
-				break;
-			case "stop": {
-				if (!this.#client || !this.#state.session) return;
-				await this.sendCommand("abort", {});
-				this.setState({ type: "connection", status: "connected", error: undefined });
-				await this.pullEvents();
-				break;
-			}
-			case "new_task": await this.newTaskFlow(); break;
-			case "open_folder": await this.openFolderFlow(); break;
-			case "task_actions": await this.taskActions(); break;
-			case "more_action": await this.runMoreAction(message.id); break;
-			case "viewport":
-				this.#viewport = { width: message.width, height: message.height };
-				this.postSnapshot();
-				break;
-			case "select_project": await this.selectProject(message.projectId); break;
-			case "select_session": await this.selectSession(message.sessionId); break;
-			case "search": {
-				const searchEpoch = ++this.#searchEpoch;
-				const navigationEpoch = this.#navigationEpoch;
-				const query = message.query;
-				const scope = message.scope ?? this.#search.scope;
-				this.#search = {
-					...this.#search,
-					query,
-					scope,
-					updating: true,
-					queryId: searchEpoch,
-				};
-				this.postSnapshot();
-				let files: { path: string }[] = [];
-				let lastIndexedNote: string | undefined;
-				if (query.trim() && (scope === "all" || scope === "files")) {
-					const cleaned = query.replace(/[{}[\]*?]/g, "").slice(0, 64);
-					if (cleaned) {
-						try {
-							const uris = await vscode.workspace.findFiles(`**/*${cleaned}*`, "{**/node_modules/**,**/.git/**,**/dist/**,**/upstream/**,**/desktop/**}", 24);
-							files = uris.map(uri => ({ path: vscode.workspace.asRelativePath(uri) }));
-						} catch {
-							lastIndexedNote = SEARCH_INDEX_FAILED_NOTE;
-						}
-					}
-				}
-				if (searchEpoch !== this.#searchEpoch || navigationEpoch !== this.#navigationEpoch) break;
-				this.#search = {
-					...buildSearchHits({
-						query,
-						scope,
-						sessions: this.#state.sessions,
-						files,
-						settings: [...SETTINGS_SECTIONS],
-						settingRows: this.currentSettingsRows().map(row => ({ id: row.id, section: row.section, label: row.label })),
-						transcripts: Object.entries(this.#transcriptIndex).map(([sessionId, row]) => ({
-							sessionId,
-							title: row.title,
-							text: row.text,
-						})),
-					}),
-					updating: false,
-					queryId: searchEpoch,
-					...(lastIndexedNote ? { lastIndexedNote } : {}),
-				};
-				this.postSnapshot();
-				break;
-			}
-			case "refresh": await this.refresh(); break;
-			case "load_more":
-				await this.loadOlderMessages();
-				break;
-			case "get_models": await this.getModels(); break;
-			case "get_login_providers": await this.getLoginProviders(); break;
-			case "get_slash_commands": await this.getSlashCommands(); break;
-			case "run_slash": await this.sendCommand("prompt", { message: `/${message.name.replace(/^\/+/, "")}` }); break;
-			case "compact": await this.sendCommand("compact", {}); break;
-			case "start_login": await this.startLogin(message.providerId); break;
-			case "open_login_url": await this.openLoginUrl(message.url); break;
-			case "select_model": await this.selectModel(message.modelId, message.provider); break;
-			case "select_thinking_level": await this.selectThinkingLevel(message.level); break;
-			case "ui_answer": await this.answerUi(message.token, message.answer); break;
-			case "ui_cancel": await this.answerUi(message.token, { cancelled: true }); break;
-			case "native_action": await this.nativeAction(message.action); break;
-			case "rename_session": {
-				await this.patchListedSession(message.sessionId, async (session, client) => {
-					const title = message.title?.trim() || await vscode.window.showInputBox({ title: "Task name", value: session.title });
-					if (!title?.trim()) return;
-					const updated = await client.patchSession(session.id, { title: title.trim() });
-					const next = normalizeSession(updated);
-					if (next && this.#state.session?.id === session.id) this.setState({ type: "session", session: next });
-				});
-				break;
-			}
-			case "archive_session": {
-				await this.patchListedSession(message.sessionId, async (session, client) => {
-					const hide = message.archived !== false;
-					if (hide && session.status === "running") {
-						const confirmed = await vscode.window.showWarningMessage("Work continues on this Mac. Archive only hides the task from the list. Cedia will not stop OMP.", { modal: true }, "Archive anyway");
-						if (!confirmed) return;
-					}
-					await client.patchSession(session.id, { archived: hide });
-					if (hide && this.#state.session?.id === session.id) this.setState({ type: "session", session: null });
-				});
-				break;
-			}
-			case "pin_session": {
-				await this.patchListedSession(message.sessionId, async (session, client) => {
-					await client.patchSession(session.id, { pinned: message.pinned });
-				});
-				break;
-			}
-			// The dock's own Delete item. The Agents window's list confirms before it
-			// sends (`cedia.session.delete`), so this side has to ask: the host's delete
-			// removes the record and the transcript it wrote, and nothing brings it back.
-			case "delete_session": {
-				const session = this.sessionForMutation(message.sessionId);
-				if (!session) return;
-				const confirmed = await vscode.window.showWarningMessage(
-					`Delete "${session.title}"? This action cannot be undone.`,
-					{ modal: true },
-					"Delete",
-				);
-				if (!confirmed) return;
-				await this.deleteChatSessions([session.id]);
-				break;
-			}
-			case "set_workbench_mode": await this.setWorkbenchMode(message.mode); break;
-			case "persist_draft": {
-				this.#draftRevision += 1;
-				this.#draftPersistOk = false;
-				this.#state = reduceTaskState(this.#state, { type: "draft", draft: message.draft });
-				this.captureActivePaneDraft();
-				this.postSnapshot();
-				try {
-					await this.#context.globalState.update("cedia.drafts", this.#state.drafts);
-					this.#draftPersistOk = true;
-				} catch {
-					this.#draftPersistOk = false;
-				}
-				this.postSnapshot();
-				break;
-			}
-			case "persist_scroll":
-				this.setState({
-					type: "transcript_scroll",
-					key: this.scrollKeyForView(message.viewId),
-					offset: message.offset,
-					followLatest: message.followLatest,
-					...(message.eventId ? { eventId: message.eventId } : {}),
-				});
-				break;
-			case "work_panel":
-				this.setState({ type: "work_panel", action: { type: "open_tab", tab: message.tab } });
-				if (message.tab === "changes") await this.refreshReview();
-				if (message.tab === "artifacts" || message.tab === "preview") await this.refreshArtifacts();
-				break;
-			case "close_work_panel": this.setState({ type: "work_panel", action: { type: "close_panel" } }); break;
-			case "set_pref": {
-				const base = normalizeProductPrefs({ ...this.#prefs, ...(this.#settingsDraft?.values ?? {}) });
-				const next = message.key === "density" && (message.value === "comfortable" || message.value === "detailed")
-					? applyProductPref(base, { density: message.value })
-					: message.key === "panelPosition" && (message.value === "right" || message.value === "bottom")
-						? applyProductPref(base, { panelPosition: message.value })
-						: message.key === "startupView" && (message.value === "ide" || message.value === "agents" || message.value === "last_task")
-							? applyProductPref(base, { startupView: message.value })
-						: message.key === "submitEnter" && typeof message.value === "boolean"
-							? applyProductPref(base, { submitEnter: message.value })
-							: message.key === "reduceMotion" && typeof message.value === "boolean"
-								? applyProductPref(base, { reduceMotion: message.value })
-								: message.key === "highContrast" && typeof message.value === "boolean"
-									? applyProductPref(base, { highContrast: message.value })
-								: message.key === "windowRestore" && typeof message.value === "boolean"
-									? applyProductPref(base, { windowRestore: message.value })
-								: message.key === "autoHideEmptyIde" && typeof message.value === "boolean"
-									? applyProductPref(base, { autoHideEmptyIde: message.value })
-								: base;
-				this.#settingsDraft = beginSettingsDraft("Appearance", this.#settingsDraft?.revision ?? this.#settingsRevision, appearanceValues(next));
-				this.#settingsApplyError = undefined;
-				this.postSnapshot();
-				break;
-			}
-			case "apply_settings": {
-				const draft = beginSettingsDraft(message.section, message.revision, message.values, message.scope ?? "global");
-				const result = applySettingsSection(this.#settingsRevision, draft);
-				if (!result.ok) {
-					this.#settingsDraft = draft;
-					this.#settingsApplyError = result.reason;
-					this.postSnapshot();
-					break;
-				}
-				this.#prefs = normalizeProductPrefs({ ...this.#prefs, ...result.values });
-				this.#settingsRevision = result.revision;
-				this.#settingsDraft = undefined;
-				this.#settingsApplyError = undefined;
-				this.#settingsResetPreview = undefined;
-				void this.#context.globalState.update("cedia.productPrefs", this.#prefs);
-				void this.#context.globalState.update("cedia.settingsRevision", this.#settingsRevision);
-				if (this.#prefs.panelPosition !== this.#state.workPanel.position) {
-					this.setState({ type: "work_panel", action: { type: "set_position", position: this.#prefs.panelPosition } });
-				} else {
-					this.postSnapshot();
-				}
-				break;
-			}
-			case "reset_settings": {
-				const key = message.key;
-				if (!isProductPrefSettingKey(key)) break;
-				const currentValues = normalizeProductPrefs({ ...this.#prefs, ...(this.#settingsDraft?.values ?? {}) });
-				const current = currentValues[key];
-				const inherited = DEFAULT_PRODUCT_PREFS[key];
-				this.#settingsResetPreview = previewResetOverride(key, current, inherited);
-				this.#settingsDraft = beginSettingsDraft(
-					"Appearance",
-					this.#settingsDraft?.revision ?? this.#settingsRevision,
-					appearanceValues(applyProductPref(currentValues, { [key]: inherited })),
-				);
-				this.#settingsApplyError = undefined;
-				this.postSnapshot();
-				break;
-			}
-			case "route_error_action": {
-				this.#routeError = undefined;
-				if (message.action === "projects") await this.openProjectsRoute();
-				else await this.goRouteBack();
-				break;
-			}
-			case "navigate_projects":
-				await this.openProjectsRoute();
-				break;
-			case "route_back":
-				await this.goRouteBack();
-				break;
-			case "route_forward":
-				await this.goRouteForward();
-				break;
-			case "work_panel_layout":
-				if (message.position) this.#state = reduceTaskState(this.#state, { type: "work_panel", action: { type: "set_position", position: message.position } });
-				if (message.preferredWidth !== undefined || message.preferredHeight !== undefined) {
-					this.#state = reduceTaskState(this.#state, { type: "work_panel", action: { type: "set_size", preferredWidth: message.preferredWidth, preferredHeight: message.preferredHeight } });
-				}
-				if (message.position && message.position !== this.#prefs.panelPosition) {
-					this.#prefs = applyProductPref(this.#prefs, { panelPosition: message.position });
-					void this.#context.globalState.update("cedia.productPrefs", this.#prefs);
-				}
-				if (message.preferredSidebarWidth !== undefined) {
-					this.#prefs = applyProductPref(this.#prefs, { sidebarWidth: clampSidebarWidth(message.preferredSidebarWidth) });
-					void this.#context.globalState.update("cedia.productPrefs", this.#prefs);
-				}
-				void this.#context.globalState.update("cedia.workPanelLayout", {
-					preferredWidth: this.#state.workPanel.preferredWidth,
-					preferredHeight: this.#state.workPanel.preferredHeight,
-					position: this.#state.workPanel.position,
-					preferredSidebarWidth: this.#prefs.sidebarWidth,
-				});
-				this.postSnapshot();
-				break;
-			case "pick_attachments": await this.pickAttachments(); break;
-			case "retry_attachment": {
-				this.#attachments = this.#attachments.map(item => item.id !== message.id ? item : {
-					...reduceAttachment(item, { type: "retry" }),
-					state: "failed",
-					error: "Host file upload is not advertised. Remove this chip to send, or wait until OMP advertises an upload.",
-				});
-				this.postSnapshot();
-				break;
-			}
-			case "remove_attachment":
-				this.#attachments = this.#attachments.filter(item => item.id !== message.id);
-				this.postSnapshot();
-				break;
-			case "refresh_review": await this.refreshReview(); break;
-			case "refresh_devices": await this.refreshDevices(); break;
-			case "open_workspace_file": await this.openWorkspaceFile(message.path); break;
-			case "review_file": await this.reviewFile(message.path); break;
-			case "native_diff": await this.openNativeDiff(message.path); break;
-			case "open_in_split": await this.openSessionInNewPane(message.sessionId); break;
-			case "select_theme": await vscode.commands.executeCommand("workbench.action.selectTheme"); break;
-			case "open_keybindings": await vscode.commands.executeCommand("workbench.action.openGlobalKeybindings"); break;
-			case "open_merge_editor": await this.openMergeEditor(message.path); break;
-			case "jump_latest":
-				this.#markedUnread = false;
-				this.setState({
-					type: "transcript_scroll",
-					key: draftViewKey(this.#state.project?.id, this.#state.session?.id),
-					offset: 0,
-					followLatest: true,
-				});
-				break;
-			case "inspect_outcome": await this.inspectOutcome(); break;
-			case "set_sidebar_filters":
-				this.#sidebarFilters = normalizeSidebarFilters({ ...this.#sidebarFilters, ...message.filters });
-				void this.#context.globalState.update("cedia.sidebarFilters", this.#sidebarFilters);
-				this.postSnapshot();
-				break;
-			case "export_diagnostics":
-				await this.exportDiagnostics();
-				break;
-			case "restore_sent_draft":
-				if (this.#lastSentDraft) {
-					this.setState({ type: "draft", draft: this.#lastSentDraft });
-					void this.#context.globalState.update("cedia.drafts", this.#state.drafts);
-				}
-				break;
-			case "copy_queue_draft": {
-				const command = this.#state.pendingCommands[message.commandId];
-				const payload = command?.payload;
-				const text = payload && typeof payload.message === "string" ? payload.message : "";
-				if (text.trim()) {
-					this.setState({ type: "draft", draft: text });
-					void this.#context.globalState.update("cedia.drafts", this.#state.drafts);
-				}
-				break;
-			}
-			case "revoke_device": {
-				const client = await this.ensureClient();
-				await client.revokeDevice(message.deviceId);
-				await this.refreshDevices();
-				break;
-			}
-			case "mark_all_read":
-				this.#markedUnread = false;
-				this.postSnapshot();
-				break;
-			case "download_artifact":
-				await this.downloadArtifactCopy(message.sha256);
-				break;
-			case "select_destination":
-				await this.selectDestination(message.id);
-				break;
-			case "mention_pick":
-				await this.pickMention(message.kind, message.id);
-				break;
-			case "refresh_branch":
-				await this.refreshGitBranch();
-				this.postSnapshot();
-				break;
-			case "select_branch_ref": {
-				const hit = this.#branches.find(item => item.name === message.ref);
-				if (!hit) {
-					await vscode.window.showInformationMessage("That ref is not in the advertised Git list. Cedia will not invent main or checkout.");
-					break;
-				}
-				this.#draftBranchRef = hit.name;
-				this.postSnapshot();
-				await vscode.window.showInformationMessage(`${BRANCH_SELECT_REASON} Target: ${hit.name}.`);
-				break;
-			}
-			case "create_worktree":
-				await this.createWorktreeOnCurrentProject();
-				break;
-			case "cancel_worktree":
-				if (this.#worktreeReceipt.status === "creating") this.#navigationEpoch++;
-				this.#worktreeReceipt = cancelWorktreeReceipt(this.#worktreeReceipt);
-				this.postSnapshot();
-				break;
-			case "restart_resource":
-				await this.restartWorkResource(message.tab);
-				break;
-			case "set_queue_collapsed":
-				this.#queueCollapsed = message.collapsed;
-				void this.#context.globalState.update("cedia.queueCollapsed", this.#queueCollapsed);
-				this.postSnapshot();
-				break;
-			case "split_pane":
-				this.applyPaneSplit(message.direction);
-				break;
-			case "close_pane":
-				this.applyClosePane();
-				break;
-			case "focus_pane":
-				this.captureActivePaneDraft();
-				this.#layout = focusView(this.#layout, message.viewId);
-				this.persistLayout();
-				await this.revealActivePane();
-				break;
-			case "open_recent":
-				await this.openProjectAtPath(message.path);
-				break;
-			case "focus_user_pty": {
-				const row = this.#userPtys.find(item => item.preview.id === message.id);
-				if (!row) {
-					await vscode.window.showInformationMessage(focusUserPtyPlan().reason);
-					break;
-				}
-				row.terminal.show();
-				this.postSnapshot();
-				break;
-			}
-			case "persist_pane_draft": {
-				const leaf = visibleLeaves(this.#layout).find(item => item.viewId === message.viewId);
-				if (!leaf) break;
-				const key = paneDraftKey(leaf);
-				this.#state = { ...this.#state, drafts: { ...this.#state.drafts, [key]: message.draft } };
-				if (leaf.viewId === this.#layout.activeViewId) {
-					this.#state = reduceTaskState(this.#state, { type: "draft", draft: message.draft });
-					this.captureActivePaneDraft();
-				}
-				try {
-					await this.#context.globalState.update("cedia.drafts", this.#state.drafts);
-					this.#draftPersistOk = true;
-				} catch {
-					this.#draftPersistOk = false;
-					this.postSnapshot();
-				}
-				break;
-			}
-			case "set_layout_ratio": {
-				this.#layout = setSplitRatio(this.#layout, message.firstViewId, message.ratio);
-				this.persistLayout();
-				this.postSnapshot();
-				break;
-			}
-			case "pop_to_ide": {
-				const tab = message.tab ?? this.#state.workPanel.activeTab;
-				if (tab === "browser") {
-					await vscode.window.showInformationMessage("Browser is unsupported until the OMP browser bridge advertises a live handle. Opening IDE without a page.");
-				}
-				await this.setWorkbenchMode("ide");
-				const landing = ideLandingForWorkTab(tab, this.#review);
-				if (landing.message) await vscode.window.showInformationMessage(landing.message);
-				if (landing.view === "file") await this.openWorkspaceFile(landing.path);
-				else if (landing.view === "explorer" || tab === "files") await vscode.commands.executeCommand("workbench.view.explorer");
-				else if (tab === "terminal") {
-					const row = this.#userPtys.find(item => !item.preview.ended) ?? this.#userPtys[0];
-					if (row) row.terminal.show();
-					else await this.nativeAction("terminal");
-				}
-				break;
-			}
-		}
+	// Item 63a: deleted with the hand-drawn task shell — the dock renders the shared
+	// bundle through CediaIdeAgentProvider now. Kept as a named stub so item 66 can see
+	// exactly what the split removes (this method had no other callers).
+	private async handleMessage(_message: unknown): Promise<void> {
+		throw new Error("Cedia task shell was removed (item 63a)");
 	}
 
 	private async selectDestination(id: string): Promise<void> {
