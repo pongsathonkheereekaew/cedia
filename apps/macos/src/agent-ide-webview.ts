@@ -5,7 +5,7 @@ import type { CediaHostClient } from "./api.ts";
 import { createAgentWindowHandler } from "./agent-window-main.ts";
 import { readIdeHandoff, resolveAgentUiThread, validAgentThreadId } from "./agent-ui-state.ts";
 import { createAgentFilesService } from "./agent-window-files.ts";
-import { createAgentGitService } from "./agent-window-git.ts";
+import { createAgentGitService, type AgentGitService } from "./agent-window-git.ts";
 import { writeAgentThemeSnapshot } from "./agent-theme.ts";
 
 function escapeAttribute(value: string): string {
@@ -23,11 +23,13 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
   private ready = false;
   private pendingActions: unknown[] = [];
   private readonly files = createAgentFilesService();
-  private readonly git = createAgentGitService();
+  private readonly git: AgentGitService;
   private themeWrite: Promise<void> | undefined;
   constructor(private readonly context: vscode.ExtensionContext, private readonly stateDir: string,
     private readonly ensureClient: () => Promise<CediaHostClient>,
-    private readonly onSession: (id: string) => Promise<void>) {}
+    private readonly onSession: (id: string) => Promise<void>) {
+    this.git = createAgentGitService({ ensureClient: () => this.ensureClient() });
+  }
 
   private cwd(): string | null { return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null; }
 

@@ -100,16 +100,11 @@ export function agentEditDiffTitle(path: string): string {
 	return `${path} (before Cedia ↔ after Cedia)`;
 }
 
-/** Only refs Cedia itself produces may reach `git show`. Anything else falls
- * back to HEAD so a crafted path can never become an arbitrary revision flag. */
+/** Only refs Cedia itself produces may leave the extension for the host's
+ * revision read. Anything else falls back to HEAD so a crafted path can never
+ * become an arbitrary revision. */
 export function safeReviewRef(ref: string): string {
 	return /^[A-Za-z0-9._/-]{1,128}$/.test(ref) && !ref.startsWith("-") ? ref : "HEAD";
-}
-
-/** The exact `git show` argv used to read the original side of a review diff.
- * Exposed so the real argument shape can be exercised against a fixture repo. */
-export function reviewOriginalArgs(ref: string, path: string): readonly string[] {
-	return ["show", `${safeReviewRef(ref)}:${path}`];
 }
 
 export interface ReviewTargetInput {

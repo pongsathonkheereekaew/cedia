@@ -16,7 +16,7 @@ import { showArtifacts } from "./artifacts.ts";
 
 import * as vscode from "vscode";
 import { randomBytes, randomUUID } from "node:crypto";
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
@@ -40,7 +40,7 @@ import { DISCARD_DRAFT_CONFIRM, discardDraftPlan } from "./discard-draft.ts";
 import { aboutIdentity } from "./about-identity.ts";
 import { alreadyAttached, reduceAttachment, type Attachment } from "./attachment-runtime.ts";
 import { buildSubagentTree, emptyPlan, planFromOmpState, type PlanProjection } from "./plan-projection.ts";
-import { BRANCH_SELECT_REASON, parseGitBranchList, type BranchHit } from "./branch-picker.ts";
+import { BRANCH_SELECT_REASON, branchHitsFromHostBranches, type BranchHit } from "./branch-picker.ts";
 import { providerGlyphMap } from "./provider-icons.ts";
 import { emptyReview, ideLandingForWorkTab, markReviewDirtyConflict, markReviewStale, parseUnifiedDiff, REVIEW_CONFLICT_REASON, reviewCommitPreview, reviewFromGitStatus, reviewOpenMergeEnabled, reviewSummary, reviewWorkspaceLabel, type ReviewSnapshot } from "./review-snapshot.ts";
 import { buildSearchHits, emptySearchPalette, SEARCH_INDEX_FAILED_NOTE, type SearchPaletteState } from "./search-palette.ts";
@@ -73,7 +73,7 @@ import { resolveShellLayout, visibleWorkResources, workResourceId, WORK_PANEL_TA
 import { projectSessionFilterFields } from "./session-row-meta.ts";
 import { beginWorktreeReceipt, cancelWorktreeReceipt, failedWorktreeReceipt, idleWorktreeReceipt, readyWorktreeReceipt, type WorktreeReceipt } from "./worktree-receipt.ts";
 import { CediaEditorService, type EditorAppliedSummary } from "./editor.ts";
-import { AGENT_EDIT_DIFF_SCHEME, agentEditDiffTitle, decodeAgentEditDocId, decodeReviewDocId, encodeAgentEditDocId, encodeReviewDocId, looksBinary, NATIVE_DIFF_BINARY_REASON, NATIVE_DIFF_SCHEME, nativeDiffPlan, resolveReviewTarget, reviewOriginalArgs } from "./native-diff.ts";
+import { AGENT_EDIT_DIFF_SCHEME, agentEditDiffTitle, decodeAgentEditDocId, decodeReviewDocId, encodeAgentEditDocId, encodeReviewDocId, looksBinary, NATIVE_DIFF_BINARY_REASON, NATIVE_DIFF_SCHEME, nativeDiffPlan, resolveReviewTarget } from "./native-diff.ts";
 import { cediaCodeActions } from "./code-actions.ts";
 import { agentEditLabel, agentEditLenses, agentEditReviewDecision, decorationHover, decorationRange, markRangesFor, revertDecision, type MarkRange, type PendingAgentEdit } from "./agent-edit-marks.ts";
 import { selectionAction, selectionPrompt, type SelectionActionId } from "./selection-actions.ts";
@@ -86,7 +86,7 @@ import type { Command, Json, Project, Session } from "../../../packages/protocol
 
 
 import type { CediaTaskViewProviderApi } from "./provider-api.ts";
-import { errorMessage, asArray, workspacePath, hostSetupMessage, normalizeProject, normalizeSession, EVENT_PAGE_LIMIT, POLL_INTERVAL_MS, execFileAsync, HostSetupRequiredError } from "./task-runtime.ts";
+import { errorMessage, asArray, workspacePath, hostSetupMessage, normalizeProject, normalizeSession, EVENT_PAGE_LIMIT, POLL_INTERVAL_MS, requestGit, HostSetupRequiredError } from "./task-runtime.ts";
 
 export const hostConcern: Partial<CediaTaskViewProviderApi> = {
 		async ensureClient(this: CediaTaskViewProviderApi): Promise<CediaHostClient> {
@@ -244,16 +244,16 @@ export const hostConcern: Partial<CediaTaskViewProviderApi> = {
 					return;
 				}
 				try {
-					const { stdout } = await execFileAsync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], { timeout: 3_000 });
-					const branch = stdout.trim();
-					this.gitBranch = branch && branch !== "HEAD" ? branch : undefined;
+					// The host owns the repository read: one call for the checked out
+					// branch and one for the advertised refs, both authorized against
+					// the roots it already knows.
+					const client = await this.ensureClient();
+					const status = await requestGit(client, cwd, "status", {});
+					const branches = await requestGit(client, cwd, "listBranches", {});
+					this.gitBranch = status.branch ?? undefined;
+					this.branches = branchHitsFromHostBranches(branches.branches);
 				} catch {
 					this.gitBranch = undefined;
-				}
-				try {
-					const { stdout } = await execFileAsync("git", ["-C", cwd, "branch", "-a"], { timeout: 3_000 });
-					this.branches = parseGitBranchList(stdout, this.gitBranch);
-				} catch {
 					this.branches = [];
 				}
 		},

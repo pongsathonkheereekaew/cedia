@@ -635,10 +635,9 @@ Four structural consequences, each hit in practice:
 | Artifact | Retire when | Status |
 |---|---|---|
 | `apps/macos/src/webview.ts` + `TASK_WEBVIEW_CSS` + the tests bound to the shell | S3 | **unreachable at runtime (measured 2026-09-22)** — the dock is `agent-ide-webview.ts` loading `agent-ui/ide.html`; `CediaTaskViewProvider` is never passed to `registerWebviewViewProvider`. Delete per §10 items 10/63 |
-| `scripts/shell-render-fixture.ts` | with `webview.ts` | **delete with `webview.ts` (corrected 2026-09-22)** — the shell it renders is no longer any window's UI; parity checks capture the live bundle window instead |
+| `scripts/shell-render-fixture.ts` | with `webview.ts` | **deleted 2026-09-23** — it imported the deleted `webview.ts`, so it broke the root `tsc` for a shell no window renders; parity checks capture the live bundle window instead |
 | `caretComposer` view + its `caretAgents` activity-bar container | 2026-09-17 | **retired** — a second agent surface for one window; the dock is the only Cedia view left |
 | the `caret.agentsShell` editor + `openAgentsShellEditor()` + the `.caret-shell` document | 2026-09-17 | **retired** — the shell-in-an-editor-column route the Agents window already refused to mount |
-| `scripts/shell-render-fixture.ts` | with `webview.ts` | **kept on purpose**: the shell it renders is still the live IDE dock, and headless render is how the open AX/DOM parity check (§10 item 16) measures it |
 | `patches/desktop/0002` + context key `caret.agentsWindow` + chrome hiding on mode switch | S1 | **retired** (replaced by `0008`; context key removed from the extension) |
 | drift of `agentWorkbenchActions.ts` edited in the checkout without a patch | S1 | **retired 2026-09-17** — the whole `src/vs/workbench/contrib/agentWorkbench/` island is recorded as a `removals` entry, and patch `0034` drops its one import; nothing in `desktop/` registers it any more |
 | the fork's `caret.openAgentsWindow` command that still opens the `caretComposer` webview | S3 | **retired 2026-09-17** (patch `0034`): the command, its `caret.openIde` twin, the mode service behind them and the context key `caretWorkbenchShell` all went with the island. The one remaining route is `cedia.showAgents` → `workbench.action.openAgentsWindow`. |
@@ -671,6 +670,8 @@ What that pass found, and what this one changed:
   `settings-hits` and `transcript-find` — five modules whose only importer was their own test;
 - still live on purpose: the dock (`webview.ts` + `TASK_WEBVIEW_CSS` + shell-bound tests) and
   `scripts/shell-render-fixture.ts`, which renders that dock headlessly for the open AX/DOM check.
+  *(Corrected 2026-09-23: both are gone — `webview.ts` with §10 item 63 and the fixture script with it.
+  See the §6.2 retirement ledger.)*
 
 Receipt: [`evidence/dead-code-retirement-2026-09-17/`](evidence/dead-code-retirement-2026-09-17/).
 
@@ -3424,6 +3425,103 @@ suite 129 pass; `ci-validate` CI-OK; `upstream.json` records the vendor cuts.
 **Owed: the packaged run** — one `workbench.colorTheme` change repainting both
 windows, on screen, from a `package:mac` build (rides the next packaged run with
 the other eight).
+
+### Host git service: one implementation behind every Cedia git surface (2026-09-23)
+
+Closes §10 item 58. Cedia had **two** git implementations — the Mac extension's
+subprocess layer (`agent-window-git.ts` + six `execFileAsync("git", …)` sites in the
+task-view provider) and the host's sync helper in `workspaces.ts` — and the pane
+itself could only reach nine of the twenty-nine methods its contract declares. Now
+one module spawns git, and the pane's actions work.
+
+**What was measured first.** Reachability of the pane's refusals, per call site in
+the vendored bundle: 16 of the 18 unsupported methods are wired to live controls
+(Initialize Git, Stage/Unstage, Pull, the stash-and-switch recovery trio, Remove
+index lock, Create Branch, hand off to local/worktree, delete worktree, blame,
+diff-line blame, the PR rows), and two have no caller at all (`createWorktree`,
+`summarizeDiff`). One of the reachable ones was worse than a disabled button:
+`onWorktreeSetupProgress` **threw synchronously**, and the worktree-send flow
+subscribes to it before it creates anything, so "send the first message in a New
+worktree thread" aborted before the worktree was ever requested.
+
+**The build.**
+
+- `packages/protocol/src/git.ts` (356 lines, new): the wire contract — the status /
+  branch / commit / diff / stats / file / stash / worktree / handoff result shapes,
+  the 22-method table (`GitMethodShapes`, so a method's input and result are typed
+  together and the dispatch table is exhaustive), the action event union, and the
+  one honest refusal (`GIT_GITHUB_UNAVAILABLE_REASON`). Its rows mirror the pane's
+  own vendored contract field for field, so the extension's translation is a
+  mapping `tsc` checks rather than a reinterpretation.
+- `apps/host/src/git.ts` (1,190 lines, new): the single implementation. One async
+  `runGit` (the reference env policy — `GIT_TERMINAL_PROMPT=0`, `GIT_PAGER=cat`,
+  `LC_ALL=C`, 30 s, 8 MiB) and one sync `runGitSync` for the worktree snapshotter,
+  the ported argument hardening (`--literal-pathspecs`, revisions/branches/paths
+  that begin with `-` rejected, length caps), path authorization against the
+  projects and the host's own worktrees root, and a bounded in-memory action
+  registry (32 live records, 10-minute TTL) for the two streaming flows.
+- **Routes**: `POST /v1/git`, `POST /v1/git/actions`, `GET /v1/git/actions/:id?after=`,
+  owner-only — these methods move the user's checkout, so a paired controller is
+  refused exactly like the editor bridge. `path` must resolve inside a project or
+  the host's worktree root, checked before any git process starts.
+- `apps/host/src/workspaces.ts` converged on `runGitSync` (its private helper is
+  gone, its 4 tests untouched and green).
+- The Mac side became a client: `agent-window-git.ts` (798 lines) validates the
+  pane's input and forwards, `native-git.ts` flipped the remaining eleven methods
+  from `unsupported` to real requests, and `provider-host` / `provider-review` /
+  `provider-editor` read through the host (`status` + `listBranches`, `porcelain`
+  text — the review surface's own parser and staleness comparison are unchanged —
+  and `readWorkingTreeDiff` / `readFileAtRev` / `workingTreeDiffStats` respectively).
+  Every git argv, timeout, buffer and env in the extension is deleted; the obsoleted
+  parsers went with it (`parseGitBranchList`, `reviewOriginalArgs`).
+
+**Deviations, all deliberate.** The stacked action's progress phases are polled
+(~150 ms) rather than pushed: the webview channel lives in the extension, so the
+extension starts the host action and re-emits the host's own records. The host
+streams no git-hook output because the ported action never did; the emitted set is
+`action_started` / `phase_started` / `action_finished|action_failed`, stated in the
+code. `runGitSync` keeps the inherited environment (byte-identical snapshotting for
+`workspaces.ts`) while the async runner applies the policy. Untracked paths report
+`binary: false` — numstat cannot classify a file git does not diff. `createWorktree`
+and `summarizeDiff` stay refused by name (no caller in the bundle), and the three
+PR methods refuse with `GIT_GITHUB_UNAVAILABLE_REASON`: Cedia has no GitHub client,
+and the plan already retires the pull-request surface for want of a source. The
+`git.ts` ↔ `workspaces.ts` module cycle (each calls the other from a function body
+only) is deliberate: splitting the snapshotter out would have left a re-export shim
+behind the path `workspaces.test.ts` pins.
+
+**Receipt.** `apps/macos/test/agent-git-pane-roundtrip.test.ts` (268 lines, new)
+starts the **real host server** on a private state dir, registers a **real
+repository**, and drives the extension's git service exactly as the panel host does
+(`handle(event, method, input)`) through every action above, reading the resulting
+repository state back with `git`: status/branches/commits/blame; stage → `diff
+--cached` shows the file and unstage clears it; `commit_push` lands a real commit on
+a real bare origin and **refuses while the branch is behind upstream**; `pull`
+fast-forwards a real remote commit and **refuses to invent a merge** when both sides
+moved; `createBranch` + `stashAndCheckout` + `stashInfo` + `stashDrop` round-trip a
+stashed file; `init` on a fresh folder (twice) and `removeIndexLock` clearing a real
+lock; `createDetachedWorktree` (with its three-phase progress on the worktree
+channel) + `handoffThread` + `removeWorktree` round-trip; a remote ref checking out
+as a real tracking branch; a path outside the checkout refused before the host sees
+it. 11 tests, 52 assertions, all green.
+
+Suites: **host 146 pass / 0 fail** (19 files, +17 new); **apps/macos 701 pass / 3
+fail** — the patch-set drift, `menus-contract` (needs `rg`) and the theme-handoff
+assertion, all pre-existing; agent-window root + vendor `tsc` clean, `vite build`
+clean, **84 pass / 0 fail**; root `tsc --noEmit` unchanged (10 pre-existing errors:
+the 9 vendored `~/nativeApi` ones and `state.test.ts`); `ci-validate` CI-OK.
+`grep` for `execFile("git"` / `execFileSync("git"` finds exactly one spawn site in
+`apps/host/src/git.ts` and none in `apps/macos`. The receipt also caught two real
+bugs on the way: `removeWorktree` was validating an absolute worktree path with the
+workspace-relative file-path validator, and `StartedHostServer` is now a named type
+instead of a `ReturnType<typeof startHostServer>` at three call sites.
+
+Also closed as this item's tail: `scripts/shell-render-fixture.ts` (deleted) — item
+63 removed `webview.ts` and left the script importing it, which broke the root
+`tsc`; the §6.2 retirement ledger now records the deletion and the contradicting
+"kept on purpose" row is gone. **Owed: the packaged pane click-through** — Stage,
+Initialize Git, Pull and the worktree setup card driven in the shipped window
+(rides the next `package:mac` batch with the other owed receipts).
 
 ## 10. Open work (the only authoritative list of what is not done)
 

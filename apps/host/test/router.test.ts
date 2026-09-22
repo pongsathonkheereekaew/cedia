@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RPC_COMMAND_TYPES } from "../../../packages/omp-adapter/src/types.ts";
 import { DeviceAuth } from "../src/auth.ts";
+import { createHostGit } from "../src/git.ts";
 import { createRouter, type HostResponse } from "../src/router.ts";
 import { CediaHost } from "../src/service.ts";
 import { DurableStore } from "../src/store.ts";
@@ -32,9 +34,37 @@ function makeFixture(withOmp = false): RouterFixture {
   const store = DurableStore.open({ stateDir: directory, recover: false });
   const auth = new DeviceAuth(join(directory, "devices"));
   const host = new CediaHost({ store, stateDir: directory, ...(withOmp ? { ompExecutable: fixtureExecutable, ompEnv: { CEDIA_NODE: fixtureNode } } : {}) });
-  const fixture = { directory, projectPath, store, host, auth, router: createRouter(host, auth) };
+  const fixture = { directory, projectPath, store, host, auth, router: createRouter(host, auth, { git: createHostGit({ store }) }) };
   fixtures.push(fixture);
   return fixture;
+}
+
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+}
+
+/** A repository at the fixture's project path, registered so the host will run git in it. */
+function gitProject(fixture: RouterFixture): string {
+  git(fixture.projectPath, ["init", "--quiet"]);
+  git(fixture.projectPath, ["config", "user.email", "cedia-fixture@example.invalid"]);
+  git(fixture.projectPath, ["config", "user.name", "Cedia fixture"]);
+  writeFileSync(join(fixture.projectPath, "tracked.txt"), "tracked\n");
+  git(fixture.projectPath, ["add", "."]);
+  git(fixture.projectPath, ["commit", "--quiet", "-m", "fixture"]);
+  fixture.store.createProject({ path: realpathSync(fixture.projectPath), name: "Repo" });
+  return git(fixture.projectPath, ["branch", "--show-current"]).trim();
+}
+
+async function waitForAction(fixture: RouterFixture, actionId: string): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const poll = await request(fixture, "GET", `/v1/git/actions/${actionId}?after=0`);
+    const body = poll.body as { done?: boolean };
+    if (body.done) return poll.body as Record<string, unknown>;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    setTimeout(resolve, 5);
+    await promise;
+  }
+  throw new Error(`Git action ${actionId} did not finish`);
 }
 
 async function request(fixture: RouterFixture, method: string, path: string, body?: unknown, token = fixture.auth.ownerToken): Promise<HostResponse> {
@@ -200,5 +230,57 @@ describe("authenticated Cedia host router", () => {
     const served = await request(fixture, "GET", `/v1/sessions/${session.id}/terminals`);
     expect(served.status).toBe(200);
     expect(served.body).toEqual({ terminals: [checkpoint] });
+  });
+
+  it("answers one authorized git status and refuses paths and methods the host does not own", async () => {
+    const fixture = makeFixture();
+    const branch = gitProject(fixture);
+
+    const status = await request(fixture, "POST", "/v1/git", { path: fixture.projectPath, method: "status", input: {} });
+    expect(status.status).toBe(200);
+    expect(status.body).toMatchObject({ branch, hasWorkingTreeChanges: false, hasUpstream: false, pr: null, workingTree: { files: [], insertions: 0, deletions: 0 } });
+
+    // A directory the host does not own is refused before any git process starts.
+    const unauthorized = await request(fixture, "POST", "/v1/git", { path: fixture.directory, method: "status", input: {} });
+    expect(unauthorized).toMatchObject({ status: 403, body: { error: { code: "path_not_authorized" } } });
+
+    const unknown = await request(fixture, "POST", "/v1/git", { path: fixture.projectPath, method: "summarizeDiff", input: {} });
+    expect(unknown).toMatchObject({ status: 400, body: { error: { code: "invalid_body" } } });
+
+    // A folder that is not a repository answers as a state, not an error - except `porcelain`,
+    // whose result carries no field to say so.
+    const plain = join(fixture.directory, "plain");
+    mkdirSync(plain, { recursive: true });
+    fixture.store.createProject({ path: realpathSync(plain), name: "Plain" });
+    expect((await request(fixture, "POST", "/v1/git", { path: plain, method: "status", input: {} })).body).toMatchObject({ branch: null, hasWorkingTreeChanges: false });
+    expect(await request(fixture, "POST", "/v1/git", { path: plain, method: "porcelain", input: {} })).toMatchObject({ status: 400, body: { error: { code: "not_a_repository" } } });
+
+    // Git moves the user's checkout, so a paired controller is refused the same way the
+    // editor bridge refuses it: a projection of the session is not a second pair of hands.
+    const controller = fixture.auth.issue("Test controller");
+    expect(await request(fixture, "POST", "/v1/git", { path: fixture.projectPath, method: "status", input: {} }, controller.token)).toMatchObject({ status: 403, body: { error: { code: "forbidden" } } });
+  });
+
+  it("streams a git action from the start route to the poll route", async () => {
+    const fixture = makeFixture();
+    gitProject(fixture);
+    writeFileSync(join(fixture.projectPath, "tracked.txt"), "changed\n");
+
+    const started = await request(fixture, "POST", "/v1/git/actions", { actionId: "router-action", path: fixture.projectPath, kind: "stacked", action: "commit", commitMessage: "router commit" });
+    expect(started).toEqual({ status: 200, body: { actionId: "router-action" } });
+
+    const finished = await waitForAction(fixture, "router-action");
+    expect(finished).toMatchObject({ done: true, result: { action: "commit", commit: { status: "created", subject: "router commit" } } });
+    expect(finished.events).toEqual([
+      { kind: "action_started", actionId: "router-action", phases: ["commit"] },
+      { kind: "phase_started", actionId: "router-action", phase: "commit", label: "Commit" },
+      expect.objectContaining({ kind: "action_finished", actionId: "router-action" }),
+    ]);
+    expect(git(fixture.projectPath, ["log", "-1", "--format=%s"]).trim()).toBe("router commit");
+
+    // A cursor past the delivered events returns nothing, and an unknown action is not found.
+    expect((await request(fixture, "GET", "/v1/git/actions/router-action?after=3")).body).toEqual({ events: [], done: true, result: finished.result });
+    expect((await request(fixture, "GET", "/v1/git/actions/router-missing?after=0")).status).toBe(404);
+    expect((await request(fixture, "GET", "/v1/git/actions/router-missing?after=nope")).status).toBe(400);
   });
 });

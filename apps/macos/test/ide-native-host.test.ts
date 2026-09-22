@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startHostServer } from "../../host/src/server.ts";
+import { startHostServer, type StartedHostServer } from "../../host/src/server.ts";
 import { CediaHostClient } from "../src/api.ts";
 import { installVscodeStub, stubState, stubUri } from "./helpers/vscode-stub.ts";
 
@@ -35,7 +35,7 @@ mkdirSync(join(root, "extension", "agent-ui"), { recursive: true });
 // build, so a minimal document keeps that boundary self-contained.
 writeFileSync(join(root, "extension", "agent-ui", "ide.html"), "<!doctype html><html><head></head><body></body></html>");
 
-let server: Awaited<ReturnType<typeof startHostServer>>;
+let server: StartedHostServer;
 let client: CediaHostClient;
 let projectId = "";
 let projectName = "";

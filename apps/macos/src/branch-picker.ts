@@ -1,5 +1,7 @@
 /** New-draft branch picker (D18). Lists advertised Git refs only. Does not checkout. */
 
+import type { GitBranch } from "../../../packages/protocol/src/git.ts";
+
 export type BranchKind = "local" | "remote" | "current";
 
 export interface BranchHit {
@@ -21,26 +23,14 @@ export const BRANCH_NO_GIT = "No Git branch until the folder has a repository.";
 export const BRANCH_NO_RESULTS = "No matching refs. Refresh to reload advertised local and remote names.";
 export const BRANCH_SELECT_REASON = "Selecting a ref targets the new draft. Cedia will not checkout until you confirm a workspace workflow.";
 
-export function parseGitBranchList(stdout: string, current?: string): BranchHit[] {
-	const seen = new Set<string>();
-	const hits: BranchHit[] = [];
-	const head = current?.trim();
-	for (const raw of stdout.split(/\r?\n/)) {
-		const line = raw.trim();
-		if (!line || line.endsWith("/HEAD") || line.includes(" -> ")) continue;
-		const starred = line.startsWith("*");
-		const remote = line.includes("remotes/");
-		const name = line.replace(/^\*\s+/, "").replace(/^remotes\//, "").trim();
-		if (!name || seen.has(name)) continue;
-		seen.add(name);
-		const isCurrent = starred || (head !== undefined && name === head);
-		hits.push({
-			name,
-			kind: isCurrent ? "current" : remote ? "remote" : "local",
-			current: isCurrent,
-		});
-	}
-	return hits;
+/** The picker's rows from the host's branch list (§10 item 58): the host reads
+ * the refs, this only names the three kinds the picker renders. */
+export function branchHitsFromHostBranches(branches: readonly GitBranch[]): BranchHit[] {
+	return branches.map(branch => ({
+		name: branch.name,
+		kind: branch.current ? "current" : branch.isRemote === true ? "remote" : "local",
+		current: branch.current,
+	}));
 }
 
 export function filterBranchHits(hits: readonly BranchHit[], query: string, loading = false): BranchPickerState {

@@ -198,6 +198,7 @@ export function createAgentHostGateway(options: GatewayOptions) {
   }
   return {
     ensure: async () => { await ensureClient(); },
+    ensureClient,
     request: async (method: HostMethod, path: string, body?: unknown): Promise<unknown> => {
       const active = await ensureClient();
       try { return await active.requestApplication(method, path, body); }
@@ -221,11 +222,11 @@ export function registerCediaAgentWindowBridge(options: AgentWindowBridgeOptions
   const panels = {
     terminal: createAgentTerminalService({ appRoot: options.appRoot }),
     files: createAgentFilesService(),
-    git: createAgentGitService(),
+    git: createAgentGitService({ ensureClient: () => gateway.ensureClient() }),
     browser: createAgentBrowserService({ appRoot: options.appRoot }),
     device: createAgentDeviceService({ appRoot: options.appRoot, stateDir: options.stateDir, helperSourceDir: join(options.appRoot, "out/vs/cedia/agent/native/device-helper") }),
   };
-  options.ipcMain.handle(AGENT_WINDOW_CHANNEL, createAgentWindowHandler({ ...options, ...gateway,
+  options.ipcMain.handle(AGENT_WINDOW_CHANNEL, createAgentWindowHandler({ ...options, ensure: gateway.ensure, request: gateway.request,
     panel: (event, surface, method, input) => panels[surface as keyof typeof panels].handle(event, method, input),
   }));
   // The extension host may never run in the agents window, so no extension is

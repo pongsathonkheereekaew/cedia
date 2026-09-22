@@ -1,7 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+// The host runs git in exactly one place (see `apps/host/src/git.ts`); snapshotting a worktree
+// uses that module's synchronous runner.
+import { runGitSync } from "./git.ts";
 
 export function within(root: string, path: string): boolean {
   const child = relative(resolve(root), resolve(path));
@@ -25,11 +27,8 @@ export function workspacePath(cwd: string, name: string): string {
   if (!within(root, existing)) throw new Error("Path resolves outside this workspace");
   return candidate;
 }
-function git(cwd: string, args: string[], input?: Buffer): Buffer {
-  return execFileSync("git", ["-C", cwd, ...args], { input, maxBuffer: 64 * 1024 * 1024, timeout: 30_000 });
-}
 export function gitRoot(cwd: string): string | undefined {
-  try { return git(cwd, ["rev-parse", "--show-toplevel"]).toString().trim(); } catch { return undefined; }
+  try { return runGitSync(cwd, ["rev-parse", "--show-toplevel"]).toString().trim(); } catch { return undefined; }
 }
 
 export interface WorkspaceSnapshot {
@@ -57,6 +56,10 @@ export interface CreateWorktreeOptions {
   readonly runScript?: string;
   readonly portStart?: number;
   readonly usedPorts?: readonly number[];
+  /** Revision the new worktree starts from; `HEAD` when omitted. */
+  readonly baseRef?: string;
+  /** Branch the new worktree is created on; `cedia/task-<taskId>` when omitted. */
+  readonly branch?: string;
 }
 
 const DEFAULT_PORT_START = 41_000;
@@ -114,10 +117,12 @@ export function copyAllowlistedIgnored(sourceRoot: string, destinationRoot: stri
     if (!existsSync(source)) continue;
     let ignored = false;
     try {
-      execFileSync("git", ["-C", sourceRoot, "check-ignore", "-q", "--", name], { timeout: 10_000 });
+      runGitSync(sourceRoot, ["check-ignore", "-q", "--", name], { timeoutMs: 10_000 });
       ignored = true;
     } catch (error) {
-      if ((error as { status?: number }).status !== 1) throw error;
+      // `check-ignore -q` exits 1 for "this path is not ignored"; any other failure is real.
+      const notIgnored = error !== null && typeof error === "object" && "status" in error && error.status === 1;
+      if (!notIgnored) throw error;
     }
     if (!ignored) continue;
     const stat = lstatSync(source);
@@ -134,10 +139,10 @@ export function copyAllowlistedIgnored(sourceRoot: string, destinationRoot: stri
 export function createWorktree(source: string, destination: string, taskId: string, options: CreateWorktreeOptions = {}): WorkspaceSnapshot {
   const root = gitRoot(source);
   if (!root) throw new Error("This folder is not a Git repository; use local mode");
-  const baseCommit = git(root, ["rev-parse", "HEAD"]).toString().trim();
-  const patch = git(root, ["diff", "--no-ext-diff", "--binary", "HEAD"]);
-  const untracked = git(root, ["ls-files", "--others", "--exclude-standard", "-z"]).toString().split("\0").filter(Boolean);
-  const branch = `cedia/task-${taskId}`;
+  const baseCommit = runGitSync(root, ["rev-parse", options.baseRef ?? "HEAD"]).toString().trim();
+  const patch = runGitSync(root, ["diff", "--no-ext-diff", "--binary", "HEAD"]);
+  const untracked = runGitSync(root, ["ls-files", "--others", "--exclude-standard", "-z"]).toString().split("\0").filter(Boolean);
+  const branch = options.branch ?? `cedia/task-${taskId}`;
   const prepared: { name: string; source: string; kind: "file" | "symlink"; hash: string }[] = [];
   let bytes = patch.length;
   for (const name of untracked) {
@@ -151,9 +156,9 @@ export function createWorktree(source: string, destination: string, taskId: stri
     prepared.push({ name, source: path, kind, hash: createHash("sha256").update(content).digest("hex") });
   }
   mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
-  git(root, ["worktree", "add", "-b", branch, destination, baseCommit]);
+  runGitSync(root, ["worktree", "add", "-b", branch, destination, baseCommit]);
   try {
-    if (patch.length) git(destination, ["apply", "--binary", "-"], patch);
+    if (patch.length) runGitSync(destination, ["apply", "--binary", "-"], { input: patch });
     for (const file of prepared) {
       const target = workspacePath(destination, file.name);
       mkdirSync(dirname(target), { recursive: true });
@@ -165,7 +170,7 @@ export function createWorktree(source: string, destination: string, taskId: stri
       const actual = createHash("sha256").update(file.kind === "symlink" ? readlinkSync(target) : readFileSync(target)).digest("hex");
       if (actual !== file.hash) throw new Error(`Source changed during snapshot: ${file.name}`);
     }
-    if (!git(root, ["diff", "--no-ext-diff", "--binary", "HEAD"]).equals(patch)) throw new Error("Tracked source changed during snapshot; retry from a stable revision");
+    if (!runGitSync(root, ["diff", "--no-ext-diff", "--binary", "HEAD"]).equals(patch)) throw new Error("Tracked source changed during snapshot; retry from a stable revision");
     const ignored = copyAllowlistedIgnored(root, destination, options.allowlist ?? []);
     const port = allocateWorkspacePort(options.usedPorts ?? [], options.portStart ?? DEFAULT_PORT_START);
     const result: WorkspaceSnapshot = { cwd: resolve(destination, relative(root, realpathSync(source))), root: destination,
@@ -175,7 +180,7 @@ export function createWorktree(source: string, destination: string, taskId: stri
     return result;
   } catch (error) {
     // Only remove the new, unexposed fixture worktree created by this operation.
-    try { git(root, ["worktree", "remove", "--force", destination]); git(root, ["branch", "-D", branch]); } catch { /* Report original failure; never reset source. */ }
+    try { runGitSync(root, ["worktree", "remove", "--force", destination]); runGitSync(root, ["branch", "-D", branch]); } catch { /* Report original failure; never reset source. */ }
     throw error;
   }
 }
@@ -183,7 +188,7 @@ export function createWorktree(source: string, destination: string, taskId: stri
 export function reviewWorkspace(cwd: string): { available: boolean; branch?: string; diff?: string; untracked?: { path: string; text?: string; binary: boolean }[] } {
   const root = gitRoot(cwd);
   if (!root) return { available: false };
-  const names = git(root, ["ls-files", "--others", "--exclude-standard", "-z"]).toString().split("\0").filter(Boolean);
+  const names = runGitSync(root, ["ls-files", "--others", "--exclude-standard", "-z"]).toString().split("\0").filter(Boolean);
   const untracked = names.slice(0, 200).map(name => {
     const path = workspacePath(root, name);
     const stat = lstatSync(path);
@@ -192,8 +197,8 @@ export function reviewWorkspace(cwd: string): { available: boolean; branch?: str
     const binary = bytes.includes(0);
     return { path: name, binary, ...(binary ? {} : { text: bytes.toString("utf8") }) };
   });
-  return { available: true, branch: git(root, ["branch", "--show-current"]).toString().trim(),
-    diff: git(root, ["diff", "--no-ext-diff", "HEAD"]).toString(), untracked };
+  return { available: true, branch: runGitSync(root, ["branch", "--show-current"]).toString().trim(),
+    diff: runGitSync(root, ["diff", "--no-ext-diff", "HEAD"]).toString(), untracked };
 }
 
 export function saveSnapshotManifest(path: string, snapshot: WorkspaceSnapshot): void {

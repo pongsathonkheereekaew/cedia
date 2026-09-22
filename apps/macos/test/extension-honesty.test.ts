@@ -73,9 +73,10 @@ describe("ide-native workbench contributions", () => {
 		// Binary files are refused rather than shown as a misleading text diff.
 		expect(src).toContain("nativeDiffPlan({");
 		expect(src).toContain("binary: file?.binaryHint === true");
-		// The provider must not shell out with an unvalidated ref: it builds the
-		// argv through the hardened helper instead of interpolating by hand.
-		expect(src).toContain("const [subcommand, target] = reviewOriginalArgs(ref, path);");
+		// The provider must not send an unvalidated ref to the host's revision
+		// read: it hardens the ref itself, and no concern shells out any more.
+		expect(src).toContain("rev: safeReviewRef(ref)");
+		expect(src).not.toMatch(/execFile/);
 		expect(src).not.toContain("`${safeRef}:${path}`");
 		// Review must not initialize Git or write to disk.
 		const diffProviderBody = src.slice(src.indexOf("diffContentProvider(this:"));

@@ -7,12 +7,28 @@ import { DeviceAuth } from "./auth.ts";
 import { CediaHost, type HostOptions } from "./service.ts";
 import { DurableStore } from "./store.ts";
 import { createRouter } from "./router.ts";
+import { createHostGit, type HostGitService } from "./git.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { RemoteConnection } from "./remote.ts";
 import { EditorConnections } from "./editors.ts";
 import { workspaceJudgeFromEnv } from "./workspace-mode.ts";
 
-export async function startHostServer(options: Omit<HostOptions, "store"> & { port?: number }) {
+/** What a started host hands back: the live objects plus the lifetime hooks.
+ *
+ * Named rather than inferred so a consumer (the CLI, a smoke script, an
+ * integration test) states the contract it depends on instead of a
+ * `ReturnType<typeof startHostServer>` spelling of it. */
+export interface StartedHostServer {
+  readonly host: CediaHost;
+  readonly auth: DeviceAuth;
+  readonly router: ReturnType<typeof createRouter>;
+  readonly descriptor: HostDescriptor;
+  readonly editors: EditorConnections;
+  stats(): { lastRequestAt: number; runningSessions: number; remotePaired: boolean };
+  close(): Promise<void>;
+}
+
+export async function startHostServer(options: Omit<HostOptions, "store"> & { port?: number }): Promise<StartedHostServer> {
   const store = DurableStore.open({ stateDir: options.stateDir });
   let server: Server | undefined;
   let host: CediaHost | undefined;
@@ -25,7 +41,7 @@ export async function startHostServer(options: Omit<HostOptions, "store"> & { po
     // The judge comes from an explicit option or the operator's opt-in environment; without
     // either, the host has no judge and the suggestion endpoint answers "no opinion".
     host = new CediaHost({ ...options, store, editors, workspaceJudge: options.workspaceJudge ?? workspaceJudgeFromEnv(process.env) });
-    const extras: { artifacts: ArtifactStore; editors: EditorConnections; remote?: RemoteConnection } = { artifacts: new ArtifactStore(options.stateDir), editors };
+    const extras: { artifacts: ArtifactStore; editors: EditorConnections; remote?: RemoteConnection; git: HostGitService } = { artifacts: new ArtifactStore(options.stateDir), editors, git: createHostGit({ store }) };
     const router = createRouter(host, auth, extras);
     const remote = new RemoteConnection(options.stateDir, auth, router);
     extras.remote = remote;

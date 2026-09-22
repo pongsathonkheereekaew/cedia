@@ -1,10 +1,12 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { CEDIA_PROTOCOL_VERSION, type CommandRequest, type UiResponseRequest } from "../../../packages/protocol/src/index.ts";
+import { isGitMethod } from "../../../packages/protocol/src/git.ts";
 import { OMP_BASELINE_VERSION } from "../../../packages/omp-adapter/src/types.ts";
 import { DeviceAuth } from "./auth.ts";
 import { CediaHost, HostError } from "./service.ts";
 import { ProviderAuthError } from "./provider-auth.ts";
 import { reviewWorkspace, workspacePath } from "./workspaces.ts";
+import { GitCapacityError, GitNotARepositoryError, GitPathNotAuthorizedError, gitAuthorizedRoots, type HostGitService } from "./git.ts";
 import type { ArtifactStore } from "./artifacts.ts";
 import type { RemoteConnection } from "./remote.ts";
 import type { EditorConnections } from "./editors.ts";
@@ -41,8 +43,27 @@ function integer(value: string | null, fallback: number): number {
   return Number(value);
 }
 
+/**
+ * The git service's own refusals, translated for a client.
+ *
+ * An unauthorized folder and a folder without a repository are the two states the protocol names
+ * (`GitPathRejection`), so they keep their own codes; everything else keeps git's diagnosis with
+ * the host's runtime paths stripped, so a local owner can read what git objected to without the
+ * reply doubling as a filesystem listing.
+ */
+function gitFailure(error: unknown, runtimePaths: readonly string[]): HostError {
+  if (error instanceof HostError) return error;
+  if (error instanceof GitPathNotAuthorizedError) return new HostError("path_not_authorized", error.message, 403);
+  if (error instanceof GitNotARepositoryError) return new HostError("not_a_repository", error.message, 400);
+  if (error instanceof GitCapacityError) return new HostError("too_many_actions", error.message, 429);
+  const collapsed = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").trim();
+  let message = collapsed.slice(0, 400);
+  for (const path of runtimePaths) message = message.split(path).join(".");
+  return new HostError("git_failed", message || "The git command failed", 400);
+}
+
 /** Identical authenticated application router for loopback HTTP and encrypted relay. */
-export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint } = {}) {
+export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService } = {}) {
   const responses = new ResponseChunks();
   return async (request: HostRequest): Promise<HostResponse> => {
     try {
@@ -196,6 +217,31 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
           else if (stat.isFile() && stat.size <= 1024 * 1024) { const bytes = readFileSync(path); result = bytes.includes(0) ? { binary: true, size: stat.size } : { text: bytes.toString("utf8"), size: stat.size }; }
           else result = { binary: true, size: stat.size };
         } else throw new HostError("not_found", "Unknown task route", 404);
+      } else if (parts[1] === "git" && extras.git) {
+        // One git implementation behind three routes: a one-shot method, a streaming action, and
+        // that action's poll. `path` is a working directory the host must already own, so the
+        // refusal is always available before any git process starts. Owner-only for the same
+        // reason the editor bridge is: these methods move the user's checkout (stage, checkout,
+        // stash, commit, push, worktree removal), and a paired controller is a projection of the
+        // session, not a second pair of hands on the repository.
+        owner();
+        const git = extras.git;
+        const runtimePaths = [host.store.paths.stateDir, ...gitAuthorizedRoots(host.store)];
+        try {
+          if (parts.length === 2 && method === "POST") {
+            const b = body();
+            if (!isGitMethod(b.method)) throw new HostError("invalid_body", "Unknown git method", 400);
+            result = await git.request({ path: b.path, method: b.method, input: b.input });
+          } else if (parts.length === 3 && parts[2] === "actions" && method === "POST") {
+            result = git.startAction(body());
+          } else if (parts.length === 4 && parts[2] === "actions" && method === "GET") {
+            const poll = git.pollAction(string(parts[3], "actionId"), integer(url.searchParams.get("after"), 0));
+            if (!poll) throw new HostError("not_found", "Unknown git action", 404);
+            result = poll;
+          } else throw new HostError("not_found", "Unknown git route", 404);
+        } catch (error) {
+          throw gitFailure(error, runtimePaths);
+        }
       } else if (parts[1] === "editors" && extras.editors) {
         owner();
         const id = string(parts[2], "editor client ID");

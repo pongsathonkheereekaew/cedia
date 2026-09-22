@@ -197,6 +197,30 @@ function ensureLegacyController(): any {
 	return legacyController;
 }
 
+/** The review surfaces read Git through the host (item 58), and this harness has
+ * no reachable host.  Point the controller's review command and content provider
+ * at a client that answers the git routes, and hand back the recorded calls so
+ * the request itself can be asserted. */
+function bindReviewSurface(answers: Record<string, unknown>): { method: string; input: unknown }[] {
+	const controller = ensureLegacyController();
+	const calls: { method: string; input: unknown }[] = [];
+	controller.client = {
+		health: async () => ({ protocolVersion: 1 }),
+		requestApplication: async (method: string, route: string, body?: unknown) => {
+			if (!body || typeof body !== "object" || !("method" in body) || typeof body.method !== "string") {
+				throw new Error(`not a git request: ${JSON.stringify(body)}`);
+			}
+			calls.push({ method: body.method, input: "input" in body ? body.input : undefined });
+			const answer = answers[body.method];
+			if (answer === undefined) throw new Error(`unexpected git call ${body.method} over ${route}`);
+			return answer;
+		},
+	};
+	stubState.contentProviders.set("cedia-review", controller.diffContentProvider());
+	stubState.commands.set("cedia.reviewInDiff", (resource?: unknown) => controller.reviewActiveFileInDiff(resource));
+	return calls;
+}
+
 /** Resolve the controller's task webview explicitly. The registered dock view
  * is a CediaIdeAgentProvider now and intentionally has no task snapshot API. */
 function resolveViews(): void {
@@ -474,6 +498,11 @@ describe("ide-native workbench surface", () => {
 	});
 	it("opens the review in the native diff editor with the Git original", async () => {
 		await activateAndSettle();
+		const calls = bindReviewSurface({
+			workingTreeDiffStats: { additions: 1, deletions: 1, fileCount: 1, files: [{ path: "src/greet.ts", insertions: 1, deletions: 1, binary: false }] },
+			readWorkingTreeDiff: { patch: "", truncated: false },
+			readFileAtRev: { contents: headText, resolvedRev: "HEAD", missing: false, truncated: false },
+		});
 		await stubState.commands.get("cedia.reviewInDiff")!(stubUri(`file://${sourceFile}`));
 		const diff = stubState.executed.find(entry => entry.id === "vscode.diff");
 		expect(diff).toBeDefined();
@@ -482,6 +511,10 @@ describe("ide-native workbench surface", () => {
 		expect(diff!.args[1]).toMatchObject({ scheme: "file", fsPath: sourceFile });
 		const provider = stubState.contentProviders.get("cedia-review")!;
 		await expect(provider.provideTextDocumentContent(original)).resolves.toBe(headText);
+		// Every read came from the host, each naming the file the diff is about.
+		expect(calls).toContainEqual({ method: "readWorkingTreeDiff", input: { scope: "unstaged", filePath: "src/greet.ts" } });
+		expect(calls).toContainEqual({ method: "workingTreeDiffStats", input: { scope: "workingTree", filePath: "src/greet.ts" } });
+		expect(calls).toContainEqual({ method: "readFileAtRev", input: { filePath: "src/greet.ts", rev: "HEAD" } });
 	});
 	it("renders a real status bar item that opens the task", async () => {
 		await activateAndSettle();
@@ -533,20 +566,46 @@ describe("ide-native workbench surface", () => {
 	});
 	it("refuses a binary file instead of opening a text diff of bytes", async () => {
 		await activateAndSettle();
+		const calls = bindReviewSurface({
+			workingTreeDiffStats: { additions: 0, deletions: 0, fileCount: 1, files: [{ path: "assets/logo.png", insertions: 0, deletions: 0, binary: true }] },
+			readWorkingTreeDiff: { patch: "", truncated: false },
+		});
 		await stubState.commands.get("cedia.reviewInDiff")!(stubUri(`file://${binaryFile}`));
-		// Honesty: git reports this as binary, so no diff editor may open.
+		// Honesty: the host reports this path as binary, so no diff editor may open.
 		expect(stubState.executed.some(entry => entry.id === "vscode.diff")).toBe(false);
 		expect(stubState.statusMessages.some(message => message.toLowerCase().includes("binary"))).toBe(true);
+		// The refusal came from the host's per-file binary flag, not from a guess.
+		expect(calls).toContainEqual({ method: "readWorkingTreeDiff", input: { scope: "unstaged", filePath: "assets/logo.png" } });
+		expect(calls).toContainEqual({ method: "workingTreeDiffStats", input: { scope: "workingTree", filePath: "assets/logo.png" } });
 	});
 	it("opens an untracked text file as all-added from an empty original", async () => {
 		await activateAndSettle();
+		const calls = bindReviewSurface({
+			workingTreeDiffStats: { additions: 1, deletions: 0, fileCount: 1, files: [{ path: "src/new-file.ts", insertions: 1, deletions: 0, binary: false }] },
+			readWorkingTreeDiff: { patch: "", truncated: false },
+			readFileAtRev: { contents: "", resolvedRev: "HEAD", missing: true, truncated: false },
+		});
 		await stubState.commands.get("cedia.reviewInDiff")!(stubUri(`file://${untrackedFile}`));
 		const diff = stubState.executed.find(entry => entry.id === "vscode.diff");
 		expect(diff).toBeDefined();
 		const provider = stubState.contentProviders.get("cedia-review")!;
-		// An empty original is the honest answer for a path with no HEAD version;
-		// Cedia must not invent content for the left side.
+		// The host reports no version of this path at HEAD, so the left side stays
+		// empty instead of Cedia inventing content for it.
 		await expect(provider.provideTextDocumentContent(diff!.args[0])).resolves.toBe("");
+		expect(calls).toContainEqual({ method: "readFileAtRev", input: { filePath: "src/new-file.ts", rev: "HEAD" } });
+	});
+	it("reads the Changes list from the host's porcelain text", async () => {
+		await activateAndSettle();
+		const calls = bindReviewSurface({ porcelain: { text: " M src/greet.ts\n?? src/new-file.ts\n" } });
+		const controller: { review: { files: { path: string; status: string }[] }; refreshReview(): Promise<void> } = ensureLegacyController();
+		await controller.refreshReview();
+		expect(calls).toEqual([{ method: "porcelain", input: {} }]);
+		// The classification still comes from the same porcelain parser, now fed
+		// by the host instead of a local `git status` (item 58).
+		expect(controller.review.files.map(file => [file.path, file.status])).toEqual([
+			["src/greet.ts", "modified"],
+			["src/new-file.ts", "untracked"],
+		]);
 	});
 	it("opens the Changes view from the Diff action", async () => {
 		await activateAndSettle();

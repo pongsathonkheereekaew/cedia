@@ -64,6 +64,15 @@ describe("reviewFromGitStatus", () => {
 			stale: false,
 			noGit: true,
 		});
+		// Item 58: the host states the same normal state in its own words, and the
+		// panel must still explain a non-Git folder instead of showing no changes.
+		expect(reviewFromGitStatus("", "/tmp/repo", "This folder is not a git repository")).toEqual({
+			cwd: "/tmp/repo",
+			files: [],
+			error: REVIEW_NO_GIT_REASON,
+			stale: false,
+			noGit: true,
+		});
 		expect(reviewFromGitStatus("", "/tmp/repo", "git timed out")).toEqual({
 			cwd: "/tmp/repo",
 			files: [],

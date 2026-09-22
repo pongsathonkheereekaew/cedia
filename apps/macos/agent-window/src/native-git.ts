@@ -1,8 +1,12 @@
 import type { NativeApi } from "../vendor/synara/packages/contracts/src/ipc.ts";
-import type { GitActionProgressEvent } from "../vendor/synara/packages/contracts/src/git.ts";
+import type { GitActionProgressEvent, GitWorktreeSetupProgressEvent } from "../vendor/synara/packages/contracts/src/git.ts";
+import { GIT_GITHUB_UNAVAILABLE_REASON } from "../../../../packages/protocol/src/git.ts";
 
 import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 export const CEDIA_AGENT_GIT_EVENT_CHANNEL = "vscode:cediaAgentGit";
+/** Detached-worktree setup progress; the panel emits it separately from the
+ * stacked-action stream because the setup card subscribes on its own. */
+export const CEDIA_AGENT_WORKTREE_EVENT_CHANNEL = "vscode:cediaAgentWorktree";
 
 export interface NativeGitBridge {
 	invoke(channel: string, input?: unknown): Promise<unknown>;
@@ -35,55 +39,54 @@ function unsupported<T>(method: string): Promise<T> {
 	return Promise.reject(new Error(`Unsupported native Git method '${method}'`));
 }
 
-function unsupportedEvent(method: string): never {
-	throw new Error(`Unsupported native Git event '${method}'`);
+/** Cedia has no GitHub client, so these cannot be answered at all. */
+function githubUnavailable<T>(): Promise<T> {
+	return Promise.reject(new Error(GIT_GITHUB_UNAVAILABLE_REASON));
 }
 
-function eventPayload(args: readonly unknown[]): GitActionProgressEvent | null {
-	const payload = args[0];
-	return payload && typeof payload === "object" && !Array.isArray(payload)
-		? payload as GitActionProgressEvent
-		: null;
+/** One subscription shape for both git event channels: the panel sends the
+ * payload as the listener's first argument, and unsubscribing is optional. */
+function subscribe<T>(bridge: NativeGitBridge, channel: string, listener: (event: T) => void): () => void {
+	if (!bridge.on) return () => undefined;
+	const handler = (_event: unknown, ...args: unknown[]) => {
+		const payload = args[0];
+		if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+		listener(payload as T);
+	};
+	bridge.on(channel, handler);
+	return () => bridge.removeListener?.(channel, handler);
 }
 
 export function createNativeGitApi(bridge: NativeGitBridge): NativeGitApi {
 	return {
-		githubRepository: () => unsupported("githubRepository"),
+		githubRepository: input => request(bridge, "githubRepository", input),
 		status: input => request(bridge, "status", input),
 		listBranches: input => request(bridge, "listBranches", input),
 		listRecentCommits: input => request(bridge, "listRecentCommits", input),
 		createWorktree: () => unsupported("createWorktree"),
-		createDetachedWorktree: () => unsupported("createDetachedWorktree"),
-		removeWorktree: () => unsupported("removeWorktree"),
+		createDetachedWorktree: input => request(bridge, "createDetachedWorktree", input),
+		removeWorktree: input => request(bridge, "removeWorktree", input),
 		readWorkingTreeDiff: input => request(bridge, "readWorkingTreeDiff", input),
 		workingTreeDiffStats: input => request(bridge, "workingTreeDiffStats", input),
 		createBranch: input => request(bridge, "createBranch", input),
 		checkout: input => request(bridge, "checkout", input),
-		stashAndCheckout: () => unsupported("stashAndCheckout"),
-		stashDrop: () => unsupported("stashDrop"),
-		stashInfo: () => unsupported("stashInfo"),
-		removeIndexLock: () => unsupported("removeIndexLock"),
-		init: () => unsupported("init"),
-		stageFiles: () => unsupported("stageFiles"),
-		unstageFiles: () => unsupported("unstageFiles"),
-		handoffThread: () => unsupported("handoffThread"),
-		resolvePullRequest: () => unsupported("resolvePullRequest"),
-		pullRequestSnapshot: () => unsupported("pullRequestSnapshot"),
-		preparePullRequestThread: () => unsupported("preparePullRequestThread"),
-		pull: () => unsupported("pull"),
+		stashAndCheckout: input => request(bridge, "stashAndCheckout", input),
+		stashDrop: input => request(bridge, "stashDrop", input),
+		stashInfo: input => request(bridge, "stashInfo", input),
+		removeIndexLock: input => request(bridge, "removeIndexLock", input),
+		init: input => request(bridge, "init", input),
+		stageFiles: input => request(bridge, "stageFiles", input),
+		unstageFiles: input => request(bridge, "unstageFiles", input),
+		handoffThread: input => request(bridge, "handoffThread", input),
+		resolvePullRequest: () => githubUnavailable(),
+		pullRequestSnapshot: () => githubUnavailable(),
+		preparePullRequestThread: () => githubUnavailable(),
+		pull: input => request(bridge, "pull", input),
 		readFileAtRev: input => request(bridge, "readFileAtRev", input),
-		blameLine: () => unsupported("blameLine"),
+		blameLine: input => request(bridge, "blameLine", input),
 		summarizeDiff: () => unsupported("summarizeDiff"),
 		runStackedAction: input => request(bridge, "runStackedAction", input),
-		onActionProgress: listener => {
-			if (!bridge.on) return () => undefined;
-			const handler = (_event: unknown, ...args: unknown[]) => {
-				const payload = eventPayload(args);
-				if (payload) listener(payload);
-			};
-			bridge.on(CEDIA_AGENT_GIT_EVENT_CHANNEL, handler);
-			return () => bridge.removeListener?.(CEDIA_AGENT_GIT_EVENT_CHANNEL, handler);
-		},
-		onWorktreeSetupProgress: () => unsupportedEvent("onWorktreeSetupProgress"),
+		onActionProgress: listener => subscribe<GitActionProgressEvent>(bridge, CEDIA_AGENT_GIT_EVENT_CHANNEL, listener),
+		onWorktreeSetupProgress: listener => subscribe<GitWorktreeSetupProgressEvent>(bridge, CEDIA_AGENT_WORKTREE_EVENT_CHANNEL, listener),
 	} as NativeGitApi;
 }

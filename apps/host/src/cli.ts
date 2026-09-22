@@ -4,7 +4,7 @@ import { resolve, join, dirname } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runCli } from "./cli-client.ts";
-import { startHostServer } from "./server.ts";
+import { startHostServer, type StartedHostServer } from "./server.ts";
 import { isProcessAlive, shouldStopHost } from "./host-lifetime.ts";
 import type { HostDescriptor } from "../../../packages/protocol/src/index.ts";
 
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   if (action !== "serve") { process.exitCode = await runCli(process.argv.slice(2)); return; }
   let fatalDuringStartup = false;
   let stopping = false;
-  let server: Awaited<ReturnType<typeof startHostServer>> | undefined;
+  let server: StartedHostServer | undefined;
   const bundledOmp = resolve(dirname(fileURLToPath(import.meta.url)), "../omp/omp");
   const useBundled = !process.env.CEDIA_OMP_PATH && existsSync(bundledOmp);
   server = await startHostServer({ stateDir, ompExecutable: process.env.CEDIA_OMP_PATH ?? (useBundled ? bundledOmp : undefined),

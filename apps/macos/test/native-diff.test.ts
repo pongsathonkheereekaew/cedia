@@ -1,8 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
 	decodeReviewDocId,
 	encodeReviewDocId,
@@ -10,7 +6,6 @@ import {
 	NATIVE_DIFF_BINARY_REASON,
 	nativeDiffPlan,
 	reviewDiffTitle,
-	reviewOriginalArgs,
 	resolveReviewTarget,
 	AGENT_EDIT_DIFF_SCHEME,
 	agentEditDiffTitle,
@@ -113,62 +108,6 @@ describe("review target decision", () => {
 	it("titles a brand new file as a new-file comparison", () => {
 		const decision = resolveReviewTarget({ relativePath: "notes.md", cwd: "/tmp/ws", missingOriginal: true });
 		expect(decision.open && decision.title).toBe("notes.md (new file ↔ Working Tree)");
-	});
-});
-
-describe("original-side read against a real repository", () => {
-	function fixture(): string {
-		const dir = mkdtempSync(join(tmpdir(), "cedia-native-diff-"));
-		mkdirSync(join(dir, "src"), { recursive: true });
-		execFileSync("git", ["init", "-q"], { cwd: dir });
-		writeFileSync(join(dir, "src/app.ts"), "export const value = 1;\n");
-		execFileSync("git", ["add", "-A"], { cwd: dir });
-		execFileSync("git", ["-c", "user.email=a@b.c", "-c", "user.name=F", "commit", "-qm", "init"], { cwd: dir });
-		// Change the working tree so a diff is meaningful.
-		writeFileSync(join(dir, "src/app.ts"), "export const value = 2;\nexport const extra = true;\n");
-		return dir;
-	}
-
-	it("returns the committed version, not the working tree", () => {
-		const dir = fixture();
-		try {
-			const [subcommand, target] = reviewOriginalArgs("HEAD", "src/app.ts");
-			const original = execFileSync("git", ["-C", dir, subcommand!, target!], { encoding: "utf8" });
-			expect(original).toBe("export const value = 1;\n");
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
-	it("yields no original for a path the ref does not contain", () => {
-		const dir = fixture();
-		try {
-			writeFileSync(join(dir, "src/new.ts"), "export const fresh = true;\n");
-			const [subcommand, target] = reviewOriginalArgs("HEAD", "src/new.ts");
-			let failed = false;
-			try {
-				execFileSync("git", ["-C", dir, subcommand!, target!], { stdio: "pipe" });
-			} catch {
-				failed = true;
-			}
-			// The provider maps this failure to an empty original (all-added diff).
-			expect(failed).toBe(true);
-			expect(nativeDiffPlan({ path: "src/new.ts", missingOriginal: true }).open).toBe(true);
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
-	it("cannot be turned into an arbitrary command by a hostile ref", () => {
-		const dir = fixture();
-		try {
-			const [subcommand, target] = reviewOriginalArgs("--output=/tmp/cedia-pwned", "src/app.ts");
-			expect(target).toBe("HEAD:src/app.ts");
-			const original = execFileSync("git", ["-C", dir, subcommand!, target!], { encoding: "utf8" });
-			expect(original).toBe("export const value = 1;\n");
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
 	});
 });
 
