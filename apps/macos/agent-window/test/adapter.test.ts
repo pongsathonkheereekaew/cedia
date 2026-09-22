@@ -630,6 +630,15 @@ describe("Cedia Agent Window native adapter", () => {
 		});
 		expect(calls.some(call => call.path === "/v1/models")).toBe(true);
 	});
+	it("creates the project through host POST /v1/projects (item 59)", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+		await api.orchestration.dispatchCommand({ type: "project.create", commandId: "project-1", projectId: "project-new", workspaceRoot: "/repo/new-project", title: "New project" });
+		const posted = calls.find(call => call.path === "/v1/projects" && call.method === "POST");
+		expect((posted?.body as { id?: string; path?: string; name?: string })).toEqual({ id: "project-new", path: "/repo/new-project", name: "New project" });
+		// No GitHub provisioning path: the adapter has no second project source.
+		expect(calls.some(call => JSON.stringify(call).includes("provisionFromGitHub"))).toBe(false);
+	});
 });
 
 it("routes duplicate model IDs by upstream provider and passes the selected thinking level", async () => {

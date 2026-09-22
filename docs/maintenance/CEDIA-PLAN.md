@@ -3200,6 +3200,40 @@ recorded before this slice; `ci-validate` CI-OK. Live packaged proof (a binding
 edited in the agent window appearing in the workbench and vice versa) rides the next
 `package:mac` + `check:packaged` run with items 54/60/61/62.
 
+### One project-creation flow; the host record is the project (2026-09-22)
+
+Closes §10 item 59. No code cut was needed — the mapping showed the flow already
+converged; the slice pins it with a test and a receipt.
+
+**Map.** Four live entry points, one host call: the bundle `CreateProjectDialog`
+(local-folder tab) → `project.create` dispatch → adapter `POST /v1/projects`;
+first-send folder-mention auto-create (`prepareChatSendWorkspace`) → same dispatch;
+IDE dock handoff (`native-handoff.ts openNativeAgentIntent`) → same dispatch; the IDE
+extension (`ensureProject`, `addProjectAtPath`, `openProjectAtPath`,
+`cedia.project.add`) → `CediaHostClient.createProject` → same `POST /v1/projects`.
+The host stores exactly one record (`store.createProject`: path + name, duplicate
+path → `project-exists`); both windows list it through `GET /v1/projects`.
+
+**Dead sources, confirmed cut (not re-cut).** `provisionFromGitHub` +
+`onProvisionProgress` are `unsupportedAsync` stubs in the adapter (item 62's slice)
+with no host route behind them, and the capability probe
+(`readGitHubProvisioningCapability`) answers false without the bridge function — so
+the dialog's GitHub tab is disabled by construction and its submit path
+(`handleCreateProjectSubmit`'s github branch) is unreachable. `workspace-suggestion`
+has a host route but no bundle caller (only the opt-in TypeSafe judge path in
+`service.ts`/`workspace-mode.ts`); first-send workspace mode comes from the caller,
+not a suggestion call. Spaces/`spaceId` are renderer-local grouping: the adapter
+projects `spaceId: null` and `spaces: []`, the host has no spaces table, and
+`project.create`'s `spaceId`/`kind`/`defaultModelSelection` extras never reach the
+host body (`{id, path, name}` only).
+
+Receipt: new adapter test pins `project.create` → `POST /v1/projects {id, path,
+name}` with no provisioning call (30 pass); throwaway live proof against a real
+host — gateway `POST projects` then `GET projects` returns the same record in both
+(`same record: YES`); host suite 129 pass; agent-window root `tsc` clean;
+`ci-validate` CI-OK. Packaged proof (a project created in either window visible in
+both) rides the next `package:mac` run.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.
