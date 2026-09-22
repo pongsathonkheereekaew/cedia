@@ -18,6 +18,7 @@ import {
   subscribeSidebarUiState,
 } from "../components/Sidebar.uiState";
 import { isElectron } from "../env";
+import { useTheme } from "../hooks/useTheme";
 import { useHandleNewChat } from "../hooks/useHandleNewChat";
 import { useHandleNewStudioChat } from "../hooks/useHandleNewStudioChat";
 import { useTemporaryThreadLifecycle } from "../hooks/useTemporaryThreadLifecycle";
@@ -50,6 +51,7 @@ import { toastManager } from "~/components/ui/toast";
 import {
   Sidebar,
   SIDEBAR_OFFCANVAS_MOTION_CLASS,
+  SIDEBAR_OFFCANVAS_MOTION_SUPPRESSED_CLASS,
   SidebarInstanceProvider,
   SidebarProvider,
   SidebarRail,
@@ -568,6 +570,22 @@ function ChatRouteLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     isIdeEmbedded ? false : readSidebarUiState().sidebarOpen,
   );
+  // Mirror the right dock: mount (and any remount from route changes) with motion
+  // suppressed, then enable after the first painted frame. Animating from a stale
+  // geometry flashes the transition strip. (Cedia addition.)
+  const [sidebarMotionSuppressed, setSidebarMotionSuppressed] = useState(true);
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => setSidebarMotionSuppressed(false));
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+  const sidebarMotionClass = sidebarMotionSuppressed
+    ? SIDEBAR_OFFCANVAS_MOTION_SUPPRESSED_CLASS
+    : SIDEBAR_OFFCANVAS_MOTION_CLASS;
+  // The thread sidebar is a transparent vibrancy surface. That reads as dark glass over a
+  // dark desktop, but in light mode dark wallpaper (or a black clear color) shows through
+  // and the dark-ink labels go unreadable - so the sidebar is only transparent in dark
+  // mode, and takes the solid sidebar token in light mode. (Cedia addition.)
+  const { resolvedTheme } = useTheme();
   const handleSidebarOpenChange = useCallback((open: boolean) => {
     setSidebarOpen(open);
     persistSidebarUiState({ ...readSidebarUiState(), sidebarOpen: open });
@@ -582,10 +600,33 @@ function ChatRouteLayout() {
       collapsible="offcanvas"
       // Match the right dock's soft drawer slide (shared token) instead of the
       // shell's default `ease-linear`. Applied to the container + gap in lockstep.
-      className={cn("text-foreground", SIDEBAR_OFFCANVAS_MOTION_CLASS)}
-      gapClassName={cn(SIDEBAR_GAP_CLASS, SIDEBAR_OFFCANVAS_MOTION_CLASS)}
-      innerClassName={SIDEBAR_INNER_CLASS}
-      transparentSurface
+      className={cn(
+        "text-foreground",
+        sidebarMotionClass,
+        // In light mode the sidebar is opaque (Cedia), so the container's own border-r
+        // would stack with the content card's seam shadow into a dark edge; drop it and
+        // let the seam carry the divider alone. Dark keeps the existing edge.
+        resolvedTheme === "dark" ? null : "group-data-[side=left]:border-r-0",
+      )}
+      gapClassName={cn(
+        SIDEBAR_GAP_CLASS,
+        sidebarMotionClass,
+        // The panel slides on the compositor thread while the gap/content resize on the
+        // main thread: under load the content trails a few frames and the vacated strip
+        // goes see-through (dark flicker). In light mode the gap carries the solid
+        // sidebar token so the strip stays painted through the whole transition; dark
+        // keeps the glass gap. (Cedia addition.)
+        resolvedTheme === "dark" ? null : "bg-sidebar",
+      )}
+      innerClassName={cn(
+        SIDEBAR_INNER_CLASS,
+        // A backdrop blur over a transparent body resamples every animation frame and
+        // flashes black while the panel slides (Chromium compositor quirk). In light mode
+        // the surface is opaque anyway, so the blur is pure cost plus flicker risk: drop
+        // it there and keep the glass in dark mode. (Cedia addition.)
+        resolvedTheme === "dark" ? null : "[backdrop-filter:none] [-webkit-backdrop-filter:none]",
+      )}
+      transparentSurface={resolvedTheme === "dark"}
       resizable={THREAD_SIDEBAR_RESIZABLE}
     >
       <ThreadSidebar />
@@ -636,7 +677,12 @@ function ChatRouteLayout() {
       open={resolvedSidebarOpen}
       onOpenChange={handleSidebarOpenChange}
       shellNavigationOwner={isElectron}
-      className="bg-[var(--app-shell-background)]"
+      // The provider shell is the static backdrop behind the sliding panel, the
+      // shrinking gap and the growing content. Upstream leaves it transparent for the
+      // glass window; in Cedia's opaque window any pixel it leaves uncovered paints
+      // black, which flashed on every sidebar close in light mode. Opaque in light,
+      // glass in dark. (Cedia addition.)
+      className={resolvedTheme === "dark" ? "bg-[var(--app-shell-background)]" : "bg-background"}
       data-sidebar-side="left"
     >
       <ThreadRetentionMaintenanceToast />

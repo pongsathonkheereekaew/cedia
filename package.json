@@ -12,7 +12,6 @@
     "build:agent": "bun scripts/build-agent-window.ts",
     "build:mac": "bun scripts/build-cedia.ts --runtime --desktop",
     "build:portable": "bun scripts/build-cedia.ts --portable",
-    "check:cedia-ui": "bun scripts/cedia-ui-check.ts",
     "check:packaged": "bun scripts/check-packaged-shell.ts",
     "check:repo": "node scripts/ci-validate.mjs",
     "check:terminal": "bun scripts/terminal-conformance.ts",

@@ -204,10 +204,14 @@ export function stateForHostTheme(state: ThemeState, snapshot: HostThemeSnapshot
   const variant = snapshot.mode;
   // The IDE names its theme (VS Code `workbench.colorTheme`); project it onto this
   // app's closest pack so the agent follows the IDE, not just its light/dark
-  // mode and accent tints. Unknown names keep the stored pack. This overlay only
-  // projects for display; storage keeps the user's own packs underneath, so
-  // switching the toggle off restores their look.
-  const mappedPack = packForIdeThemeName(snapshot.themeName, variant);
+  // mode and accent tints. Unknown names keep the stored pack. A pack the user
+  // already changed stays theirs — following is a default, not an override — so
+  // mapping lands only while that variant is still the pristine default. This
+  // overlay only projects for display; storage keeps the user's own packs
+  // underneath, so switching the toggle off restores their look.
+  const mappedPack = isDefaultVariantPack(state, variant)
+    ? packForIdeThemeName(snapshot.themeName, variant)
+    : undefined;
   let next = state;
   if (mappedPack) {
     next = setThemeCodeThemeId(next, variant, mappedPack);

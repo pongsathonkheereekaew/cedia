@@ -88,6 +88,7 @@ import {
   useBrowserAnnotations,
   type BrowserAnnotationsController,
 } from "./browser/useBrowserAnnotations";
+import { useTheme } from "../hooks/useTheme";
 import { LocalServerIdentity } from "./LocalServerIdentity";
 import { Button } from "./ui/button";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
@@ -420,16 +421,21 @@ function BrowserRuntimePreview(props: { title: string; detail: string }) {
   );
 }
 
-function BrowserRuntimeError(props: { message: string; onReload: () => void }) {
+// Cedia seam: exported for the agent-window theme test; `dark` follows the resolved theme.
+export function BrowserRuntimeError(props: { message: string; onReload: () => void; dark: boolean }) {
+  const { dark } = props;
   return (
     <div
-      className="absolute inset-0 z-20 flex items-center justify-center bg-[#0d0d0d] px-6 text-center text-white"
+      className={cn(
+        "absolute inset-0 z-20 flex items-center justify-center px-6 text-center",
+        dark ? "bg-[#0d0d0d] text-white" : "bg-background text-foreground",
+      )}
       role="alert"
     >
       <div className="flex max-w-xs flex-col items-center">
-        <CircleAlertIcon className="size-7 text-white/35" aria-hidden="true" />
-        <p className="mt-3 text-sm font-medium text-white/80">This page could not be loaded</p>
-        <p className="mt-1 text-xs text-white/45">{props.message}</p>
+        <CircleAlertIcon className={cn("size-7", dark ? "text-white/35" : "text-muted-foreground")} aria-hidden="true" />
+        <p className={cn("mt-3 text-sm font-medium", dark ? "text-white/80" : "text-foreground")}>This page could not be loaded</p>
+        <p className={cn("mt-1 text-xs", dark ? "text-white/45" : "text-muted-foreground")}>{props.message}</p>
         <Button
           type="button"
           variant="secondary"
@@ -486,14 +492,20 @@ function BrowserLocalServerThumbnail({ server }: { server: ServerLocalServerProc
 }
 
 // Replaces about:blank with a local-server launcher so the browser never opens to white.
-function BrowserLocalServersHome({
+// Cedia seam: exported for the agent-window theme test; `dark` follows the resolved theme.
+// Cedia's adapter reports no local servers, so the empty state is the permanent home here:
+// it reads like a new-tab page (Codex: globe, "Start browsing", "Enter a URL to open a
+// page") instead of a dead-end server list, and follows the light/dark theme.
+export function BrowserLocalServersHome({
   activeTabId,
+  dark,
   loading,
   onNavigate,
   onRefresh,
   servers,
 }: {
   activeTabId: string | null;
+  dark: boolean;
   loading: boolean;
   onNavigate: (url: string, tabId: string | null) => void;
   onRefresh: () => void;
@@ -502,37 +514,47 @@ function BrowserLocalServersHome({
   const hasServers = servers.length > 0;
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col overflow-hidden bg-[#0d0d0d] text-white">
+    <div
+      className={cn(
+        "absolute inset-0 z-20 flex flex-col overflow-hidden",
+        dark ? "bg-[#0d0d0d] text-white" : "bg-background text-foreground",
+      )}
+    >
       <div className="mx-auto flex h-full w-full max-w-[52rem] flex-col px-8 py-9">
-        <div className="flex shrink-0 items-center justify-between">
-          <p className="text-[15px] font-medium text-white/35">Local</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-8 text-white/35 hover:bg-white/[0.06] hover:text-white/70"
-            disabled={loading}
-            onClick={onRefresh}
-            aria-label="Refresh local servers"
-            title="Refresh local servers"
-          >
-            <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
-          </Button>
-        </div>
+        {hasServers ? (
+          <div className="flex shrink-0 items-center justify-between">
+            <p className={cn("text-[15px] font-medium", dark ? "text-white/35" : "text-muted-foreground")}>Local</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                "size-8",
+                dark ? "text-white/35 hover:bg-white/[0.06] hover:text-white/70" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              disabled={loading}
+              onClick={onRefresh}
+              aria-label="Refresh local servers"
+              title="Refresh local servers"
+            >
+              <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
+            </Button>
+          </div>
+        ) : null}
 
         {!hasServers ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
             {loading ? (
               <>
-                <RefreshCwIcon className="mb-4 size-12 animate-spin text-white/20" />
-                <p className="text-base font-semibold text-white">Scanning local servers</p>
-                <p className="mt-2 text-sm text-white/35">Checking localhost ports</p>
+                <RefreshCwIcon className={cn("mb-4 size-12 animate-spin", dark ? "text-white/20" : "text-foreground/20")} />
+                <p className={cn("text-base font-semibold", dark ? "text-white" : "text-foreground")}>Scanning local servers</p>
+                <p className={cn("mt-2 text-sm", dark ? "text-white/35" : "text-muted-foreground")}>Checking localhost ports</p>
               </>
             ) : (
               <>
-                <GlobeIcon className="mb-4 size-16 stroke-[1.5] text-white/30" />
-                <p className="text-base font-semibold text-white">No local servers</p>
-                <p className="mt-2 text-sm text-white/35">Try another browser URL</p>
+                <GlobeIcon className={cn("mb-4 size-16 stroke-[1.5]", dark ? "text-white/30" : "text-foreground/30")} />
+                <p className={cn("text-base font-semibold", dark ? "text-white" : "text-foreground")}>Start browsing</p>
+                <p className={cn("mt-2 text-sm", dark ? "text-white/35" : "text-muted-foreground")}>Enter a URL to open a page</p>
               </>
             )}
           </div>
@@ -551,7 +573,12 @@ function BrowserLocalServersHome({
                       onNavigate(url, activeTabId);
                     }
                   }}
-                  className="group grid w-full shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 rounded-xl border border-white/[0.07] px-3 py-2.5 text-left transition-colors hover:border-white/[0.14] hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-45"
+                  className={cn(
+                    "group grid w-full shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                    dark
+                      ? "border-white/[0.07] hover:border-white/[0.14] hover:bg-white/[0.04]"
+                      : "border-border hover:border-foreground/25 hover:bg-muted",
+                  )}
                 >
                   <BrowserLocalServerThumbnail server={server} />
                   <LocalServerIdentity server={server} tone="browser" />
@@ -580,6 +607,8 @@ export function BrowserPanel({
   // AssignmentPattern there and silently drops the whole component's memoization.
   const runtimeMode = runtimeModeProp ?? "live";
   const isFloatingMode = mode === "floating";
+  const { resolvedTheme } = useTheme();
+  const browserDark = resolvedTheme === "dark";
   const api = readNativeApi();
   const isLiveRuntime = runtimeMode === "live";
   const threadBrowserState = useBrowserStateStore(selectThreadBrowserState(threadId));
@@ -2016,7 +2045,7 @@ export function BrowserPanel({
               />
             ) : null}
             {isLiveRuntime && browserPageError ? (
-              <BrowserRuntimeError message={browserPageError} onReload={onReloadActiveTab} />
+              <BrowserRuntimeError message={browserPageError} onReload={onReloadActiveTab} dark={browserDark} />
             ) : null}
             {isFloatingMode && usesNativeRuntime && previewFrame?.tabId === activeTabId ? (
               <img
@@ -2029,6 +2058,7 @@ export function BrowserPanel({
             {showLocalServersHome ? (
               <BrowserLocalServersHome
                 activeTabId={activeTab?.id ?? null}
+                dark={browserDark}
                 loading={localServersQuery.isLoading || localServersQuery.isFetching}
                 onNavigate={onOpenLocalServer}
                 onRefresh={() => void localServersQuery.refetch()}
