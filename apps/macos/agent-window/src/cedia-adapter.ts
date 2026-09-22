@@ -10,12 +10,18 @@
 
 import {
 	DEFAULT_SERVER_SETTINGS_VIEW,
+	ThreadId,
 	type DesktopBridge,
+	type ProviderCompactThreadInput,
+	type ProviderListCommandsInput,
+	type ProviderListSkillsInput,
 } from "@synara/contracts";
 import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState } from "../../src/state.ts";
-import { entryFailureText } from "../../src/chat-sessions-map.ts";
+import { entryFailureText, promptWithAttachedContext } from "../../src/chat-sessions-map.ts";
 import type { Json } from "../../../../packages/protocol/src/index.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
+import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
+import { readComposerImageBlob } from "../vendor/synara/apps/web/src/lib/composerImageBlobStore";
 import { createNativeTerminalApi } from "./native-terminal";
 import { createNativeFilesApi } from "./native-files";
 import { createNativeBrowserApi } from "./native-browser";
@@ -27,6 +33,35 @@ import { createCediaContextMenuPresenter } from "./cedia-context-menu";
 export const CEDIA_AGENT_CHANNEL = "vscode:cediaAgent";
 /** UI-only value used until OMP reports a current model. Never sent to OMP. */
 export const OMP_UNRESOLVED_MODEL = "cedia:unresolved";
+
+/** Base64 for OMP's `images[]` — arrayBuffer-based so it works in the renderer and in tests (no FileReader). */
+async function fileToBase64(file: File): Promise<string> {
+	const bytes = new Uint8Array(await file.arrayBuffer());
+	let binary = "";
+	const chunkSize = 0x8000;
+	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+	}
+	return btoa(binary);
+}
+
+/**
+ * Bytes for a composer image attachment, looked up across the composer stores the
+ * send paths own: the live draft's File, a queued turn's File, then the persisted
+ * IndexedDB blob (AppSnap / reload-hydration window). Null when nothing backs the id.
+ */
+async function composerImageFile(threadId: string, imageId: string): Promise<File | null> {
+	const draft = useComposerDraftStore.getState().draftsByThreadId[ThreadId.makeUnsafe(threadId)];
+	if (!draft) return null;
+	const live = draft.images.find((image) => image.id === imageId);
+	if (live?.file) return live.file;
+	const queued = draft.queuedTurns
+		.flatMap((turn) => ("images" in turn && Array.isArray(turn.images) ? turn.images : []))
+		.find((image) => image.id === imageId);
+	if (queued?.file) return queued.file;
+	const persisted = draft.persistedAttachments.find((item) => item.id === imageId && item.blobKey);
+	return persisted?.blobKey ? await readComposerImageBlob(persisted.blobKey) : null;
+}
 
 export interface AgentWindowBridge {
 	invoke(channel: string, input?: unknown): Promise<unknown>;
@@ -928,6 +963,74 @@ class CediaAgentAdapter {
 		return asSessions(await this.request("GET", `/v1/sessions${query}`));
 	}
 
+	/**
+	 * Fold composer attachments/mentions/skills into the outgoing prompt the way the
+	 * native path proved it (§10 item 61): image bytes travel in OMP's own `images[]`
+	 * and every other reference is named in a labelled attached-context block. OMP's
+	 * agent reads referenced files itself, so paths stay references — nothing is
+	 * uploaded anywhere (§10 item 60).
+	 */
+	async turnTextWithAttachments(
+		threadId: string,
+		message: Record<string, unknown>,
+	): Promise<{ message: string; images: Array<{ type: "image"; data: string; mimeType: string }> }> {
+		const text = string(message.text) ?? "";
+		const images: Array<{ type: "image"; data: string; mimeType: string }> = [];
+		const labels: string[] = [];
+		// Mirrors the native `attachedContextLabels`: name every non-image reference,
+		// deduplicated, so a chip can never be dropped silently.
+		const pushLabel = (label: string | undefined): void => {
+			if (!label || labels.includes(label)) return;
+			labels.push(label);
+		};
+		for (const item of array(message.attachments)) {
+			const attachment = record(item);
+			if (!attachment) continue;
+			const kind = string(attachment.type);
+			if (kind === "image") {
+				const imageId = string(attachment.id);
+				const file = imageId ? await composerImageFile(threadId, imageId) : null;
+				if (!file) {
+					throw new Error(`Cedia could not read the bytes for attached image '${string(attachment.name) ?? imageId ?? "image"}'`);
+				}
+				images.push({ type: "image", data: await fileToBase64(file), mimeType: string(attachment.mimeType) ?? "image/png" });
+				continue;
+			}
+			if (kind === "file") pushLabel(string(attachment.name));
+			else if (kind === "assistant-selection") pushLabel(string(attachment.text));
+		}
+		for (const item of array(message.mentions)) {
+			const mention = record(item);
+			if (!mention) continue;
+			pushLabel(string(mention.path) ?? string(mention.name));
+		}
+		for (const item of array(message.skills)) {
+			const skill = record(item);
+			const name = skill ? string(skill.name) : undefined;
+			// The composer's slash lane already puts `/name` in the text when it was
+			// completed there; only name a skill chip that left no text behind.
+			if (name && !text.includes(name)) pushLabel(`Skill: ${name}`);
+		}
+		return {
+			message: labels.length > 0 ? promptWithAttachedContext(text, labels) : text,
+			images,
+		};
+	}
+
+	/** OMP's live slash/skill catalogue for a task's session; best-effort empty when there is no session to ask. */
+	async availableSlashCommands(threadId: string | undefined): Promise<unknown[]> {
+		if (!threadId) return [];
+		try {
+			const session = await this.session(threadId);
+			const command = await this.sendCommand(session, id(), "get_available_commands");
+			return array(record(record(command.result)?.data)?.commands);
+		} catch {
+			// Discovery is best-effort: a draft, absent or starting session reports no
+			// extra commands rather than breaking the composer menu.
+			return [];
+		}
+	}
+
 	async session(sessionId: string): Promise<CediaSession> {
 		const value = await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}`);
 		const rows = asSessions([value]);
@@ -1285,8 +1388,11 @@ class CediaAgentAdapter {
 			const threadId = string(row.threadId);
 			const message = record(row.message);
 			if (!threadId || !message || typeof message.text !== "string") throw new Error("Turn requires a thread and message");
-			if (Array.isArray(message.attachments) && message.attachments.length > 0) throw new Error("Cedia OMP turns do not support composer attachments yet");
-			if (Array.isArray(message.mentions) && message.mentions.length > 0) throw new Error("Cedia OMP turns do not support composer mentions yet");
+			// Cedia §10 item 61: attachments/mentions/skills fold into the prompt the way
+			// the native path proved it — image bytes into OMP's `images[]`, everything
+			// else into a labelled attached-context block.
+			const turn = await this.turnTextWithAttachments(threadId, message);
+			const payload = { message: turn.message, ...(turn.images.length > 0 ? { images: turn.images } : {}) };
 			let session = await this.ensureStarted(await this.session(threadId));
 			const selection = modelSelectionFromCommand(row.modelSelection);
 			if (selection) await this.setModelIfRequested(session, selection);
@@ -1294,13 +1400,13 @@ class CediaAgentAdapter {
 			const command = session.status === "running" && dispatchMode
 				? dispatchMode === "steer" ? "steer" : "follow_up"
 				: "prompt";
-			let result = await this.sendCommand(session, string(row.commandId) ?? id(), command, { message: message.text });
+			let result = await this.sendCommand(session, string(row.commandId) ?? id(), command, payload);
 			if (result.status === "not_dispatched") {
 				// A not_dispatched result is explicitly safe to retry with the same
 				// command id.  Refresh the session first so its durable incarnation
 				// matches the next command envelope.
 				session = await this.ensureStarted(await this.session(threadId));
-				result = await this.sendCommand(session, string(row.commandId) ?? id(), command, { message: message.text });
+				result = await this.sendCommand(session, string(row.commandId) ?? id(), command, payload);
 			}
 			if (result.status === "failed" || result.status === "outcome_unknown" || result.status === "not_dispatched") throw new Error(result.error ?? "OMP did not accept the prompt");
 		} else if (type === "thread.turn.interrupt" || type === "thread.task.stop") {
@@ -1450,10 +1556,45 @@ class CediaAgentAdapter {
 			filesystem: files.filesystem,
 			studio: { listThreadOutputs: unsupportedAsync("studio.listThreadOutputs") },
 			provider: {
-				getComposerCapabilities: async () => ({ provider: "omp", supportsSkillMentions: false, supportsSkillDiscovery: false, supportsNativeSlashCommandDiscovery: false, supportsPluginMentions: false, supportsPluginDiscovery: false, supportsRuntimeModelList: true, supportsThreadCompaction: false, supportsThreadImport: false }),
-				compactThread: unsupportedAsync("provider.compactThread"),
-				listCommands: async () => ({ commands: [], source: "omp" }),
-				listSkills: async () => ({ skills: [], source: "omp" }),
+				// Cedia §10 item 62: skills/commands are OMP's own `get_available_commands`
+				// (rows split by `source`), and compaction is OMP's `compact` — all real.
+				getComposerCapabilities: async () => ({ provider: "omp", supportsSkillMentions: false, supportsSkillDiscovery: true, supportsNativeSlashCommandDiscovery: true, supportsPluginMentions: false, supportsPluginDiscovery: false, supportsRuntimeModelList: true, supportsThreadCompaction: true, supportsThreadImport: false }),
+				compactThread: async (input: ProviderCompactThreadInput) => {
+					const threadId = string(input.threadId);
+					if (!threadId) throw new Error("Compaction needs a task");
+					const session = await adapter.ensureStarted(await adapter.session(threadId));
+					const result = await adapter.sendCommand(session, id(), "compact");
+					if (result.status === "failed" || result.status === "outcome_unknown" || result.status === "not_dispatched") throw new Error(result.error ?? "OMP did not compact this task");
+				},
+				listCommands: async (input: ProviderListCommandsInput) => {
+					// `get_available_commands` needs a session; a draft with no host session
+					// honestly reports no provider commands (the built-in list still shows).
+					const rows = await adapter.availableSlashCommands(input.threadId);
+					const commands = rows.flatMap((row) => {
+						const command = record(row);
+						const name = command ? string(command.name) : undefined;
+						const source = command ? string(command.source) : undefined;
+						if (!name || source === "skill") return [];
+						const description = command ? string(command.description) : undefined;
+						return [{ name, ...(description ? { description } : {}) }];
+					});
+					return { commands, source: "omp" };
+				},
+				listSkills: async (input: ProviderListSkillsInput) => {
+					const rows = await adapter.availableSlashCommands(input.threadId);
+					const skills = rows.flatMap((row) => {
+						const command = record(row);
+						const name = command ? string(command.name) : undefined;
+						const source = command ? string(command.source) : undefined;
+						if (!name || source !== "skill") return [];
+						const description = command ? string(command.description) : undefined;
+						// OMP's RPC row carries no file path and the descriptor requires one;
+						// on this path the reference is inert (OMP invokes skills by name).
+						return [{ name, path: name, enabled: true, ...(description ? { description } : {}) }];
+					});
+					return { skills, source: "omp" };
+				},
+				// Sessionless: the settings catalog has no OMP session to ask (recorded §9).
 				listSkillsCatalog: async () => ({ skills: [] }),
 				listPlugins: async () => ({ marketplaces: [], marketplaceLoadErrors: [], remoteSyncError: null, featuredPluginIds: [], source: "omp" }),
 				readPlugin: unsupportedAsync("provider.readPlugin"),

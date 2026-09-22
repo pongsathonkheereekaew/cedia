@@ -27,6 +27,7 @@ import {
   type ComposerImageAttachment,
   type PersistedComposerImageAttachment,
 } from "../composerDraftDomain";
+import { readNativeApi } from "../nativeApi";
 import { readComposerImageBlob } from "./composerImageBlobStore";
 import {
   ComposerImagePreparationError,
@@ -298,6 +299,37 @@ export async function stageUploadComposerAttachments(input: {
     assistantMessageId: MessageId.makeUnsafe(selection.assistantMessageId),
     text: selection.text,
   }));
+
+  // Cedia §10 item 61 (native runtime): there is no Synara attachment server to
+  // upload to — bytes must not leave the machine at this layer. Stage the locally
+  // created ids as-is; the agent-window adapter reads the bytes from the composer
+  // stores when it builds the OMP prompt (`images[]` on prompt/steer/follow_up).
+  if (readNativeApi()) {
+    for (const image of input.images) {
+      attachments.push({
+        type: "image",
+        id: image.id,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.sizeBytes,
+      });
+    }
+    for (const file of input.files ?? []) {
+      attachments.push({
+        type: "file",
+        id: file.id,
+        name: file.name,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+      });
+    }
+    return {
+      attachments,
+      commit: () => undefined,
+      cleanup: async () => undefined,
+      runWithDispatch: async (dispatch) => dispatch(attachments),
+    };
+  }
 
   // Upload sequentially so selecting several maximum-size files never creates a
   // burst of concurrent body buffers. The RPC turn then carries only short ids.

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Schema } from "../vendor/synara/packages/contracts/node_modules/effect/dist/index.js";
-import { OrchestrationShellSnapshot, OrchestrationThreadDetailSnapshot } from "@synara/contracts";
+import { OrchestrationShellSnapshot, OrchestrationThreadDetailSnapshot, ThreadId } from "@synara/contracts";
 import { resolveLatestTailUserMessageEditTarget } from "@synara/shared/conversationEdit";
+import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
 
 import {
 	createCediaNativeApi,
@@ -80,6 +81,10 @@ function fakeBridge(eventFrames = frames) {
 			if (request.path.endsWith("/commands") && request.method === "POST") {
 				const kind = (request.body as { command: string }).command;
 				if (kind === "get_branch_messages") return { status: "completed", result: { data: { messages: [{ entryId: "entry-1", text: "hello" }] } } };
+				if (kind === "get_available_commands") return { status: "completed", result: { data: { commands: [
+					{ name: "review", description: "Review a change", source: "builtin" },
+					{ name: "super-review", description: "A skill of OMP", source: "skill" },
+				] } } };
 				if (kind === "branch") return { status: "completed", result: { data: { text: "hello", cancelled: false } } };
 				if (kind === "get_messages") return { status: "completed", result: { data: { messages: [{ id: "user-1", role: "user", content: [{ type: "text", text: "hello" }] }] } } };
 				return {
@@ -623,4 +628,114 @@ it("routes duplicate model IDs by upstream provider and passes the selected thin
   await api.orchestration.dispatchCommand({ type: "thread.turn.start", commandId: "model-turn", threadId: session.id, message: { text: "hello" }, modelSelection: { provider: "omp", model: "b/same", options: { thinkingLevel: "high" } } });
   expect(calls.find(call => (call.body as { command?: string })?.command === "set_model")?.body).toMatchObject({ incarnation: "inc-2", payload: { provider: "b", modelId: "same" } });
   expect(calls.find(call => (call.body as { command?: string })?.command === "set_thinking_level")?.body).toMatchObject({ payload: { level: "high" } });
+});
+
+describe("attachments, mentions and skills reach OMP (Cedia §10 items 61-62)", () => {
+	const imageAttachment = {
+		type: "image" as const,
+		id: "img-1",
+		name: "shot.png",
+		mimeType: "image/png",
+		sizeBytes: 2,
+		previewUrl: "blob:preview",
+		file: new File([new Uint8Array([104, 105])], "shot.png", { type: "image/png" }),
+	};
+
+	it("folds image bytes into OMP's images[] and names files/mentions", async () => {
+		await useComposerDraftStore.getState().addImages(ThreadId.makeUnsafe(session.id), [imageAttachment]);
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		await api.orchestration.dispatchCommand({
+			type: "thread.turn.start",
+			commandId: "cmd-attach",
+			threadId: session.id,
+			message: {
+				text: "look at this",
+				attachments: [
+					{ type: "image", id: "img-1", name: "shot.png", mimeType: "image/png", sizeBytes: 2 },
+					{ type: "file", id: "file-1", name: "notes.md", mimeType: "text/markdown", sizeBytes: 12 },
+				],
+				mentions: [{ name: "x.ts", path: "/workspace/demo/src/x.ts" }],
+			},
+		});
+
+		const prompt = calls.find(
+			(call) => call.path.endsWith("/commands") && (call.body as { command?: string })?.command === "prompt",
+		);
+		expect(prompt?.body).toMatchObject({
+			payload: {
+				message:
+					"look at this\n\nAttached context:\n- notes.md\n- /workspace/demo/src/x.ts",
+				images: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+			},
+		});
+	});
+
+	it("refuses to drop an image whose bytes cannot be read", async () => {
+		const { bridge } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+		await expect(
+			api.orchestration.dispatchCommand({
+				type: "thread.turn.start",
+				commandId: "cmd-missing-bytes",
+				threadId: session.id,
+				message: {
+					text: "look",
+					attachments: [{ type: "image", id: "img-ghost", name: "ghost.png", mimeType: "image/png", sizeBytes: 1 }],
+				},
+			}),
+		).rejects.toThrow("could not read the bytes");
+	});
+
+	it("advertises the real capabilities and splits OMP's catalogue by source", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		expect(await api.provider.getComposerCapabilities()).toMatchObject({
+			supportsSkillDiscovery: true,
+			supportsNativeSlashCommandDiscovery: true,
+			supportsThreadCompaction: true,
+		});
+
+		const commands = await api.provider.listCommands({
+			provider: "omp",
+			cwd: "/workspace/demo",
+			threadId: session.id,
+		});
+		expect(commands).toMatchObject({ source: "omp" });
+		expect(commands.commands).toEqual([{ name: "review", description: "Review a change" }]);
+
+		const skills = await api.provider.listSkills({
+			provider: "omp",
+			cwd: "/workspace/demo",
+			threadId: session.id,
+		});
+		expect(skills).toMatchObject({ source: "omp" });
+		expect(skills.skills).toEqual([
+			{ name: "super-review", path: "super-review", enabled: true, description: "A skill of OMP" },
+		]);
+
+		expect(
+			calls.filter(
+				(call) => (call.body as { command?: string })?.command === "get_available_commands",
+			),
+		).toHaveLength(2);
+	});
+
+	it("asks no OMP catalogue without a host session, and compaction runs on OMP", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		const draftCommands = await api.provider.listCommands({ provider: "omp", cwd: "/workspace/demo" });
+		expect(draftCommands).toEqual({ commands: [], source: "omp" });
+		expect(
+			calls.some((call) => (call.body as { command?: string })?.command === "get_available_commands"),
+		).toBe(false);
+
+		await api.provider.compactThread({ threadId: session.id });
+		expect(calls.some((call) => (call.body as { command?: string })?.command === "compact")).toBe(true);
+
+		await expect(api.provider.compactThread({ threadId: "session-missing" })).rejects.toThrow();
+	});
 });

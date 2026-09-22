@@ -3004,6 +3004,46 @@ is its own wave sequenced after item 59 rather than folded here. The item 60 clo
 still owed: the fresh-profile walk through every sidebar row and settings section showing no
 dead state.
 
+### Composer attachments, mentions, skills and compaction are real (2026-09-22)
+
+Closes §10 items 61 and 62 (one slice — both edit `cedia-adapter.ts`).
+
+**61 — attachments/mentions reach OMP on the bundle path.** The two hard-throws in
+`thread.turn.start` are gone; the turn now folds composer input the way the native path
+proved it (§10 item 34): image bytes travel in OMP's own `images[]` on
+`prompt`/`steer`/`follow_up`, and every other reference becomes a labelled
+`Attached context` block — file names, mention paths as *path references* (OMP's agent
+reads the files itself, matching the native "path references only" precedent in
+`mention-context.ts`), and assistant-selection text. Bytes are read where they live: the
+live draft's `File`, a queued turn's `File`, or the persisted IndexedDB blob
+(AppSnap/reload-hydration window); a missing blob **fails the turn loudly** instead of
+dropping the image silently. Companion fix in `composerSend.ts`:
+`stageUploadComposerAttachments` no longer POSTs bytes to the nonexistent Synara
+attachment server when `window.nativeApi` is installed — it stages the composer's local
+ids (the old path could never succeed in Cedia, so every attachment send died at staging
+before dispatch, and shipping bytes to a third-party route would have violated the scope
+rule anyway).
+
+**62 — skills/slash and compaction forward the pinned RPC.** `listCommands`/`listSkills`
+both read OMP's `get_available_commands` and split rows by `source` (skill rows → skills
+with `enabled: true`; everything else → commands), `getComposerCapabilities` flips
+`supportsSkillDiscovery` / `supportsNativeSlashCommandDiscovery` / `supportsThreadCompaction`,
+and `compactThread` sends OMP's `compact` against a started session with real failure
+statuses surfaced. Discovery is honest about context: no `threadId`, or no host session,
+means an empty list and **no RPC fired**. Two recorded deviations: `set_auto_compaction`
+has no UI surface in the bundle, so it is not wired (the plan's wording listed it beside
+`compact`); the sessionless `listSkillsCatalog` stays empty (no session to ask).
+
+Receipt: root + vendor `tsc` clean; agent-window `bun test test/` **76 pass / 0 fail** —
+6 new adapter cases (image bytes land as `images[]` base64, file/mention labels, missing
+bytes refused, capability bits, source split, no-session emptiness + compact send and
+missing-session failure) plus 2 staging-bypass cases in the new
+`test/attachment-staging.test.ts`; `vite build` clean; root suite 969 pass / 2 fail —
+both the documented pre-existing pair (`menus-contract` needs `rg`; the
+`ide-native-workbench` theme-handoff test); `ci-validate` CI-OK. Still owed per plan: the
+**packaged-run receipts** — one image pasted in the agent composer arriving in the OMP
+turn, `/` completing a real skill, and a compaction run from the UI.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.
