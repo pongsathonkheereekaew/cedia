@@ -1,12 +1,22 @@
 // FILE: useTemporaryThreadLifecycle.ts
-// Purpose: Deletes temporary threads when focus leaves them.
+// Purpose: Puts a temporary thread away when focus leaves it — archived, not deleted.
 // Layer: Web route lifecycle hook
 // Exports: useTemporaryThreadLifecycle
+//
+// Cedia deviation (§10 item 1d): upstream DELETES the temporary thread here, which
+// is safe on a server that models a draft as scratch. A Cedia thread is a durable
+// host session from the moment it exists, and the host's DELETE removes the record
+// and its transcript for good — so a draft the user glanced away from was lost, and
+// an observed case showed a `New task` row gone from the host store the same day.
+// The automatic path therefore archives: the thread leaves the sidebar (archived
+// rows are hidden), survives a restart, and is restorable from Settings → Archived.
+// Only explicit user deletion (`activeThreadDelete`, the Archived panel's own rows)
+// still dispatches `thread.delete`.
 
 import type { ThreadId } from "@synara/contracts";
 import { useEffect, useRef } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
-import { reconcileDeletedThreadFromClient } from "../lib/deletedThreadClientReconciliation";
+import { archiveThreadFromClient } from "../lib/threadArchive";
 import { resolveTemporaryThreadIdToDelete } from "../lib/temporaryThread";
 import { newCommandId } from "../lib/utils";
 import { readNativeApi } from "../nativeApi";
@@ -111,21 +121,10 @@ async function disposeTemporaryThread(input: {
         .catch(() => undefined);
 
       if (serverThread) {
-        const deletedOnServer = await api.orchestration
-          .dispatchCommand({
-            type: "thread.delete",
-            commandId: newCommandId(),
-            threadId: temporaryThreadId,
-          })
-          .then(() => true)
-          .catch(() => false);
-        if (deletedOnServer) {
-          void reconcileDeletedThreadFromClient({
-            threadId: temporaryThreadId,
-            removeDeletedThreadFromClientState:
-              useStore.getState().removeDeletedThreadFromClientState,
-          });
-        }
+        // Archive, never delete: the transcript belongs to the user, and losing
+        // focus is not a request to destroy it. A failure here keeps the draft
+        // markers cleared below, so the thread simply stays in the sidebar.
+        await archiveThreadFromClient(api.orchestration, temporaryThreadId).catch(() => undefined);
       }
     }
 

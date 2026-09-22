@@ -3752,6 +3752,47 @@ protocol/omp-adapter/relay 80 pass; `grep -ri trysynara apps/macos/agent-window`
 → 0 matches; `grep -rn "/studio"` in the bundle → 0; root `tsc --noEmit` at the
 same 10 pre-existing errors; `ci-validate` CI-OK.
 
+### A temporary thread put away is archived, not destroyed (2026-09-23)
+
+Closes §10 item 1d. The renderer's temporary-thread lifecycle deleted the thread
+when focus left it; on this host `DELETE` removes the record **and its
+transcript**, and it was what lost a `New task` row the user had only glanced
+away from (observed 2026-09-20).
+
+**The decision, recorded in code and in the vendored-deviation list.** A Cedia
+thread is a durable host session from the moment it exists, so "temporary" can
+only mean *not finished with yet*, never *disposable*. `useTemporaryThreadLifecycle`'s
+disposal path now sends `thread.archive` (the vendored `archiveThreadFromClient`)
+instead of `thread.delete`: the draft leaves the sidebar because archived rows are
+hidden, survives a restart, and is restorable from Settings → Archived. The
+session stop and the terminal-history close still happen — those release
+resources, not the conversation. For the case where the user really did want it
+gone: the explicit paths are untouched (`activeThreadDelete`, the Archived
+panel's own rows), so `thread.delete` now means exactly what it says, and an
+archived thread can be deleted for real from Archived.
+
+**Receipt — a real restart, over the real host.** `apps/macos/test/agent-window-temporary-thread.test.ts`
+(new) boots the host server, creates a project and a thread through the
+renderer's own command path, drives the disposal command, and then **drops the
+gateway and builds a new one over the same state directory** (the process that
+created the session is gone) before reading it back through HTTP: the thread is
+still there, `archivedAt` is set, and the session list reports `archived: true`.
+A second case in the same file proves the other half — a disposed draft is still
+listed while an explicitly deleted session is gone from the store entirely, and
+unarchive clears `archivedAt`.
+
+**Adapter contract.** The adapter test now covers both intents, which nothing
+did before: `thread.archive` → `PATCH {archived: true}` with no `DELETE`, and
+`thread.delete` → `DELETE`. The fixture also became stateful (a `PATCH` now
+changes what the next read returns, as the host does), which is what makes an
+archive/unarchive assertion mean anything.
+
+Receipt: agent-window root + vendor `tsc` clean, `vite build` clean, agent-window
+suite **87 pass / 0 fail**; `apps/macos` **702 tests / 2 fail** — `menus-contract`
+(needs `rg`) and the theme-handoff assertion, both pre-existing; host 156 pass;
+root `tsc --noEmit` unchanged (10 pre-existing errors); `ci-validate` CI-OK;
+`upstream.json` records the deviation.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

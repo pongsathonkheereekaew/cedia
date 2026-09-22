@@ -58,6 +58,9 @@ const frames = [
 
 function fakeBridge(eventFrames = frames) {
 	const calls: Request[] = [];
+	// One mutable row, so the fixture behaves like the host: a PATCH changes what the
+	// next read returns. Archive/unarchive tests are meaningless otherwise.
+	let row = { ...session };
 	const bridge = {
 		invoke: async (_channel: string, request: Request) => {
 			calls.push(request);
@@ -76,11 +79,17 @@ function fakeBridge(eventFrames = frames) {
 				source: "omp",
 				models: [{ id: "fixture-model", provider: "fixture", label: "Fixture model", reasoning: true, thinking: ["low", "high"], contextWindow: 128000, maxTokens: 4096 }],
 			};
-			if (request.path === `/v1/sessions?projectId=${project.id}`) return [session];
-			if (request.path === `/v1/sessions/${session.id}`) return session;
-			if (request.path === `/v1/sessions/${session.id}` && request.method === "PATCH") return { ...session, ...(request.body as Record<string, unknown>) };
+			if (request.path === `/v1/sessions?projectId=${project.id}`) return [row];
+			// The host answers a PATCH with the updated row, so the fixture must too: a
+			// reader that only saw the pre-patch row would make archive/unarchive look inert.
+			if (request.path === `/v1/sessions/${session.id}` && request.method === "PATCH") {
+				row = { ...row, ...(request.body as Record<string, unknown>) };
+				return row;
+			}
+			if (request.path === `/v1/sessions/${session.id}` && request.method === "DELETE") return { deleted: true };
+			if (request.path === `/v1/sessions/${session.id}`) return row;
 			if (request.path === `/v1/sessions/${session.id}/fork`) return { ...session, id: "side-1", sidechatSourceThreadId: session.id };
-			if (request.path === `/v1/sessions/${session.id}/start` && request.method === "POST") return { ...session, status: "running", incarnation: "inc-2", updatedAt: "2026-09-19T00:03:00.000Z" };
+			if (request.path === `/v1/sessions/${session.id}/start` && request.method === "POST") return { ...row, status: "running", incarnation: "inc-2", updatedAt: "2026-09-19T00:03:00.000Z" };
 			if (request.path.startsWith(`/v1/sessions/${session.id}/events`)) {
 				return { events: eventFrames, cursor: eventFrames.at(-1)?.sequence ?? 0, hasMore: false };
 			}
@@ -535,6 +544,30 @@ describe("Cedia Agent Window native adapter", () => {
 		// A field the host does own still reaches it.
 		await api.orchestration.dispatchCommand({ type: "thread.meta.update", commandId: "meta-2", threadId: session.id, title: "Renamed" });
 		expect(calls.some(call => call.method === "PATCH" && (call.body as { title?: string }).title === "Renamed")).toBe(true);
+	});
+
+	it("archives a thread the window put away, and only an explicit delete removes one", async () => {
+		// §10 item 1d: the renderer's temporary-thread lifecycle used to dispatch `thread.delete`
+		// when focus left a draft, and this host's DELETE removes the record and its transcript -
+		// so a `New task` thread the user glanced away from was gone for good (observed
+		// 2026-09-20). The automatic path now archives (the disposal hook calls
+		// `archiveThreadFromClient`), which keeps the two intents apart in the adapter too.
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		await api.orchestration.dispatchCommand({ type: "thread.archive", commandId: "archive-1", threadId: session.id });
+		expect(calls.some(call => call.path === `/v1/sessions/${session.id}` && call.method === "PATCH" && (call.body as { archived?: boolean }).archived === true)).toBe(true);
+		expect(calls.some(call => call.method === "DELETE")).toBe(false);
+
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: session.id });
+		expect(detail.thread.archivedAt).not.toBeNull();
+
+		// Restoring is the same field the other way, and an explicit delete still deletes.
+		await api.orchestration.dispatchCommand({ type: "thread.unarchive", commandId: "unarchive-1", threadId: session.id });
+		expect(calls.some(call => call.method === "PATCH" && (call.body as { archived?: boolean }).archived === false)).toBe(true);
+
+		await api.orchestration.dispatchCommand({ type: "thread.delete", commandId: "delete-1", threadId: session.id });
+		expect(calls.some(call => call.method === "DELETE" && call.path === `/v1/sessions/${session.id}`)).toBe(true);
 	});
 
 	it("carries a turn id so the window offers its edit affordance", async () => {

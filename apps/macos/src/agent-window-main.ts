@@ -16,7 +16,9 @@ import { defaultKeybindingsFile, readKeybindingsFile, writeKeybindingRule } from
 
 import { AGENT_WINDOW_CHANNEL } from "./bridge-contract.ts";
 export { AGENT_WINDOW_CHANNEL };
-type HostMethod = "GET" | "POST" | "PATCH" | "DELETE";
+/** The HTTP methods a renderer may ask the host for; exported so a caller (and its
+ * tests) can name the contract instead of restating it. */
+export type HostMethod = "GET" | "POST" | "PATCH" | "DELETE";
 export interface IdeTarget { cwd: string; path?: string; line?: number }
 interface HandlerOptions {
   stateDir?: string;
