@@ -21,7 +21,7 @@ import { createInitialTaskState, normalizeSlashCommands, parseCediaUiRequest, re
 import { createTaskWebviewHtml } from "./webview.ts";
 import { CediaIdeAgentProvider } from "./agent-ide-webview.ts";
 import { writeAgentThemeSnapshot } from "./agent-theme.ts";
-import { fetchGlobalOmpModelSnapshot, fetchOmpModelRoles, registerCediaChatSessions } from "./chat-sessions.ts";
+import { fetchGlobalOmpModelSnapshot, fetchOmpModelRoles } from "./omp-catalog.ts";
 import { modelRoleLabel, sessionIdFromUri, setModelRoleRequest } from "./chat-sessions-map.ts";
 import { canAnswer } from "./approval-runtime.ts";
 import { approvalCanSubmit, approvalDisplayStatus } from "./approval-view.ts";
@@ -758,36 +758,6 @@ export class CediaTaskViewProvider {
 		void vscode.commands.executeCommand("workbench.action.openAgentsWindow");
 	}
 
-	/**
-	 * Connection accessor for the native chat sessions provider. There is one
-	 * host connection owner (this provider), so the sessions surface reuses its
-	 * reconnect logic instead of opening a second client.
-	 */
-	chatSessionsConnection(): { getClient: () => Promise<CediaHostClient>; log: (message: string) => void } {
-		return {
-			getClient: () => this.ensureClient(),
-			log: message => this.#log.info(message),
-		};
-	}
-
-	/**
-	 * Let the chat session registration be refreshed from here.
-	 *
-	 * The project menu archives chats on the host, and the Agents sidebar only
-	 * moves a row out of its workspace group when the item collection is
-	 * republished - so the action that changed the host has to trigger the
-	 * listing. Activation wires this to the registration it created.
-	 */
-	setChatSessionsRefresh(refresh: () => void): void {
-		this.#chatSessionsRefresh = refresh;
-	}
-
-	#chatSessionsRefresh: (() => void) | undefined;
-
-	private refreshChatSessions(): void {
-		this.#chatSessionsRefresh?.();
-	}
-
 	showIde(): void {
 		void this.setWorkbenchMode("ide");
 	}
@@ -1192,9 +1162,7 @@ export class CediaTaskViewProvider {
 			void vscode.window.showInformationMessage(open.length === 0
 				? `No open chats in ${project.name}.`
 				: `Archived ${open.length} chat${open.length === 1 ? "" : "s"} in ${project.name}.`);
-			// The sidebar groups rows by workspace, so the rows only leave their
-			// group once the session list says they are archived.
-			this.refreshChatSessions();
+			// The sidebar regroups rows from the refreshed projection.
 			await this.refresh();
 		});
 	}
@@ -1229,7 +1197,6 @@ export class CediaTaskViewProvider {
 			}
 			await client.patchProject(project.id, { archived: true });
 			void vscode.window.showInformationMessage(`Removed ${project.name} from Cedia. Its chats are archived and its folder is untouched.`);
-			this.refreshChatSessions();
 			await this.refresh();
 		});
 	}
@@ -1255,9 +1222,7 @@ export class CediaTaskViewProvider {
 				await client.deleteSession(id);
 			}
 			void vscode.window.showInformationMessage(ids.length === 1 ? "Deleted 1 chat." : `Deleted ${ids.length} chats.`);
-			// A row leaves the sidebar only when the item collection says it is gone,
-			// so the delete has to be followed by a republish.
-			this.refreshChatSessions();
+			// The sidebar regroups rows from the refreshed projection.
 			await this.refresh();
 		} catch (error) {
 			void vscode.window.showWarningMessage(`Cedia could not delete that chat: ${errorMessage(error)}`);
@@ -2049,8 +2014,7 @@ export class CediaTaskViewProvider {
 			// No title: the host names a new task, the same way its own New Task does.
 			await client.createSession({ projectId: project.id });
 		}
-		// The sidebar only regroups rows when the extension republishes its items.
-		this.refreshChatSessions();
+		// The sidebar regroups rows from the refreshed projection.
 		await this.refresh();
 		this.postSnapshot();
 	}
@@ -4140,16 +4104,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	const provider = new CediaTaskViewProvider(context);
 	const ideAgent = new CediaIdeAgentProvider(context, descriptorStateDir(context), () => provider.ensureClient(), id => provider.syncIdeSession(id));
 	provider.ideAppendContext = text => ideAgent.appendContext(text);
-	// Cedia is the only chat session provider in this window: the native
-	// Agents window renders these sessions instead of a Cedia-drawn shell. The
-	// project menu's archive/remove actions change what those rows should say, so
-	// they republish through this same registration.
-	const chatSessions = registerCediaChatSessions(provider.chatSessionsConnection());
-	provider.setChatSessionsRefresh(() => chatSessions.refresh());
 	context.subscriptions.push(
 		provider,
 		ideAgent,
-		chatSessions,
 		vscode.window.registerWebviewViewProvider("cediaComposerDock", ideAgent, { webviewOptions: { retainContextWhenHidden: true } }),
 		// The chrome palette follows the active theme kind (Cursor ships light
 		// and dark), so repaint the dock when the user switches themes.

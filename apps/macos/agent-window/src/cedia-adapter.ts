@@ -16,8 +16,7 @@ import {
 	type ProviderListCommandsInput,
 	type ProviderListSkillsInput,
 } from "@synara/contracts";
-import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState } from "../../src/state.ts";
-import { entryFailureText, promptWithAttachedContext } from "../../src/chat-sessions-map.ts";
+import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState, type TranscriptEntry } from "../../src/state.ts";
 import type { Json } from "../../../../packages/protocol/src/index.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
@@ -208,6 +207,40 @@ function string(value: unknown): string | undefined {
 
 function array(value: unknown): unknown[] {
 	return Array.isArray(value) ? value : [];
+}
+
+/**
+ * Why a failed transcript entry failed, in the provider's own words.
+ *
+ * OMP records an assistant message that ended on a provider error with the message it received
+ * (`errorMessage`, and a shorter `errorClassificationMessage` alongside it), and the message
+ * carries no text at all. The provider's sentence is the honest content for that row; Cedia's own
+ * sentence only says that the turn stopped. Moved here with item 56: the native chat surface that
+ * owned this reader is retired, and the bundle timeline is its only reader now.
+ */
+function entryFailureText(entry: TranscriptEntry): string | undefined {
+	if (entry.status !== "failed") return undefined;
+	for (const frame of [...entry.rawFrames].reverse()) {
+		const row = record(frame);
+		// A host event carries the message either at its top level or under `message`, and the
+		// write-through ack nests both under `data`.
+		const message = record(row?.message) ?? record(record(row?.data)?.message);
+		const text = string(message?.errorMessage) ?? string(row?.errorMessage)
+			?? string(message?.errorClassificationMessage) ?? string(row?.errorClassificationMessage);
+		if (text) return text;
+	}
+	return undefined;
+}
+
+/**
+ * Name the non-image references so their context is not dropped silently, then
+ * fold them into the prompt as one `Attached context` block. Moved here with
+ * item 56 for the same reason as `entryFailureText`: the adapter is the only
+ * caller left.
+ */
+function promptWithAttachedContext(prompt: string, labels: readonly string[]): string {
+	if (labels.length === 0) return prompt;
+	return `${prompt}\n\nAttached context:\n${labels.map(label => `- ${label}`).join("\n")}`;
 }
 
 function reduceEvents(state: TaskState, events: readonly CediaEvent[]): TaskState {

@@ -5,9 +5,6 @@
   "version": "0.1.0",
   "private": true,
   "enabledApiProposals": [
-    "chatSessionsProvider",
-    "chatParticipantPrivate",
-    "defaultChatParticipant",
     "chatProvider",
     "chatParticipantAdditions"
   ],
@@ -472,34 +469,7 @@
     "configurationDefaults": {
       "chat.disableAIFeatures": true,
       "workbench.startupEditor": "none"
-    },
-    "chatSessions": [
-      {
-        "type": "cedia.omp",
-        "name": "omp",
-        "displayName": "Cedia",
-        "description": "Run work in this workspace with OMP",
-        "icon": "$(comment-discussion)",
-        "inputPlaceholder": "Plan, Build, / for skills, @ for context",
-        "welcomeTitle": "Cedia",
-        "welcomeMessage": "Cedia runs your task with **OMP** on this Mac. Describe the work and the session starts; you can steer it from here while it works."
-      }
-    ],
-    "chatParticipants": [
-      {
-        "id": "cedia.omp",
-        "name": "omp",
-        "fullName": "Cedia",
-        "description": "Run work in this workspace with OMP, Cedia's only harness",
-        "isSticky": true,
-        "isDefault": true,
-        "modes": [
-          "ask",
-          "edit",
-          "agent"
-        ]
-      }
-    ]
+    }
   },
   "activationEvents": [
     "onView:cediaComposerDock",

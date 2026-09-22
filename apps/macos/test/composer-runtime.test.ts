@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	normalizeOmpModels,
 	projectOmpModelSnapshot,
-} from "../src/chat-sessions-map.ts";
+} from "../src/omp-catalog.ts";
 import {
 	composerAxesFromTask,
 	resolveComposerControls,

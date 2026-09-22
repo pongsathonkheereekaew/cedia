@@ -2,7 +2,6 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CEDIA_LIGHT_WORKBENCH_COLORS, CEDIA_WORKBENCH_COLORS } from "../src/cedia-theme.ts";
-import { CEDIA_OMP_MODEL_VENDOR } from "../src/chat-sessions-map.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -675,44 +674,6 @@ describe("ide-native workbench surface", () => {
 		const allowed = new Set(product.extensionEnabledApiProposals?.["cedia.cedia"] ?? []);
 		for (const proposal of proposals) expect(allowed.has(proposal)).toBe(true);
 	});
-	it("keeps one OMP provider without registering a second built-in Chat agent", async () => {
-		// Cedia keeps the native participant for inline/editor bridges. The pinned
-		// desktop patch gates its visible Chat container when Cedia owns the agent
-		// surface, so the contribution remains available without a duplicate UI.
-		const manifestPath = join(import.meta.dir, "..", "package.json");
-		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-			enabledApiProposals?: string[];
-			contributes: {
-				chatParticipants?: { id: string; isDefault?: boolean; modes?: string[] }[];
-				chatSessions: { type: string; canDelegate?: boolean }[];
-				configurationDefaults?: Record<string, unknown>;
-			};
-		};
-		expect(manifest.contributes.chatParticipants).toHaveLength(1);
-		expect(manifest.contributes.chatParticipants?.[0]).toMatchObject({ id: "cedia.omp", isDefault: true });
-		const provider = manifest.contributes.chatSessions.find(entry => entry.type === "cedia.omp");
-		expect(provider?.canDelegate).not.toBe(true);
-		expect(manifest.contributes.configurationDefaults?.["chat.disableAIFeatures"]).toBe(true);
-		expect(manifest.enabledApiProposals).toContain("defaultChatParticipant");
-	});
-	it("gives a Cedia request a model the pickers can resolve", async () => {
-		// The extension host resolves a request's model by the identifier the
-		// extension registered it under (`<vendor>/<model id>`), so the two
-		// workbench projections of the OMP catalogue have to hand back that exact
-		// string. The vendor lives in the extension package and in two base patches
-		// that cannot import it, so all three are pinned here.
-		const manifestPath = join(import.meta.dir, "..", "package.json");
-		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { enabledApiProposals?: string[] };
-		expect(manifest.enabledApiProposals).toContain("chatProvider");
-		expect(CEDIA_OMP_MODEL_VENDOR).toBe("cedia-omp");
-
-		const root = join(import.meta.dir, "..", "..", "..");
-		for (const fileName of ["0011-cedia-sessions-model-picker.patch"]) {
-			const patchText = readFileSync(join(root, "patches", "desktop", fileName), "utf8");
-			expect(patchText).toContain(`const CEDIA_OMP_MODEL_VENDOR = '${CEDIA_OMP_MODEL_VENDOR}';`);
-			expect(patchText).toContain("${CEDIA_OMP_MODEL_VENDOR}/${");
-		}
-	});
 	it("offers the same Delete in the dock's session menu", async () => {
 		// The plan's item 24: delete used to be Agents-window-only, so the dock offered
 		// Archive and no Delete even though the host route existed. Both surfaces now go
@@ -731,26 +692,6 @@ describe("ide-native workbench surface", () => {
 		expect(extension).toContain("This action cannot be undone.");
 		expect(extension).toContain("await this.deleteChatSessions([session.id]);");
 	});
-	it("gives a Cedia session its own welcome instead of the base agent's", async () => {
-		// Plan section 10 item 3: a session with 0 events used to show the base's welcome
-		// ("Build with Agent" / "Generate Agent Instructions"). The session type Cedia contributes
-		// is the extension point that owns that copy, so the welcome is Cedia's own words and
-		// names the harness this build actually runs.
-		const manifest = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8")) as {
-			contributes: { chatSessions: { type: string; welcomeTitle?: string; welcomeMessage?: string; welcomeTips?: string }[] };
-		};
-		const session = manifest.contributes.chatSessions.find(entry => entry.type === "cedia.omp");
-		expect(session).toBeTruthy();
-		expect(session!.welcomeTitle).toBe("Cedia");
-		expect(session!.welcomeMessage).toContain("OMP");
-		// `welcomeTips` is declared by the extension point but nothing in this fork renders it, so
-		// Cedia does not ship copy into a field no code reads.
-		expect(session!.welcomeTips).toBeUndefined();
-		// The base names its own agent in that welcome; Cedia must not.
-		const copy = `${session!.welcomeTitle} ${session!.welcomeMessage}`;
-		expect(copy).not.toContain("Build with Agent");
-		expect(copy).not.toContain("Agent Instructions");
-	});
 	it("keeps the Copilot-flavoured composer controls out of the Agents window", async () => {
 		// Three plan chrome decisions: the tool picker, the permission picker and the
 		// "Configure Custom Agents..." entry all describe Copilot-chat behaviour, and this
@@ -758,17 +699,19 @@ describe("ide-native workbench surface", () => {
 		// IDE window keeps it.
 		const root = join(import.meta.dir, "..", "..", "..");
 		const patchText = readFileSync(join(root, "patches", "desktop", "0033-cedia-agents-no-copilot-composer-controls.patch"), "utf8");
+		// Hunk 1 (the permission-picker gate in chatExecuteActions.ts) retired with
+		// item 56: the base carries that exact gate upstream now, so the patch no
+		// longer touches the file. The tool-picker and custom-agents gates stay.
 		for (const needle of [
 			"chatToolActions.ts",
-			"chatExecuteActions.ts",
 			"chatModeActions.ts",
 			"Cedia: this configures the base's tool set",
-			"Cedia: these levels (manual / allow all / autopilot)",
 			"Cedia: custom agents are a Copilot-chat concept",
 		]) {
 			expect(patchText).toContain(needle);
 		}
-		expect(patchText.match(/^\+.*IsSessionsWindowContext\.toNegated\(\)/gm)?.length).toBe(4);
+		expect(patchText).not.toContain("chatExecuteActions.ts");
+		expect(patchText.match(/^\+.*IsSessionsWindowContext\.toNegated\(\)/gm)?.length).toBe(3);
 		expect(patchText).not.toContain("src/vs/sessions/");
 
 		const manifest = JSON.parse(readFileSync(join(root, "patches", "desktop", "manifest.json"), "utf8")) as { patches: { file: string; sha256: string }[] };

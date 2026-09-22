@@ -2,7 +2,7 @@ diff --git a/product.json b/product.json
 index aff5af5aaf7..76a1edb8ec3 100644
 --- a/product.json
 +++ b/product.json
-@@ -1,19 +1,28 @@
+@@ -1,19 +1,25 @@
  {
 -	"nameShort": "Caret",
 +	"nameShort": "Cedia",
@@ -10,9 +10,6 @@ index aff5af5aaf7..76a1edb8ec3 100644
 +	"nameLong": "Cedia",
 +	"extensionEnabledApiProposals": {
 +		"cedia.cedia": [
-+			"chatSessionsProvider",
-+			"chatParticipantPrivate",
-+			"defaultChatParticipant",
 +			"chatProvider",
 +			"chatParticipantAdditions"
 +		]

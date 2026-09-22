@@ -7,7 +7,7 @@
     },
     {
       "file": "0003-cedia-agents-window-proposals.patch",
-      "sha256": "3f207593bd120397aa38137c7b3afc8030ab297b342ee7e98dd320f39ecf6694"
+      "sha256": "e72a0e88dd4d148267dc2a7eccdf4a2a71d228301fed49896115ca8df1f81963"
     },
     {
       "file": "0005-cedia-remove-copilot-sessions.patch",
@@ -26,20 +26,8 @@
       "sha256": "42f5ea483a12facea36ac0f7e7f86e8435e1532968d9685e5c32c8c651af70ca"
     },
     {
-      "file": "0011-cedia-sessions-model-picker.patch",
-      "sha256": "65a95845f6c2d148da2af749c6e00c9f27eb4471164551e63372d55cdc88007f"
-    },
-    {
       "file": "0012-cedia-remove-copilot-status-entry.patch",
       "sha256": "40080292f1aec4533e33a500c7e9661204317fecf5d41830f8a493f7c243198a"
-    },
-    {
-      "file": "0013-cedia-sessions-option-key-bridge.patch",
-      "sha256": "7014d5cdc632b5f7118b2b777cfc297110b462c9676e07f2077653fc103e6886"
-    },
-    {
-      "file": "0014-cedia-sessions-pick-writethrough.patch",
-      "sha256": "13ea2065a0b66583c6ff8c088528383b648c7231b47586e101e84ba1d9537033"
     },
     {
       "file": "0019-cedia-customize-in-sidebar.patch",
@@ -59,7 +47,7 @@
     },
     {
       "file": "0033-cedia-agents-no-copilot-composer-controls.patch",
-      "sha256": "a54bc9dc9a65ff60ec97627085674b20bf43d93f3a15bbaad9450d9b3f27089a"
+      "sha256": "25241ed4ecdb62240dee946c96dc5c9da9023b30a584c626ddb194ac452b33e3"
     },
     {
       "file": "0034-cedia-drop-agent-workbench-shell.patch",
@@ -72,34 +60,6 @@
     {
       "file": "0037-cedia-parts-splitter-names.patch",
       "sha256": "992cc87b05ff887cb73fc11e60360aa5c9ce262917a6701b3b4f8436a0a271e2"
-    },
-    {
-      "file": "0040-cedia-model-picker-provider-tabs.patch",
-      "sha256": "61933b40766f3913999c7858fb5307768787b55a9e84c2721388e44ada327f5e"
-    },
-    {
-      "file": "0041-cedia-model-picker-provider-marks.patch",
-      "sha256": "bda168284b4a7c8a5736fb515016120bdabb7543888a342c51e2d28cb4a16e14"
-    },
-    {
-      "file": "0043-cedia-model-picker-provider-identity.patch",
-      "sha256": "4f5286a0524550817661ee545e4333d97e78b8d8ea518afdee5994414f558d86"
-    },
-    {
-      "file": "0044-cedia-model-picker-no-empty-built-in-tab.patch",
-      "sha256": "61112e1c68c3e4050156de35cab709ef6b390bf700fe634e638e51ffde8b1a43"
-    },
-    {
-      "file": "0045-cedia-model-picker-provider-field.patch",
-      "sha256": "0d96b71a691d2212f95ce14602cb9482a80f65f2d1c9388b95e6f08e0dc607ab"
-    },
-    {
-      "file": "0046-cedia-session-option-pickers-in-agents-window.patch",
-      "sha256": "5dae2e4b274704b55d9575c575a07a35f57922748e91bd5a1f7e9a2198e1ee92"
-    },
-    {
-      "file": "0047-cedia-own-model-picker-in-agents-window.patch",
-      "sha256": "a46db01712e446b8a6794e139e24371ec9dec1cc88f2521ffb8bf04c2426aa5d"
     },
     {
       "file": "0056-cedia-agent-window.patch",

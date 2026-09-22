@@ -3086,6 +3086,65 @@ CI-OK. Still owed per plan: the **measured-on-screen receipt** — the agent sta
 bar photographed with live values in a packaged run (rides the next `package:mac`
 with items 54/60/61/62).
 
+### One model-selection state; the native chat surface is retired (2026-09-22)
+
+Closes §10 item 56 (extension + patch stack; the desktop checkout is a build
+output and is re-prepared by `prepare-desktop`, never edited by hand).
+
+**Residual-consumer check first.** No palette or quick-access path resolves the
+participant: the only `registerCediaChatSessions` call was activation itself, the
+only `vscode.chat`/`vscode.lm` touches outside the retired modules are none (the two
+`vscode.*` uses left in `chat-sessions.ts` were the registration guard plus a `Uri`
+type), `configureModelRoles`/`cedia.session.delete` are ordinary commands that keep
+working, and no host/relay/iOS/script path imports the retired modules (the one
+`scripts/omp-live-turn.ts` hit is a comment plus a receipt hash of the deleted file —
+updated to the new reader).
+
+**Restated 45–49 per the §10 head rule** (native-renderer mechanisms → bundle truth):
+45's bare-id/provider mismatch now lives in the bundle picker's row identity;
+46's provider tabs/marks are the bundle picker's own grouping; 47's ladder is the
+bundle effort chip driven by the catalogue row; 48's picker polish is bundle UI;
+49's permission control stays deliberately absent (OMP approvals are items 32–35)
+and the row order is the bundle composer's. None of them names a step that survives
+the retirement, so they are superseded by this slice, not re-implemented.
+
+**Cut.** Deleted `chat-sessions.ts` (1,150 lines: participant, controller, content
+provider, turn runner, draft write-through), `omp-language-models.ts` (the
+`cedia-omp` vendor registration), the `chatSessions`/`chatParticipants`
+contributions and the `chatSessionsProvider`/`chatParticipantPrivate`/
+`defaultChatParticipant` proposals (package.json + `vscode-dts.d.ts` + `0003`),
+and patches `0011`/`0013`/`0014`/`0040`-`0047` (10 files). Live helpers relocated,
+not lost: the OMP catalog readers now live in `apps/macos/src/omp-catalog.ts`
+(`fetchOmpModels`, `fetchOmpModelSnapshot`, `snapshotWithOmpRuntime`,
+`fetchGlobalOmpModelSnapshot`, `fetchOmpModelRoles` — the configure-roles command
+reads them), and the adapter inlines the two readers it owned
+(`entryFailureText`, `promptWithAttachedContext`). `thinking-params.ts` and the
+pure `chat-sessions-map.ts` projection stay: the dock, the command and the tests
+still read them.
+
+**Patch loop per §6.1.** Deleted patches were reverted in the checkout from the
+patch files themselves (checkout `git checkout --` on exactly the touched paths,
+plus `rm` of the two created files); `0003` was trimmed to the two surviving
+proposals with its hunk header re-counted (`-1,19 +1,25`). `0033` lost its first
+hunk — the permission-picker gate the base now carries upstream — so it keeps two
+hunks and the pinning test asserts 3 gates, not 4. `desktop-patch-set.test.ts`
+reproduces the checkout byte-identical for every touched path except the one
+pre-existing drift the checkout already carried (`chat.shared.contribution.ts`:
+`0001`/`0012`/`0019` hunks the 2026-09-20 prepare never applied — checkout matches
+the pin blob, mirror carries the patches; same for 0033's first hunk). That drift
+is upstream content, not item-56 residue: the next `prepare-desktop` from a clean
+base re-applies the full set and the stamp goes green.
+
+Receipt: agent-window root + vendor `tsc` clean; `apps/macos typecheck` shows only
+the two pre-existing failures (`~/nativeApi` alias + `state.test.ts`, identical on
+the stashed baseline); agent-window `bun test test/` **82 pass / 0 fail**; `vite
+build` clean; `apps/macos` suite 659 pass / 3 fail — the patch-set drift above,
+`menus-contract` (needs `rg`), and the pre-existing theme-handoff failure (fails
+identically on the stash); `ci-validate` CI-OK. Closes when `registerCediaChatSessions`
+and those patches are gone (done above), the suite is green modulo the recorded
+pre-existing failures, and a model change from either window is one code path —
+`GET /v1/models` + `set_model` through the bundle picker, the only model control left.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

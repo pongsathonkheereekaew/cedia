@@ -67,7 +67,7 @@ const sessionId = String(created.id);
 const beforeStart = String(created.incarnation);
 
 // `start` allocates a fresh incarnation on purpose, so the command has to use the
-// post-start value. The Agents window does the same (`chat-sessions.ts#runTurn`).
+// post-start value. The bundle adapter folds the same turn the same way.
 const started = record(await call("POST", `/sessions/${sessionId}/start`));
 const incarnation = String(started.incarnation);
 check(incarnation !== beforeStart, "start did not allocate a new incarnation; the stale-incarnation guard would not be exercised");
@@ -145,7 +145,7 @@ const receipt = {
   },
   implementationSourceHashes: {
     "apps/host/src/service.ts": sha256(join(ROOT, "apps/host/src/service.ts")),
-    "apps/macos/src/chat-sessions.ts": sha256(join(ROOT, "apps/macos/src/chat-sessions.ts")),
+    "apps/macos/src/omp-catalog.ts": sha256(join(ROOT, "apps/macos/src/omp-catalog.ts")),
     "scripts/omp-live-turn.ts": sha256(fileURLToPath(import.meta.url)),
   },
   limitations: "One prompt over one provider/model chosen by the user's OMP configuration; this is not multi-turn, tool-use, permission, or approval coverage.",

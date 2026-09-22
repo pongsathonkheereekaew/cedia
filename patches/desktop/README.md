@@ -10,8 +10,14 @@ verifies the base revision and each digest before applying.
 > only the native sessions workbench UI, which no window renders since `0056` loads the
 > standalone agent bundle instead. `0005` stays: its import trims keep the sessions entries
 > compiling against the `removals` list (the gulp build fails without it). `0007` keeps its
-> platform hunk; only the sessions-contribution hunk retired. The manifest holds the 29 that
-> remain; see the plan's §9 entry.
+> platform hunk; only the sessions-contribution hunk retired.
+> Retired 2026-09-22 (plan §10 item 56): patches `0011`, `0013`, `0014`, `0040`, `0041`,
+> `0043`-`0047` are gone (10 files). They were the native model-picker path — the workbench
+> pickers that drew OMP's catalogue through session option groups — and they retire with the
+> registration that published those groups (`apps/macos/src/chat-sessions.ts`,
+> `omp-language-models.ts`, the `chatSessions`/`chatParticipants` contributions and the
+> `chatSessionsProvider`/`chatParticipantPrivate`/`defaultChatParticipant` proposals).
+> The manifest holds the 19 that remain; see the plan's §9 entry.
 
 `0001-cedia-startup-defaults.patch` changes only initial settings: disable upstream
 AI surfaces, start without the VS Code welcome editor, and disable experimental
@@ -34,8 +40,9 @@ entry are gone, and the context key it depended on was removed with it.
 
 `0003-cedia-agents-window-proposals.patch` is Cedia's product identity for the
 Agents window: it allows the built-in `cedia.cedia` extension to use the proposed
-`chatSessionsProvider`, `chatParticipantPrivate` and `defaultChatParticipant`
-APIs, and it removes the Copilot product identity —
+`chatProvider` and `chatParticipantAdditions` APIs (the `chatSessionsProvider`,
+`chatParticipantPrivate` and `defaultChatParticipant` rows retired with item 56),
+and it removes the Copilot product identity —
 `defaultChatAgent` (the key that made the sessions window run Copilot's
 welcome/sign-in flow), the Copilot entries in `trustedExtensionAuthAccess`, and
 `GitHub.copilot-chat` from `builtInExtensionsEnabledWithAutoUpdates`. After this
@@ -44,35 +51,6 @@ patch `product.json` contains no Copilot references. It is a prerequisite for
 next Code-OSS build. The 0002 menu patch is scheduled for retirement in that same
 plan: the base Agents window registers its own menu set, so hiding editor menus by
 context key stops being necessary once the Agents window is the real surface.
-
-`defaultChatParticipant` is the half of that identity that keeps the window
-sendable. The base's `ChatServiceImpl.sendRequest` refuses every request that has
-no *default* agent for its location, because upstream that agent is Copilot
-Chat's participant; a session type's own agent does not satisfy it (the base
-registers those with `isDefault: false`), and this fork ships no Copilot
-participant to be the fallback. With `defaultChatAgent` gone the window therefore
-had no sender at all: every composer send ended as
-`sendRequest No default agent for location panel` and never reached Cedia's
-provider. The proposal is what lets `cedia.cedia` declare its own participant
-`isDefault`, which is the honest owner of that role here — Cedia is the only
-harness this build runs. `apps/macos/package.json` carries the declaration and
-`apps/macos/src/chat-sessions.ts` implements the participant handler that runs the
-turn, so both halves are pinned to this allowlist entry.
-
-`chatProvider` is the other half: the extension host hands a chat request a
-`vscode.ChatRequest` with a language model attached and refuses to build one for
-an extension that has no models of its own, so Cedia registers OMP's advertised
-catalogue as vendor `cedia-omp` (`apps/macos/src/omp-language-models.ts`). Three
-pieces have to agree for that model to be resolvable, and all three live in this
-patch stack: `0010` declares the vendor descriptor (an undeclared vendor is
-rejected with `Chat model provider uses UNKNOWN vendor`), `0010` and `0011`
-prefix their picker identifiers with that vendor, because the extension host
-derives `<vendor>/<model id>` and resolves the request by exactly that string,
-and the extension strips the prefix again before writing the bare OMP id to
-`set_model`. The vendor literal is duplicated on both sides of the extension
-boundary (the workbench cannot import from `apps/macos`), so
-`apps/macos/test/ide-native-workbench.test.ts` pins the extension's
-`CEDIA_OMP_MODEL_VENDOR` against the text of both patches.
 
 `0004-cedia-agents-entry.patch` is the drift that used to live only in the
 checkout: it routes the workbench "Open Agents" action to the Cedia extension
