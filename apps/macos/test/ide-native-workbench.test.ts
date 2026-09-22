@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fireActiveColorThemeChange, installVscodeStub, resetVscodeStub, stubState, stubUri } from "./helpers/vscode-stub.ts";
+import { readProviderSources } from "./provider-sources.ts";
 
 /*
  * Behavioral coverage for the ide-native workbench surface.
@@ -693,9 +694,9 @@ describe("ide-native workbench surface", () => {
 		// deleted;
 		// the Delete path lives on as the dock menu → deleteChatSessions route
 		// (the registered `cedia.session.delete` command, wired in activate()).
-		const extension = readFileSync(join(import.meta.dir, "..", "src", "extension.ts"), "utf8");
-		expect(extension).toContain(`vscode.commands.registerCommand("cedia.session.delete"`);
-		expect(extension).toContain("provider.deleteChatSessions(hint)");
+		const registry = readFileSync(join(import.meta.dir, "..", "src", "task-commands.ts"), "utf8");
+		expect(registry).toContain(`{ id: "cedia.session.delete"`);
+		expect(registry).toContain("provider.deleteChatSessions(hint)");
 	});
 	it("keeps the Copilot-flavoured composer controls out of the Agents window", async () => {
 		// Three plan chrome decisions: the tool picker, the permission picker and the

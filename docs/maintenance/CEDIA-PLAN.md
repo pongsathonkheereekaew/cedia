@@ -3286,6 +3286,67 @@ missing), theme-handoff (pre-existing on stash), all recorded before this slice;
 `ci-validate` CI-OK. The inline-edit refusal on screen rides the next packaged run
 (no GUI run this pass). Unlocks item 66.
 
+### `extension.ts` is a wiring root again (2026-09-22)
+
+Closes §10 item 66. The class was 2,920 lines with 152 methods; `extension.ts` is
+now 247 lines, and the suite that exercises the provider is the receipt.
+
+**Why not the split the item names.** "Extract host-connection/polling, the ~45
+commands, the editor-surface, review-surface, selection-send and status/context-key
+code into modules" was read as a file-per-concern cut and measured before it was
+built: the method call graph is **one strongly-connected component** — every group
+calls every other group (chrome→editor `refreshAgentEditMarks`, editor→chrome
+`hasTaskSurface`/`captureActivePaneDraft`, projects→host `refresh`,
+review→omp `sendCommand`, …). TypeScript gives no file-level mechanism for that
+shape: a subclass chain cannot order a cycle, and `#`-private fields are invisible
+to out-of-class functions.
+
+**What shipped, then.** Four mechanical moves, all verified by typecheck + tests:
+
+1. `task-commands.ts` — the 39-entry command table (`COMMAND_REGISTRY`, one
+   `run(provider, ideAgent)` per id). `activate()` calls
+   `registerCediaCommands(vscode, provider, ideAgent)`; `command-registry.test.ts`
+   asserts no `registerCommand("cedia.` literal remains in the wiring root, that the
+   ids match the manifest, and that the only unlisted ids are the two documented
+   internals (`cedia.browser.suggest`, `cedia.focusDock`).
+2. `task-theme-sync.ts` — `syncAgentsWindowTheme` + `AGENTS_WINDOW_THEME_SETTING_KEYS`.
+3. `task-runtime.ts` — the 21 module-level helpers, `HostSetupRequiredError`,
+   `ConfiguredHostProcess`, and the five constants.
+4. `provider-api.ts` + `provider-state.ts` + six `provider-<concern>.ts` slices +
+   `provider-registry.ts` — a **generated API interface** (151 signatures) merged with
+   the leaf class, the 74 fields in one state class, and each concern's method bodies
+   moved verbatim into a contextually-typed slice installed with one
+   `Object.assign(CediaTaskViewProvider.prototype, …)`.
+
+**Recorded deviations, both mechanical.** (a) `#`-private fields became plain
+properties: a `this`-typed slice cannot read a `#` field, and the alternative — 152
+hand-written accessors — is more code than it hides. Two of them were renamed
+(`#agentEditDecoration`→`agentEditDecorationHandle`, `#reviewCwd`→`reviewCwdCache`)
+because a field and a method can no longer share a name. (b) Methods are prototype
+properties assigned at module load rather than class members; runtime-equivalent.
+Neither is observable through the extension's own API, and both are pinned:
+`provider-registry.test.ts` asserts every promised method is installed, the wiring
+root is ≤800 lines, and the class body holds only the constructor.
+
+**Test follow-through.** Six source-text assertion files read `extension.ts` directly
+(`extension-honesty`, `omp-owner`, `omp-result`, `menus-contract`,
+`ide-native-command-ids`, `command-registry`). They ask "does this repository contain
+this behaviour", so they now read the whole provider source set through
+`test/provider-sources.ts` (`readProviderSources`) instead of one file that no longer
+owns everything; the invariants are unchanged, only the marker strings that named the
+old syntax (`private async x`, `this.#x`) were re-pointed. No assertion was weakened
+or deleted.
+
+Receipt: `extension.ts` 247 lines (limit 800); `provider-chrome` 712 /
+`provider-editor` 685 / `provider-projects` 519 / `provider-review` 498 /
+`provider-omp` 420 / `provider-host` 293 / `task-runtime` 327 / `provider-state` 190 /
+`provider-api` 244 / `provider-registry` 13; `apps/macos typecheck` clean apart from
+the two pre-existing failures; `apps/macos` suite **671 pass / 3 fail** — the
+patch-set drift, `menus-contract` (needs `rg`) and the theme-handoff failure, all
+pre-existing and recorded above, with **zero new failures**; agent-window root +
+vendor `tsc` clean, `vite build` clean, agent-window suite **84 pass / 0 fail**; host
+suite 129 pass; `ci-validate` CI-OK.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

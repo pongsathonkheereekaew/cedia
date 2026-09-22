@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ideLandingForWorkTab, REVIEW_NO_GIT_REASON } from "../src/review-snapshot.ts";
+import { readProviderSources } from "./provider-sources.ts";
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/extension.ts"), "utf8");
+const src = readProviderSources(join(dirname(fileURLToPath(import.meta.url)), "../src"));
 const manifest = JSON.parse(
 	readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../package.json"), "utf8"),
 ) as {
@@ -77,7 +78,8 @@ describe("ide-native workbench contributions", () => {
 		expect(src).toContain("const [subcommand, target] = reviewOriginalArgs(ref, path);");
 		expect(src).not.toContain("`${safeRef}:${path}`");
 		// Review must not initialize Git or write to disk.
-		expect(src.slice(src.indexOf("diffContentProvider()"), src.indexOf("private reviewCwd()"))).not.toContain("writeFile");
+		const diffProviderBody = src.slice(src.indexOf("diffContentProvider(this:"));
+		expect(diffProviderBody.slice(0, diffProviderBody.indexOf("\n\t\t},"))).not.toContain("writeFile");
 	});
 
 	it("wires the selection mention and editor command to real cited context", () => {
@@ -87,32 +89,32 @@ describe("ide-native workbench contributions", () => {
 		expect(src).toContain("vscode.workspace.asRelativePath(targetUri, false)");
 		expect(src).toContain("raw.length > MAX_SELECTION_CONTEXT_CHARS");
 		// Adding context must not switch workbench mode or restart the OMP owner.
-		expect(src).toContain("private async appendActiveEditorContext");
-		const body = src.slice(src.indexOf("private async appendActiveEditorContext"));
-		const appendBody = body.slice(0, body.indexOf("\n\t/** Editor context-menu command"));
+		expect(src).toContain("async appendActiveEditorContext");
+		const body = src.slice(src.indexOf("async appendActiveEditorContext"));
+		const appendBody = body.slice(0, body.indexOf("\n\n\t\t"));
 		expect(appendBody).not.toContain("setWorkbenchMode");
 		expect(appendBody).not.toContain("openAgentsWindow");
 	});
 
 	it("renders the status bar from real connection, run, and approval state", () => {
-		expect(src).toContain("private renderAgentsStatus");
+		expect(src).toContain("renderAgentsStatus(this:");
 		expect(src).toContain("$(bell) Cedia ");
 		expect(src).toContain("$(sync~spin) Cedia running");
 		expect(src).toContain("$(debug-disconnect) Cedia offline");
 		// The old static label must be gone.
-		expect(src).not.toContain('this.#agentsStatus.text = "$(comment-discussion) Agents"');
+		expect(src).not.toContain('this.agentsStatus.text = "$(comment-discussion) Agents"');
 	});
 
 	it("fans snapshots out to every resolved surface and keeps IDE layout on focus", () => {
 		// Both the activity-bar view and the dock can be open at once.
-		expect(src).toContain("private post(message: unknown): void {");
-		expect(src).toContain("this.#views.targets().map(view => view.webview)");
-		expect(src).toContain("view.onDidDispose(() => { this.#views.remove(view); }");
+		expect(src).toContain("post(this: CediaTaskViewProviderApi, message: unknown): void {");
+		expect(src).toContain("this.views.targets().map(view => view.webview)");
+		expect(src).toContain("view.onDidDispose(() => { this.views.remove(view); }");
 		// A focus shortcut must not tear down the IDE chrome while in IDE mode.
-		expect(src).toContain("private async focusAgentSurface(message: unknown): Promise<void> {");
-		const body = src.slice(src.indexOf("private async focusAgentSurface"));
+		expect(src).toContain("async focusAgentSurface(this: CediaTaskViewProviderApi, message: unknown): Promise<void> {");
+		const body = src.slice(src.indexOf("async focusAgentSurface"));
 		const focusBody = body.slice(0, body.indexOf("\n\tprivate "));
-		expect(focusBody).toContain('if (this.#state.workbenchMode === "ide") {');
+		expect(focusBody).toContain('if (this.state.workbenchMode === "ide") {');
 		expect(focusBody).toContain("await this.focusDock();");
 	});
 
@@ -124,14 +126,14 @@ describe("ide-native workbench contributions", () => {
 		expect(src).toContain("void this.applyWorkbenchAppearance(mode).catch(error => this.reportError(error));");
 		expect(src).not.toContain("await this.applyWorkbenchAppearance(");
 		// Every workspace-scoped write inside the appearance helper is guarded.
-		const body = src.slice(src.indexOf("private async applyWorkbenchAppearance"));
+		const body = src.slice(src.indexOf("async applyWorkbenchAppearance"));
 		const helper = body.slice(0, body.indexOf("\n\t/** Reveal the docked agent view"));
 		expect(helper).toContain("await target.update(section, value, vscode.ConfigurationTarget.Workspace);");
 		// The guard still swallows the failure so the mode switch proceeds; it
 		// now also records the reason on the Cedia log channel, because a
 		// silently swallowed write hid a stalled workspace for a whole session.
 		expect(helper).toContain("} catch (error) {");
-		expect(helper).toContain("this.#log.debug(`workbench appearance skipped for ${section}: ${errorMessage(error)}`);");
+		expect(helper).toContain("this.log.debug(`workbench appearance skipped for ${section}: ${errorMessage(error)}`);");
 	});
 
 	it("reveals the docked container on the coexistence default", () => {
@@ -154,8 +156,8 @@ describe("ide-native workbench contributions", () => {
 		expect(kbd?.mac).toBe("cmd+k");
 		expect(kbd?.when).toBe("editorTextFocus && editorHasSelection");
 		// The command must require a real selection and dispatch a real turn.
-		expect(src).toContain("async inlineEdit(): Promise<void> {");
-		const body = src.slice(src.indexOf("async inlineEdit(): Promise<void> {"));
+		expect(src).toContain("async inlineEdit(this: CediaTaskViewProviderApi): Promise<void> {");
+		const body = src.slice(src.indexOf("async inlineEdit(this: CediaTaskViewProviderApi): Promise<void> {"));
 		const inlineBody = body.slice(0, body.indexOf("\n\t/**"));
 		expect(inlineBody).toContain("editor.selection.isEmpty");
 		expect(inlineBody).toContain('await this.sendCommand("prompt", { message: outgoing });');
@@ -165,7 +167,7 @@ describe("ide-native workbench contributions", () => {
 		expect(inlineBody).not.toContain("applyEdit");
 		// The instruction must survive a refused send and must not clobber an
 		// unsent draft.
-		expect(inlineBody).toContain("const existingDraft = this.#state.draft.trim();");
+		expect(inlineBody).toContain("const existingDraft = this.state.draft.trim();");
 		expect(inlineBody).toContain("const outgoing = existingDraft ? `${existingDraft}\\n\\n${prompt}` : prompt;");
 		expect(inlineBody.indexOf('{ type: "draft", draft: outgoing }')).toBeLessThan(inlineBody.indexOf("await this.sendCommand"));
 	});

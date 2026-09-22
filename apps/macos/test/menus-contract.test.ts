@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readProviderSources } from "./provider-sources.ts";
 
 /*
  * A menu or keybinding whose `when` names a context key that does not exist is
@@ -80,7 +81,7 @@ describe("menu and keybinding context keys", () => {
 	});
 
 	it("keeps the owned keys in step with what the extension actually sets", () => {
-		const source = readFileSync(join(here, "..", "src", "extension.ts"), "utf8");
+		const source = readProviderSources(join(here, "..", "src"));
 		for (const key of ownKeys) {
 			// A key we gate menus on must really be set, or the whole group is dead.
 			expect(source).toContain(`executeCommand("setContext", "${key}"`);

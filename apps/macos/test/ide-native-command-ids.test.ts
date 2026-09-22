@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readProviderSources } from "./provider-sources.ts";
 
 /*
  * Every command id the extension executes must be a command that exists.
@@ -18,7 +19,7 @@ import { fileURLToPath } from "node:url";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sources = ["../src/extension.ts", "../src/workbench-mode.ts"].map(relative => readFileSync(join(here, relative), "utf8"));
+const sources = [readProviderSources(join(here, "../src")), readFileSync(join(here, "../src/workbench-mode.ts"), "utf8")];
 const extensionSource = sources[0]!;
 const manifest = JSON.parse(readFileSync(join(here, "../package.json"), "utf8")) as {
 	readonly contributes: {

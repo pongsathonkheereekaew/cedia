@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readProviderSources } from "./provider-sources.ts";
 
 /*
  * "OMP is the single execution/transcript owner" is an ownership constraint,
@@ -12,15 +13,15 @@ import { fileURLToPath } from "node:url";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const extensionSource = readFileSync(join(here, "../src/extension.ts"), "utf8");
+const extensionSource = readProviderSources(join(here, "../src"));
 const hostServiceSource = readFileSync(join(here, "../../host/src/service.ts"), "utf8");
 
 describe("single execution owner", () => {
 	it("starts only the host helper from the Mac extension", () => {
 		expect(extensionSource).toContain('spawn(nodePath, [scriptPath, "ensure"]');
-		expect(extensionSource).toContain('join(this.#extensionPath, "runtime/host/cli.js")');
+		expect(extensionSource).toContain('"runtime/host/cli.js"');
 		// The bundled Node is the helper's runtime, never an agent runtime.
-		expect(extensionSource).toContain('join(this.#extensionPath, "runtime/node/bin/node")');
+		expect(extensionSource).toContain('"runtime/node/bin/node"');
 	});
 
 	it("has no OMP launcher in the client", () => {
