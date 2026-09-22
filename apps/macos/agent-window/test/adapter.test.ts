@@ -62,6 +62,15 @@ function fakeBridge(eventFrames = frames) {
 		invoke: async (_channel: string, request: Request) => {
 			calls.push(request);
 			if ((request as Request & { kind?: string }).kind === "bootstrap") return { platform: "darwin", homeDir: "/Users/tester", worktreesDir: "/Users/tester/Library/Application Support/Cedia/host/worktrees", version: "test-host" };
+			if ((request as Request & { kind?: string }).kind === "keybindings") {
+				const action = (request as unknown as { action?: string }).action;
+				if (action === "read") return { configPath: "/Users/tester/Library/Application Support/Cedia/User/keybindings.json", keybindings: [], issues: [] };
+				if (action === "write") {
+					const rule = (request as unknown as { rule?: { key?: string; command?: string } }).rule;
+					return { keybindings: [{ command: rule?.command ?? "chat.new", shortcut: { key: "n", metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, modKey: true } }], issues: [] };
+				}
+				throw new Error(`Unexpected keybindings action ${action}`);
+			}
 			if (request.path === "/v1/projects") return [project];
 			if (request.path === "/v1/models") return {
 				source: "omp",
@@ -399,6 +408,18 @@ describe("Cedia Agent Window native adapter", () => {
 			worktreesDir: "/Users/tester/Library/Application Support/Cedia/host/worktrees",
 			keybindingsConfigPath: "/Users/tester/Library/Application Support/Cedia/User/keybindings.json",
 		});
+	});
+	it("reads and writes the real keybindings file through the bridge (item 57)", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		const config = await api.server.getConfig();
+		expect(config.keybindings).toEqual([]);
+		const written = await api.server.upsertKeybinding({ rule: { key: "mod+n", command: "chat.new" } });
+		expect(written.keybindings).toHaveLength(1);
+		const ops = calls.filter(call => (call as unknown as { kind?: string }).kind === "keybindings");
+		expect(ops.map(op => (op as unknown as { action?: string }).action)).toEqual(["read", "write"]);
+		expect((ops[1] as unknown as { file?: string }).file).toBe("/Users/tester/Library/Application Support/Cedia/User/keybindings.json");
 	});
 
 	it("emits a snapshot envelope to subscribers after a refresh", async () => {

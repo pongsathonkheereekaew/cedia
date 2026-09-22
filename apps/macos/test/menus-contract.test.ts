@@ -53,6 +53,13 @@ function contributionWhens(): { where: string; id: string }[] {
 }
 
 describe("menu and keybinding context keys", () => {
+	// Item 57: the bundle's own resolver reads `keybindings.json` rows, not the
+	// workbench registry, so the check below stays workbench-only. The
+	// agent-surface `when` vocabulary is Cedia-owned (backlog/command-map.md);
+	// unknown identifiers are rejected at the bridge as invalid-entry issues
+	// (agent-window-keybindings.test.ts), which is the conflict gate for that
+	// surface: a row can never be silently dead the way an unknown workbench
+	// context key would be.
 	const referenced = contributionWhens();
 
 	it("references at least one key, so the extraction cannot silently pass", () => {

@@ -12,6 +12,7 @@ import { agentUiStateDir, readAgentUiState, resolveAgentUiThread, saveIdeHandoff
 import { readAgentThemeSnapshot } from "./agent-theme.ts";
 import { startAgentThemePublisher } from "./agent-window-theme-publisher.ts";
 import { AGENTS_WINDOW_WORKSPACE } from "./workbench-mode.ts";
+import { defaultKeybindingsFile, readKeybindingsFile, writeKeybindingRule } from "./agent-window-keybindings.ts";
 
 export const AGENT_WINDOW_CHANNEL = "vscode:cediaAgent";
 type HostMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -34,6 +35,13 @@ function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Agent Window request");
   return value as Record<string, unknown>;
 }
+interface KeybindingsRequest {
+	readonly action?: unknown;
+	readonly file?: unknown;
+	readonly rule?: unknown;
+	readonly replacing?: unknown;
+}
+
 function text(value: unknown): string {
   if (typeof value !== "string" || !value || value.length > 16_384 || /[\u0000-\u001f]/.test(value)) throw new Error("Invalid Agent Window argument");
   return value;
@@ -127,6 +135,17 @@ export function createAgentWindowHandler(options: HandlerOptions) {
 			if (!options.zoom || !["in", "out", "reset"].includes(String(value.action))) throw new Error("Invalid desktop zoom action");
 			return options.zoom(event, value.action as "in" | "out" | "reset");
 		}
+      case "keybindings": {
+        const body = value as KeybindingsRequest;
+        // Tests point the owned file at a temp dir through CEDIA_KEYBINDINGS_FILE;
+        // anything else is refused even for a trusted sender.
+        const allowed = process.env.CEDIA_KEYBINDINGS_FILE ?? defaultKeybindingsFile();
+        const requested = typeof body.file === "string" && body.file.length > 0 ? body.file : allowed;
+        if (resolve(requested) !== resolve(allowed)) throw new Error("Keybindings are owned by the workbench user file.");
+        if (body.action === "read") return readKeybindingsFile(allowed);
+        if (body.action === "write") return writeKeybindingRule(allowed, body.rule, body.replacing);
+        throw new Error("Unsupported keybindings action");
+      }
       default: throw new Error("Unsupported Agent Window operation");
     }
   };

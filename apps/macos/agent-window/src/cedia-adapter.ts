@@ -121,10 +121,14 @@ interface RequestBridge extends AgentWindowBridge {
 }
 
 interface AgentRequest {
-	kind: "request";
-	method: "GET" | "POST" | "PATCH" | "DELETE";
-	path: string;
+	kind: "request" | "keybindings";
+	method?: "GET" | "POST" | "PATCH" | "DELETE";
+	path?: string;
 	body?: unknown;
+	action?: "read" | "write";
+	file?: string;
+	rule?: unknown;
+	replacing?: unknown;
 }
 
 interface AdapterOptions {
@@ -968,7 +972,7 @@ class CediaAgentAdapter {
 		}
 	}
 
-	async request<T>(method: AgentRequest["method"], path: string, body?: unknown): Promise<T> {
+	async request<T>(method: NonNullable<AgentRequest["method"]>, path: string, body?: unknown): Promise<T> {
 		if (!path.startsWith("/v1/") || path.includes("#") || path.includes("\\")) throw new Error("Invalid Cedia host path");
 		return await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, {
 			kind: "request",
@@ -976,6 +980,39 @@ class CediaAgentAdapter {
 			path,
 			...(body === undefined ? {} : { body }),
 		}) as T;
+	}
+
+	/**
+	 * Item 57: the bundle's keybindings read/write through the extension bridge.
+	 * The main process owns `Cedia/User/keybindings.json` (read + validate +
+	 * resolve there); this only forwards the op and trusts the resolved rows, so
+	 * a binding edited in the agent window lands in the same file the workbench
+	 * keybinding service watches — and vice versa.
+	 */
+	async readKeybindings(): Promise<{ configPath: string; keybindings: unknown[]; issues: unknown[] }> {
+		const environment = await this.bootstrapEnvironment();
+		const file = keybindingsPath(environment);
+		const result = await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, { kind: "keybindings", action: "read", file }) as { configPath?: unknown; keybindings?: unknown; issues?: unknown };
+		return {
+			configPath: typeof result?.configPath === "string" ? result.configPath : file,
+			keybindings: Array.isArray(result?.keybindings) ? result.keybindings : [],
+			issues: Array.isArray(result?.issues) ? result.issues : [],
+		};
+	}
+
+	async writeKeybinding(input: { rule: unknown; replacing?: unknown }): Promise<{ keybindings: unknown[]; issues: unknown[] }> {
+		const environment = await this.bootstrapEnvironment();
+		const result = await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, {
+			kind: "keybindings",
+			action: "write",
+			file: keybindingsPath(environment),
+			rule: input.rule,
+			...(input.replacing === undefined ? {} : { replacing: input.replacing }),
+		}) as { keybindings?: unknown; issues?: unknown };
+		return {
+			keybindings: Array.isArray(result?.keybindings) ? result.keybindings : [],
+			issues: Array.isArray(result?.issues) ? result.issues : [],
+		};
 	}
 
 	async voiceAvailable(): Promise<boolean> {
@@ -1637,13 +1674,14 @@ class CediaAgentAdapter {
 			server: {
 				getConfig: async () => {
 					const environment = await adapter.bootstrapEnvironment();
+					const stored = await adapter.readKeybindings().catch(() => ({ configPath: keybindingsPath(environment), keybindings: [], issues: [] }));
 					return {
 						cwd: environment.homeDir,
 						homeDir: environment.homeDir,
 						worktreesDir: environment.worktreesDir,
-						keybindingsConfigPath: keybindingsPath(environment),
-						keybindings: [],
-						issues: [],
+						keybindingsConfigPath: stored.configPath,
+						keybindings: stored.keybindings,
+						issues: stored.issues,
 						providers: [{ provider: "omp", status: "ready", available: true, authStatus: "unknown", authLabel: "Managed by OMP", checkedAt: iso(adapter.#now), message: "OMP execution is owned by the Cedia host", voiceTranscriptionAvailable: await adapter.voiceAvailable() }],
 						availableEditors: ["vscode"],
 					};
@@ -1687,7 +1725,7 @@ class CediaAgentAdapter {
 				generateAutomationIntent: unsupportedAsync("server.generateAutomationIntent"),
 				prewarmVoice: async (input: unknown) => await adapter.request("POST", "/v1/voice/prewarm", input),
 				transcribeVoice: async (input: unknown) => await adapter.request("POST", "/v1/voice/transcribe", input),
-				upsertKeybinding: unsupportedAsync("server.upsertKeybinding"),
+				upsertKeybinding: async (input: { rule: unknown; replacing?: unknown }) => await adapter.writeKeybinding(input ?? {}),
 			},
 			orchestration: {
 				getSnapshot: async () => await adapter.shellSnapshot(true),

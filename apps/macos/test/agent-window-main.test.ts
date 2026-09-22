@@ -1,4 +1,6 @@
+import { defaultKeybindingsFile } from "../src/agent-window-keybindings.ts";
 import { describe, expect, it } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -63,7 +65,46 @@ describe("Agent Window main-process boundary", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
-
+  it("reads and writes the workbench keybindings file through the bridge", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cedia-agent-keybindings-"));
+    const file = join(dir, "keybindings.json");
+    const previous = process.env.CEDIA_KEYBINDINGS_FILE;
+    process.env.CEDIA_KEYBINDINGS_FILE = file;
+    try {
+      const { handler, trusted } = (() => {
+        const trustedKey = {};
+        const handler = createAgentWindowHandler({
+          stateDir: join(tmpdir(), `cedia-test-kb-${process.pid}-${Date.now()}`),
+          authorize: event => event === trustedKey,
+          request: async () => ({}),
+          ensure: async () => {},
+          pickFolder: async () => "/tmp",
+          openIde: async () => {},
+          openExternal: async () => {},
+        });
+        return { handler, trusted: trustedKey };
+      })();
+      expect(defaultKeybindingsFile("darwin", "/Users/t")).toContain("Cedia/User/keybindings.json");
+      await expect(handler(trusted, { kind: "keybindings", action: "read", file: join(dir, "elsewhere.json") })).rejects.toThrow("owned by the workbench");
+      await expect(handler({}, { kind: "keybindings", action: "read" })).rejects.toThrow("Untrusted");
+      await expect(handler(trusted, { kind: "keybindings", action: "flip", file })).rejects.toThrow("Unsupported keybindings action");
+      // Direction 1: agent-window write lands in the owned file.
+      const written = await handler(trusted, { kind: "keybindings", action: "write", file, rule: { key: "mod+shift+n", command: "chat.new" } }) as { keybindings: unknown[]; issues: unknown[] };
+      expect(written.keybindings).toHaveLength(1);
+      expect(written.issues).toEqual([]);
+      // Direction 2: a workbench-side edit of the same file reads back through the bridge.
+      const raw = JSON.parse(readFileSync(file, "utf8")) as unknown[];
+      raw.push({ key: "mod+k", command: "sidebar.search", when: "!terminalFocus" });
+      writeFileSync(file, JSON.stringify(raw, null, 4));
+      const read = await handler(trusted, { kind: "keybindings", action: "read", file }) as { keybindings: { command: string }[]; issues: unknown[] };
+      expect(read.keybindings.map(row => row.command)).toEqual(["chat.new", "sidebar.search"]);
+      expect(read.issues).toEqual([]);
+    } finally {
+      if (previous === undefined) delete process.env.CEDIA_KEYBINDINGS_FILE;
+      else process.env.CEDIA_KEYBINDINGS_FILE = previous;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   it("rejects an unregistered renderer before dispatching anything", async () => {
     const { handler, calls } = fixture();
     await expect(handler({}, { kind: "request", method: "GET", path: "/v1/projects" })).rejects.toThrow("Untrusted");

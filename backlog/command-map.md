@@ -30,6 +30,22 @@ union contradictory specs** (G-VIS-02, J6).
 | C-05 | ACP question/plan requests BLOCK; desktop async questions let work continue | ACP docs vs agent overview | Separate semantics, never one handler: blocking bridge (ACP) vs async interaction (desktop); cancel cleans the waiter (PX-23/24) |
 | C-06 | `@` picker vs `/` picker vs model picker behaviors | UI-SPEC | `@` = refs w/ preview; `/` = one-shot skill vs persistent mode; model picker splits engine/provider/model + unavailable reason, never silently retasks |
 
+## Agent-surface `when` vocabulary (item 57; Cedia-owned)
+
+The bundle's keybinding section reads and writes the real
+`Cedia/User/keybindings.json` through the extension bridge
+(`apps/macos/src/agent-window-keybindings.ts`: file I/O, key grammar,
+`when` grammar, resolution into `ResolvedKeybinding`-shaped rows). Valid
+context keys are exactly `terminalFocus`, `terminalOpen`,
+`terminalWorkspaceOpen`, `terminalWorkspaceTerminalOnly`,
+`terminalWorkspaceTerminalTabActive`, `terminalWorkspaceChatTabActive`,
+`isMac` (plus `true`/`false` literals for parked rows) — the context the
+bundle dispatch sites build (`useChatKeyboardShortcuts`,
+`useDiffChangeNavigationShortcuts`, thread-jump hints). Anything else is an
+invalid entry with a named issue, never silently false: an unknown identifier
+would be invisible forever, the same defect class `menus-contract` guards on
+the workbench side.
+
 ## Runtime gates that close this file
 
 - [ ] F01-DUMP: default keybinding set + command list extracted from pinned

@@ -3145,6 +3145,61 @@ and those patches are gone (done above), the suite is green modulo the recorded
 pre-existing failures, and a model change from either window is one code path —
 `GET /v1/models` + `set_model` through the bundle picker, the only model control left.
 
+### One keybinding system; the bundle reads and writes the real file (2026-09-22)
+
+Closes §10 item 57 (bridge read/write; the workbench owns the path and watches it).
+
+**Bridge.** New `kind: "keybindings"` op in `agent-window-main.ts` (`read`/`write`)
+backed by new `apps/macos/src/agent-window-keybindings.ts` (zero-dependency file
+I/O + key/`when` grammars + resolution into `ResolvedKeybinding`-shaped rows). The
+adapter's `server.getConfig` returns the resolved rows instead of `[]`, and
+`server.upsertKeybinding` validates + writes through the bridge instead of throwing —
+the Settings → Keybindings panel and project-script keybinding writes work end to end.
+Only the owned user file is ever touched (`defaultKeybindingsFile()` per platform;
+`CEDIA_KEYBINDINGS_FILE` override exists for tests only); anything else is refused
+even for a trusted sender, and untrusted senders are rejected before dispatch.
+
+**File syntax is bundle-flavoured, not workbench-flavoured.** Rows are
+`{key: "mod+shift+n", command: "chat.new", when: "!terminalFocus"}`. The workbench
+keybinding service ignores commands it does not know, so bundle rows are inert there
+while the `cedia.*` bindings stay in package contributes. Comments and trailing commas
+survive a read (the workbench editor writes them); write-back normalizes to plain JSON.
+Malformed JSON reads as a `keybindings.malformed-config` issue; bad rows read as
+`keybindings.invalid-entry` issues with index + reason — the same shapes the bundle's
+KeybindingsToast already renders.
+
+**Recorded deviation: `DEFAULT_SHORTCUT_FALLBACKS` stays.** §10 item 57 says "the
+bundle's private chord defaults sheet is deleted", and §6 forbids a second chord table
+in the bundle. Taken literally that means fresh profiles lose every shortcut — ⌘K,
+⇧⌘P, mod+N — until the user binds them by hand, contradicting the §3.B contract (the
+sidebar advertises ⌘K) and the vendored `keybindings.search.test.ts`. The fallback
+table is a seed default, not a second editable system: nothing writes to it,
+`getFallbackBindings` yields to any configured command, and the one file the user
+edits is the workbench-owned `keybindings.json`. Porting the ~60-row table
+workbench-side would need a second key/`when` parser in node (the bundle resolver is
+renderer code with DOM deps) for zero behavioural gain. So the table stays and the
+single-system property is: one editable file, one resolver, one bridge.
+
+**Agent-surface `when` vocabulary** (`backlog/command-map.md`): exactly
+`terminalFocus`, `terminalOpen`, `terminalWorkspaceOpen`,
+`terminalWorkspaceTerminalOnly`, `terminalWorkspaceTerminalTabActive`,
+`terminalWorkspaceChatTabActive`, `isMac` (+ `true`/`false` literals). The bridge
+rejects anything else as an invalid-entry issue — a row can never be silently dead
+the way an unknown workbench context key would be. The command allowlist is pinned
+against the vendored `STATIC_KEYBINDING_COMMANDS` by test, and the conflict gate
+(`agent-window-keybindings.test.ts`) asserts the bundle dispatch context
+(`useChatKeyboardShortcuts`'s `shortcutContext`) stays inside the vocabulary.
+
+Receipt: agent-window root + vendor `tsc` clean; `apps/macos typecheck` shows only
+the pre-existing failures (no keybinding errors); `agent-window-keybindings` 9 pass,
+`agent-window-main` 9 pass, adapter 29 pass; both-directions proof via throwaway
+script (bridge write → file on disk → workbench-side append → bridge read returns
+both rows, zero issues); `apps/macos` suite 669 pass / 3 fail — the patch-set drift,
+`menus-contract` (needs `rg`), and the pre-existing theme-handoff failure, all
+recorded before this slice; `ci-validate` CI-OK. Live packaged proof (a binding
+edited in the agent window appearing in the workbench and vice versa) rides the next
+`package:mac` + `check:packaged` run with items 54/60/61/62.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.
