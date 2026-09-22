@@ -17,7 +17,7 @@ describes the product target, not a release certification.
 - **Agent composer** - describe the change, review the diff, accept or steer mid-run.
 - **Inline edit** - select code, describe the change, apply it as one undo step.
 - **Review and worktrees** - every agent run is isolated. Bring changes back only when they are clean.
-- **Headless CLI** - drive sessions, approvals, and reviews from the terminal with JSON output.
+- **Headless CLI** - drive sessions, turns, approvals, reviews and files from the terminal with JSON output (`cedia-host help`; `rpc` reaches every OMP command).
 
 ## Getting Started
 
