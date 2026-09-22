@@ -106,3 +106,11 @@ export function registerCediaAgentWindowBridge(options: AgentWindowBridgeOptions
   } };
 }
 
+/**
+ * Patch `0057` reads this from the same module and uses it to let Cedia's browser
+ * guests navigate: without the export the packaged app's main process holds
+ * `undefined` and every in-page navigation is refused (measured 2026-09-23, which
+ * is how the missing re-export was caught). `main.cjs` is the module the desktop
+ * main process loads, so both names must leave this file.
+ */
+export { isCediaAgentBrowserWebContents } from "./agent-window-browser.ts";

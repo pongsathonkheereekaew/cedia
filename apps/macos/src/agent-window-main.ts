@@ -50,6 +50,25 @@ function text(value: unknown): string {
   return value;
 }
 
+/** Top-level names the renderer may reach at any depth; the host's router stays authoritative
+ * for the segments below them. */
+const APPLICATION_ROOTS = ["health", "projects", "sessions", "responses", "models", "voice", "workspace-suggestion"];
+/** Provider auth, matched segment by segment. `*` is exactly one opaque identifier, so a
+ * lookalike such as `/v1/providers/x/credentials` never leaves the application. */
+const PROVIDER_ROUTES: readonly (readonly string[])[] = [
+  ["providers"],
+  ["providers", "*", "api-key"],
+  ["providers", "*", "auth"],
+  ["providers", "*", "login"],
+  ["provider-logins", "*"],
+  ["provider-logins", "*", "input"],
+];
+
+function matchesProviderRoute(shape: readonly string[], segments: readonly string[]): boolean {
+  return shape.length === segments.length
+    && shape.every((part, index) => part === "*" ? /^[A-Za-z0-9._:@+-]{1,128}$/.test(segments[index]!) : part === segments[index]);
+}
+
 /** Only application routes are exposed; device credentials and editor registration stay native. */
 function applicationPath(value: unknown): string {
   const path = text(value);
@@ -57,7 +76,8 @@ function applicationPath(value: unknown): string {
   const pathname = path.split("?")[0]!;
   const segments = pathname.split("/").map(part => decodeURIComponent(part));
   if (segments.some(part => part === "." || part === ".." || /[/\\\u0000-\u001f]/.test(part))) throw new Error("Invalid application path");
-  if (!["health", "projects", "sessions", "responses", "models", "voice", "workspace-suggestion"].includes(segments[2]!)) throw new Error("Unsupported application route");
+  const route = segments.slice(2);
+  if (!APPLICATION_ROOTS.includes(segments[2]!) && !PROVIDER_ROUTES.some(shape => matchesProviderRoute(shape, route))) throw new Error("Unsupported application route");
   return path.slice(4);
 }
 

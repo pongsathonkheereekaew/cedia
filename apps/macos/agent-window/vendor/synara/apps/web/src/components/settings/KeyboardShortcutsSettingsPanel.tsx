@@ -2,7 +2,8 @@
 // Purpose: Searchable Keybindings editor for the settings screen — the same command reference
 //          the Mod+/ sheet shows, with captured-key editing and new binding creation.
 // Layer: Settings UI components
-// Depends on: shared shortcut-sheet builder/filter, key capture, server keybindings config, and the Kbd pill.
+// Depends on: shared shortcut-sheet builder/filter, key capture, server keybindings config,
+//             the Kbd pill, and this panel's row-editor logic.
 
 import type {
   KeybindingCommand,
@@ -34,6 +35,11 @@ import {
   SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME,
   SETTINGS_CARD_ROW_TITLE_CLASS_NAME,
 } from "~/settingsPanelStyles";
+import {
+  isShortcutRowEditing,
+  keybindingSaveRequest,
+  shortcutCaptureCommand,
+} from "./KeyboardShortcutsSettingsPanel.logic";
 import { SettingsCard, SettingsEmptyState } from "./SettingsPanelPrimitives";
 
 // Stable empty reference while the server config query is still loading.
@@ -104,8 +110,11 @@ export function KeyboardShortcutsSettingsPanel() {
     setReplacingRule(null);
     setCaptureError(null);
   };
-  const activeCommand = editingCommand ?? (isAdding ? newCommand : null);
+  const captureCommand = shortcutCaptureCommand(editingCommand, isAdding, newCommand);
   const captureKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    // A chord is staged only for the editor that owns this capture; with no editor open
+    // there is no command to save it under, so the keydown is left alone.
+    if (!captureCommand) return;
     event.preventDefault();
     event.stopPropagation();
     const next = keybindingFromKeyboardEvent(event.nativeEvent);
@@ -116,18 +125,17 @@ export function KeyboardShortcutsSettingsPanel() {
     setCaptureError(null);
     setKeyValue(next);
   };
-  const saveBinding = async () => {
-    if (!activeCommand || !keyValue.trim() || isSaving) return;
+  const saveBinding = async (command: KeybindingCommand) => {
+    const request = keybindingSaveRequest({
+      command,
+      key: keyValue,
+      when: whenValue,
+      replacing: replacingRule,
+    });
+    if (!request || isSaving) return;
     setIsSaving(true);
     try {
-      const result = await ensureNativeApi().server.upsertKeybinding({
-        rule: {
-          command: activeCommand,
-          key: keyValue.trim().toLowerCase(),
-          ...(whenValue.trim() ? { when: whenValue.trim() } : {}),
-        },
-        ...(replacingRule ? { replacing: replacingRule } : {}),
-      });
+      const result = await ensureNativeApi().server.upsertKeybinding(request);
       queryClient.setQueryData(serverQueryKeys.config(), (current: typeof serverConfigQuery.data) =>
         current ? { ...current, keybindings: result.keybindings, issues: result.issues } : current,
       );
@@ -214,7 +222,7 @@ export function KeyboardShortcutsSettingsPanel() {
               {captureError ?? "Use up to two modifiers and one key."}
             </p>
             <div className="flex gap-2">
-              <Button size="sm" disabled={!keyValue || isSaving} onClick={() => void saveBinding()}>
+              <Button size="sm" disabled={!keyValue || isSaving} onClick={() => void saveBinding(newCommand)}>
                 {isSaving ? "Saving..." : "Save keybinding"}
               </Button>
               <Button size="sm" variant="outline" disabled={isSaving} onClick={cancelCapture}>
@@ -259,7 +267,12 @@ export function KeyboardShortcutsSettingsPanel() {
             const muted = section.tone === "muted";
             return section.entries.map((entry) => {
               const command = entry.command;
-              const isEditing = command === editingCommand && !isAdding;
+              // Only a row that owns a command can open an editor; settings reference rows
+              // like "Show keybindings" carry none, and the panel's idle editing target is
+              // also null.
+              const editingRowCommand = isShortcutRowEditing(command, editingCommand, isAdding)
+                ? command
+                : null;
               return (
                 <div
                   key={`${section.id}:${entry.id}`}
@@ -283,7 +296,7 @@ export function KeyboardShortcutsSettingsPanel() {
                       ) : null}
                     </div>
                   </div>
-                  {isEditing ? (
+                  {editingRowCommand ? (
                     <div className="grid gap-2 border-t border-border/60 pt-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                       <Input
                         size="sm"
@@ -307,7 +320,7 @@ export function KeyboardShortcutsSettingsPanel() {
                         <Button
                           size="sm"
                           disabled={!keyValue.trim() || isSaving}
-                          onClick={() => void saveBinding()}
+                          onClick={() => void saveBinding(editingRowCommand)}
                         >
                           {isSaving ? "Saving..." : "Save"}
                         </Button>

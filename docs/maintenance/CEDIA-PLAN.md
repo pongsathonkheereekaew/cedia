@@ -3833,6 +3833,94 @@ Cedia.app matches the current patch set`; `node -e "require('./dist/agent-window
 unchanged at the 10 pre-existing errors; agent-window `86 → 87` tests, `apps/macos`
 702 tests with only the two known failures; host 156 pass.
 
+### Packaged receipts: five claims verified, item 64's premise measured false (2026-09-23)
+
+One packaged run per script, against the rebuilt `Cedia.app` (15-patch set,
+`check:packaged` all OK). `bun scripts/agent-window-panels-smoke.ts` **passes**
+and writes `dist/agent-window-panels-smoke/receipts.json`; `bun
+scripts/agent-ide-smoke.ts` passes and writes
+`dist/agent-ide-smoke/dock-terminal-receipt.json`.
+
+**Verified on screen (five claims, values from the receipts).**
+
+- **§10 item 60's close condition — met.** A fresh-profile launch (its own
+  `HOME`, its own state dir, no `--user-data-dir`) walks every sidebar row and
+  all ten settings sections: every row carries an accessible name, no row offers
+  a cut surface (Kanban / Pull requests / Plugins / Studio / Spaces), the
+  Automations row is disabled *with* its reason, every section is non-blank with
+  a heading and a live control, **zero page requests contain `trysynara`**, and
+  zero renderer errors.
+- **§10 item 57.** `Settings → System tools` reports
+  `<userData>/User/keybindings.json`, which equals the app's
+  `homedir()/Library/Application Support/Cedia/User/keybindings.json`; a row's
+  Edit → capture `Meta+Alt+9` → Save shows "Shortcut saved" and writes
+  `{key: "mod+alt+9", command: "sidebar.addProject", when: "!(terminalFocus)"}`
+  to that file, and the bridge's own read returns the same rows and path.
+- **§10 item 55.** The status bar reads `host · live`, `model ·
+  fixture/fixture-model`, `session · ready`, `branch · main` — the model cell
+  matches the host catalogue slug and the branch matches `git rev-parse`, and the
+  bar sits at the foot of the window.
+- **§10 item 61.** A pasted 1×1 PNG (70 bytes) reaches the host: one `prompt`
+  command, `images: 1`, `image/png`, message `Panel fixture image prompt`, status
+  `acknowledged` — and the transcript renders the fixture's answer.
+- **§10 item 54.** Writing `workbench.colorTheme` in the workspace file moves the
+  snapshot to `Dark Modern`/`dark` and then `Light Modern`/`light`, the DOM token
+  layer and the window's painted surface follow, and `Settings → Appearance` is
+  the read-only "Following the IDE" row with no theme-editing control.
+
+**§10 item 62 is owed, with its blocker named:** the fixture OMP advertises no
+commands (`get_commands` → `{"commands": []}`), so `/` has no real skill to
+complete in a fixture run, and the context-window popup wires its compact control
+only for `claudeAgent`. Verifying it needs a fixture that advertises a skill or a
+run against a real OMP; the packaged walk records the blocker verbatim.
+
+**§10 item 64 cannot close as written — the premise is false.** The item says the
+dock "renders the same bundle, whose Terminal pane talks to the host PTY
+registry". Measured in the packaged IDE window:
+
+- The dock renders **no right dock at all**: `[data-right-dock-content]` count 0,
+  and the embedded runtime gates it off by construction
+  (`SingleChatSurface` renders `<RightDock>` only when `!isIdeEmbeddedRuntime()`).
+  Its 28 visible controls and both menus were inventoried by accessible name —
+  no Terminal entry anywhere.
+- The pane's own transport is refused: `nativeApi.terminal.open(...)` inside the
+  dock frame answers *"Open terminal in the IDE workbench or Agents Window"*,
+  because `agent-ide-webview.ts` wires the `panel` surfaces `files` and `git`
+  only. The bridge itself is alive (a `git.status` call from the same frame
+  answers `main`), so the refusal is specific to the terminal surface.
+- The host's registry is not what either window's terminal uses: it holds OMP's
+  `cedia_terminal_*` checkpoints and is fed only when the host negotiates virtual
+  UI (the iOS client is its only consumer), while the Agents window's Terminal
+  pane goes through the Electron-main node-pty service.
+
+So §3 decision 6 ("agent terminals = one host PTY registry, rendered by the bundle
+in both windows") describes a convergence the build does not have. The item needs
+an owner decision: **re-scope** it to today's truth (one PTY per window: the
+Electron-main service in the Agents window, the workbench's own terminal in the
+IDE; the host registry serves OMP's terminals to iOS) or **fund** the convergence
+(seed the bundle's terminal runtime from `GET /v1/sessions/:id/terminals`, stream
+`cedia_terminal_*`, mount a dock Terminal pane). The IDE smoke now carries the
+probe either way: it attempts the real transport and polls the registry, so the
+day the convergence lands, its receipt flips from `resolved: false` to `true`.
+
+**Three product defects and one regression the receipts found, all fixed**, with
+regression tests: the main-process bridge refused `/v1/providers` and
+`/v1/provider-logins/...` (Settings → Agent providers was an error line; the
+allowlist is now shape-matched with lookalikes refused), the Keybindings row
+mounted an editor before any Edit click (a nullable identity check) and that
+editor's Save persisted nothing, and a pasted composer image never reached OMP
+because the send path cleared the draft — and its image blobs — *before*
+dispatching, so the adapter could not read the bytes. The regression is the
+parent's own: splitting the Electron half out of `agent-window-main.ts` dropped
+`isCediaAgentBrowserWebContents` from `main.cjs`, which patch `0057` reads to
+allow browser-guest navigation; the packaged browser step caught it and it is
+fixed. Two stale script assertions were also corrected rather than re-pinned
+(`filesSmoke` asserted a workspace write the shipped guard refuses; the Side
+chats pane was expected to mirror the parent transcript, which it never does —
+it spawns a side chat and renders that), and two measurements were re-aimed at
+what the window really paints (the status bar's foot, the theme's painted
+surface instead of the deliberately transparent body).
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

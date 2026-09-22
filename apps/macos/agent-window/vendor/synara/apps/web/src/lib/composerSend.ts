@@ -28,6 +28,7 @@ import {
   type PersistedComposerImageAttachment,
 } from "../composerDraftDomain";
 import { readNativeApi } from "../nativeApi";
+import { stageComposerImageFiles } from "./cediaStagedAttachments";
 import { readComposerImageBlob } from "./composerImageBlobStore";
 import {
   ComposerImagePreparationError,
@@ -302,9 +303,12 @@ export async function stageUploadComposerAttachments(input: {
 
   // Cedia §10 item 61 (native runtime): there is no Synara attachment server to
   // upload to — bytes must not leave the machine at this layer. Stage the locally
-  // created ids as-is; the agent-window adapter reads the bytes from the composer
-  // stores when it builds the OMP prompt (`images[]` on prompt/steer/follow_up).
+  // created ids, and hand the bytes themselves to the local runtime for this turn:
+  // the send path clears the composer draft (images and their blobs included) before
+  // the turn is dispatched, so the adapter can no longer read them from the draft
+  // when it builds the OMP prompt (`images[]` on prompt/steer/follow_up).
   if (readNativeApi()) {
+    const releaseStagedBytes = stageComposerImageFiles(input.threadId, input.images);
     for (const image of input.images) {
       attachments.push({
         type: "image",
@@ -325,9 +329,17 @@ export async function stageUploadComposerAttachments(input: {
     }
     return {
       attachments,
-      commit: () => undefined,
-      cleanup: async () => undefined,
-      runWithDispatch: async (dispatch) => dispatch(attachments),
+      commit: releaseStagedBytes,
+      cleanup: async () => releaseStagedBytes(),
+      runWithDispatch: async (dispatch) => {
+        try {
+          return await dispatch(attachments);
+        } finally {
+          // The turn owns the bytes until its dispatch settles; a rejected dispatch
+          // releases them too, and the restored draft re-stages them on retry.
+          releaseStagedBytes();
+        }
+      },
     };
   }
 

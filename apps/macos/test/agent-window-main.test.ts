@@ -129,6 +129,40 @@ describe("Agent Window main-process boundary", () => {
     expect(calls).toEqual([]);
   });
 
+  it("forwards every provider auth shape the renderer drives to the host", async () => {
+    const { handler, calls, trusted } = fixture();
+    const requests = [
+      { method: "GET", path: "/v1/providers" },
+      { method: "POST", path: "/v1/providers/openai/api-key", body: { apiKey: "sk-test" } },
+      { method: "DELETE", path: "/v1/providers/openai/auth" },
+      { method: "POST", path: "/v1/providers/openai/login" },
+      { method: "GET", path: "/v1/provider-logins/6f1c2e6a-7b1d-4a6e-9f21-2f3d4c5b6a70" },
+      { method: "POST", path: "/v1/provider-logins/6f1c2e6a-7b1d-4a6e-9f21-2f3d4c5b6a70/input", body: { requestId: "prompt-1", value: "123456" } },
+    ];
+    for (const request of requests) expect(await handler(trusted, { kind: "request", ...request })).toEqual({ projects: [] });
+    expect(calls).toEqual([
+      { method: "GET", path: "providers", body: undefined },
+      { method: "POST", path: "providers/openai/api-key", body: { apiKey: "sk-test" } },
+      { method: "DELETE", path: "providers/openai/auth", body: undefined },
+      { method: "POST", path: "providers/openai/login", body: undefined },
+      { method: "GET", path: "provider-logins/6f1c2e6a-7b1d-4a6e-9f21-2f3d4c5b6a70", body: undefined },
+      { method: "POST", path: "provider-logins/6f1c2e6a-7b1d-4a6e-9f21-2f3d4c5b6a70/input", body: { requestId: "prompt-1", value: "123456" } },
+    ]);
+  });
+
+  it("refuses provider lookalikes instead of treating providers as a prefix", async () => {
+    const { handler, calls, trusted } = fixture();
+    // Shapes the renderer never drives, and the bare collection that has no host route.
+    for (const path of ["/v1/provider-logins", "/v1/providers/openai/credentials", "/v1/providers/openai/api-keys", "/v1/providers/openai/logins", "/v1/providers/openai/api-key/extra", "/v1/provider-logins/login-1/input/extra", "/v1/providers//api-key", "/v1/providers/"]) {
+      await expect(handler(trusted, { kind: "request", method: "GET", path })).rejects.toThrow("Unsupported application route");
+    }
+    // Traversal and a neighbour route that stays native.
+    for (const path of ["/v1/providers/../devices", "/v1/provider-logins/%2e%2e/input", "/v1/providers/%2fdevices", "/v1/devices"]) {
+      await expect(handler(trusted, { kind: "request", method: "GET", path })).rejects.toThrow();
+    }
+    expect(calls).toEqual([]);
+  });
+
   it("routes an IDE request with the selected workspace and file", async () => {
     const { handler, calls, trusted } = fixture();
     await handler(trusted, { kind: "openIde", cwd: "/tmp/project", path: "src/index.ts", line: 12 });

@@ -395,6 +395,185 @@ async function openAgentsFromIde(page: any, frame: any): Promise<any> {
   return await opened;
 }
 
+/**
+ * §10 item 64 asks for a packaged receipt of *the dock's Terminal pane*: a terminal
+ * opened from the IDE dock, a command run in it, and the screen read back from the
+ * host's PTY registry (`GET /v1/sessions/:id/terminals`).
+ *
+ * This step walks that chain in the packaged build and records which link answers,
+ * instead of assuming the pane is there.  It reads the dock's real control inventory
+ * by role/accessible name, makes the exact call the bundle's terminal runtime makes
+ * when its pane mounts (`buildOpenInput` in `terminalRuntime.ts` →
+ * `nativeApi.terminal.open`), and reads the host route in the same run.  `resolved`
+ * is true only when a terminal actually opened *and* the host reported it; otherwise
+ * `blockedAt`/`missing` name the gap.  Nothing here is fabricated for the receipt.
+ */
+async function recordDockTerminalRoute(
+  frame: any,
+  options: {
+    sessionId: string;
+    workspace: string;
+    descriptor: { url: string; token: string };
+    cediaHost: typeof host.host;
+  },
+): Promise<Record<string, unknown>> {
+  // Resting state first: an earlier step (the model picker) can leave a popup open,
+  // and the inventory has to describe the dock's panes, not that popup.
+  await frame.locator("body").press("Escape");
+  await frame.waitForTimeout(200);
+  // The dock's affordances, by role and accessible name — never by CSS class.
+  const dock = await frame.evaluate(() => {
+    const normalize = (value: string | null | undefined): string => (value ?? "").replace(/\s+/g, " ").trim();
+    const controls = Array.from(document.querySelectorAll<HTMLElement>(
+      "button, [role='button'], [role='tab'], [role='menuitem'], [role='switch'], [role='slider']",
+    )).map(node => ({ node, style: window.getComputedStyle(node) }))
+      .filter(({ node, style }) => style.display !== "none" && style.visibility !== "hidden" && node.getClientRects().length > 0)
+      .map(({ node }) => ({
+        role: node.getAttribute("role"),
+        aria: normalize(node.getAttribute("aria-label")),
+        title: normalize(node.getAttribute("title")),
+        text: normalize(node.innerText || node.textContent).slice(0, 80),
+      })).filter(control => control.aria || control.title || control.text);
+    return {
+      hash: window.location.hash,
+      ideEmbedded: (window as unknown as { __CEDIA_IDE_EMBEDDED__?: boolean }).__CEDIA_IDE_EMBEDDED__ === true,
+      // The right dock's own container, its offcanvas wrapper, and any live xterm.
+      rightDockContainers: document.querySelectorAll("[data-right-dock-content]").length,
+      sidebarWrappers: document.querySelectorAll("[data-slot='sidebar-wrapper']").length,
+      terminalSurfaces: document.querySelectorAll(".xterm, [data-terminal-viewport]").length,
+      controls,
+      terminalControls: controls.filter(control => /terminal/i.test(`${control.aria} ${control.title} ${control.text}`)),
+      bodyText: normalize(document.body.innerText).slice(0, 2_000),
+    };
+  });
+  assert(dock.ideEmbedded, `IDE dock frame is not the embedded bundle runtime: ${JSON.stringify({ hash: dock.hash, ideEmbedded: dock.ideEmbedded })}`);
+  assert(dock.controls.length > 0, `IDE dock exposed no controls to inventory: ${JSON.stringify(dock)}`);
+  assert(dock.hash.includes(options.sessionId), `Terminal receipt ran in the wrong dock session: ${dock.hash}`);
+
+  // The dock's own menus: a terminal could only be offered here or in the header,
+  // so the receipt covers both rather than trusting the header row alone.
+  const menus: Record<string, string[]> = {};
+  for (const name of ["More actions", "Composer extras"]) {
+    const trigger = frame.getByRole("button", { name, exact: true }).first();
+    if (await trigger.count() === 0 || !(await trigger.isVisible())) {
+      menus[name] = [];
+      continue;
+    }
+    await trigger.click();
+    await frame.waitForTimeout(500);
+    menus[name] = await frame.locator("[role='menuitem'], [role='option'], [role='menuitemradio'], [role='menuitemcheckbox']").evaluateAll((nodes: Element[]) =>
+      nodes.filter(node => node.getClientRects().length > 0)
+        .map(node => (node.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter(Boolean));
+    await frame.locator("body").press("Escape");
+    await frame.waitForTimeout(200);
+  }
+  const menuTerminalItems = Object.values(menus).flat().filter(label => /terminal/i.test(label));
+
+  // The bundle's Terminal pane opens a PTY through this bridge call and nothing
+  // else; a refusal here is the pane's own refusal.
+  const request = { threadId: `dock-terminal:${options.sessionId}`, terminalId: "cedia-dock-terminal-receipt", cwd: options.workspace, cols: 80, rows: 24 };
+  const opened = await frame.evaluate(async (input: { threadId: string; terminalId: string; cwd: string; cols: number; rows: number }) => {
+    const api = (window as unknown as {
+      nativeApi?: { terminal?: { open: (value: unknown) => Promise<unknown> } };
+    }).nativeApi;
+    if (!api?.terminal) return { answered: false, error: "window.nativeApi.terminal is unavailable in this webview" };
+    try {
+      return { answered: true, snapshot: await api.terminal.open(input) };
+    } catch (error) {
+      return { answered: true, error: error instanceof Error ? error.message : String(error) };
+    }
+  }, request);
+
+  // Control: the same bridge answers the dock's other panels, so a refusal above is
+  // specific to the terminal surface and not a dead bridge.
+  const bridgeControl = await frame.evaluate(async (cwd: string) => {
+    const api = (window as unknown as {
+      nativeApi?: { git?: { status: (value: unknown) => Promise<{ branch?: string | null }> } };
+    }).nativeApi;
+    if (!api?.git) return { answered: false, error: "window.nativeApi.git is unavailable in this webview" };
+    try {
+      const status = await api.git.status({ cwd });
+      return { answered: true, branch: status.branch ?? null };
+    } catch (error) {
+      return { answered: true, error: error instanceof Error ? error.message : String(error) };
+    }
+  }, options.workspace);
+
+  // The host's PTY registry (`GET /v1/sessions/:id/terminals`) is the checkpoint list
+  // the item names, read here over the host's own loopback route.
+  const route = `/v1/sessions/${options.sessionId}/terminals`;
+  const response = await fetch(`${options.descriptor.url}${route}`, {
+    headers: { Authorization: `Bearer ${options.descriptor.token}` },
+  });
+  const body = await response.json() as { terminals?: unknown };
+  const routeTerminals = Array.isArray(body.terminals) ? body.terminals : null;
+  // If a terminal really opened, its output has to reach a checkpoint. Poll the
+  // registry the way a client would rather than sampling once.
+  const snapshots = opened.answered && opened.snapshot
+    ? await waitFor(
+      async () => options.cediaHost.terminalSnapshots(options.sessionId),
+      value => value.length > 0,
+      5_000,
+    )
+    : options.cediaHost.terminalSnapshots(options.sessionId);
+  assert(routeTerminals !== null, `Host terminal route did not answer with a terminal list: ${response.status} ${JSON.stringify(body)}`);
+
+  const openedTerminalId = opened.answered && opened.snapshot
+    ? (opened.snapshot as { terminalId?: unknown }).terminalId ?? null
+    : null;
+  const hostLines = snapshots.flatMap(snapshot => snapshot.lines);
+  const resolved = openedTerminalId !== null && snapshots.some(snapshot => snapshot.terminalId === openedTerminalId);
+  // Every control that could open a terminal in this dock: a header control, or an
+  // entry in one of the dock's own menus.
+  const terminalAffordances = [
+    ...dock.terminalControls.map((control: { aria: string; text: string }) => `control:${control.aria || control.text}`),
+    ...menuTerminalItems.map(label => `menu:${label}`),
+  ];
+  const blockedAt = resolved
+    ? null
+    : terminalAffordances.length === 0
+      ? "the packaged IDE dock renders no Terminal pane and no right-dock switcher, and its terminal transport is refused by the IDE bridge"
+      : "the dock exposed a Terminal control but the chain did not complete; see the fields below";
+  const missing = resolved ? [] : [
+    "dock-terminal-pane: the dock webview renders no right-dock container (`[data-right-dock-content]` count 0), no control and no menu entry whose accessible name mentions a terminal, so no pane could be opened from a switcher (the embedded runtime gates the right dock off entirely: `SingleChatSurface.tsx` renders `<RightDock>` only when `!isIdeEmbeddedRuntime()`)",
+    "dock-terminal-transport: `nativeApi.terminal.open(...)` — the exact call the bundle's terminal runtime makes when its pane mounts — is answered by the IDE bridge with the refusal recorded below (`agent-ide-webview.ts` wires the `panel` surfaces `files` and `git` only), so the dock cannot start a PTY in this window",
+    "host-pty-registry: this smoke starts the host without the virtual-UI terminal registry (its OMP is the fixture, which advertises no Cedia virtual UI, so no PTY is ever negotiated), and the host only keeps checkpoints for OMP's `cedia_terminal_*` frames — so `GET /v1/sessions/:id/terminals` has nothing to report in this run, and neither window's terminal pane is backed by that route (the Agents window's pane uses the Electron-main node-pty service in `agent-window-bridge.ts`)",
+    "no marker: with no terminal surface there is no command to run and no screen to assert a marker on; the fields the positive path would fill stay null rather than being fabricated",
+  ];
+
+  return {
+    item: "CEDIA-PLAN §10 item 64 — dock Terminal pane served by the host PTY registry",
+    resolved,
+    blockedAt,
+    missing,
+    capturedAt: new Date().toISOString(),
+    app: appPath,
+    sessionId: options.sessionId,
+    workspace: options.workspace,
+    dock,
+    menus,
+    terminalAffordances,
+    terminalAttempt: { api: "nativeApi.terminal.open", request, ...opened },
+    bridgeControl: { api: "nativeApi.git.status", ...bridgeControl },
+    terminal: {
+      terminalId: openedTerminalId,
+      marker: null,
+      hostLines,
+      hostSnapshots: snapshots,
+    },
+    hostRegistry: {
+      route,
+      status: response.status,
+      terminals: routeTerminals,
+      terminalSnapshots: snapshots,
+      virtualUi: false,
+      note: "This smoke starts the host without the virtual-UI terminal registry: enabling it needs an OMP that advertises Cedia virtual UI v1 (the provider-free fixture does not, so `cedia_terminal_negotiate` is refused), and the registry only ever holds OMP's `cedia_terminal_*` frames. An empty list here therefore means no PTY was negotiated for this session, which the module documents as an honest answer.",
+    },
+    screenshot: "dist/agent-ide-smoke/ide-dock-terminal.png",
+  };
+}
+
 async function openIdeFromAgents(page: any): Promise<any> {
   const direct = page.getByRole("button", { name: "Open in IDE", exact: true }).first();
   if (await direct.count() > 0 && await direct.isVisible()) {
@@ -495,6 +674,17 @@ try {
   await draftSend.waitFor({ state: "visible", timeout: 15_000 });
   const initialBounds = await assertComposerBounds(frame);
   await ide.screenshot({ path: join(output, "ide-draft.png"), fullPage: true });
+
+  // §10 item 64's chain, walked in the packaged build while the dock is mounted
+  // and no other surface has taken focus.  The receipt records where it stops.
+  const dockTerminal = await recordDockTerminalRoute(frame, {
+    sessionId: session.id,
+    workspace: projectPath,
+    descriptor: host.descriptor,
+    cediaHost: host.host,
+  });
+  await ide.screenshot({ path: join(output, "ide-dock-terminal.png"), fullPage: true });
+  await writeFile(join(output, "dock-terminal-receipt.json"), `${JSON.stringify(dockTerminal, null, 2)}\n`);
 
   // Use the shared composer action so it flushes the draft bridge before the
   // native host opens the standalone Agent Window.
@@ -653,6 +843,7 @@ try {
     returnedModelTitle: returnedTitle,
     draft,
     draftRoundTrip: { agent: agentDraftText, returnedIde: returnedDraftText },
+    dockTerminal,
     agentDockChecks,
     themeChecks,
     composerBounds: { initial: initialBounds, returned: returnedBounds },
@@ -673,11 +864,18 @@ try {
       "workspace-color-customizations-follow-agent-theme",
       "composer-controls-fit-within-webview-pane",
       "fixture-prompt-completed-without-provider-call",
+      // §10 item 64's chain is *recorded*, not closed: the packaged dock renders no
+      // Terminal pane (see `dockTerminal.resolved`/`blockedAt`), so the receipt names
+      // the gap instead of asserting a terminal that does not exist.
+      "dock-terminal-route-answered-and-recorded",
     ],
   };
   await writeFile(join(output, "result.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   await Promise.all(["failure.json", "failure.png"].map(name => rm(join(output, name), { force: true })));
   console.log(`Agent IDE smoke passed: ${output}`);
+  console.log(dockTerminal.resolved === true
+    ? `CEDIA-PLAN §10 item 64 receipt: resolved; see ${join(output, "dock-terminal-receipt.json")}`
+    : `CEDIA-PLAN §10 item 64 receipt: UNRESOLVED — ${String(dockTerminal.blockedAt)}; see ${join(output, "dock-terminal-receipt.json")}`);
 } catch (error) {
   await ide.screenshot({ path: join(output, "failure.png"), fullPage: true }).catch(() => undefined);
   const frames = await Promise.all(ide.frames().map(async (frame: any) => ({

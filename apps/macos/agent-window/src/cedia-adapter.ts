@@ -20,6 +20,7 @@ import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as C
 import type { Command, EventPage, Json, Project, Session, SessionEvent } from "../../../../packages/protocol/src/index.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
+import { stagedComposerImageFile } from "../vendor/synara/apps/web/src/lib/cediaStagedAttachments";
 import { readComposerImageBlob } from "../vendor/synara/apps/web/src/lib/composerImageBlobStore";
 import { createNativeTerminalApi } from "./native-terminal";
 import { createNativeFilesApi } from "./native-files";
@@ -45,11 +46,15 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Bytes for a composer image attachment, looked up across the composer stores the
- * send paths own: the live draft's File, a queued turn's File, then the persisted
- * IndexedDB blob (AppSnap / reload-hydration window). Null when nothing backs the id.
+ * Bytes for a composer image attachment. The turn's own staged bytes come first —
+ * the composer's send path clears its draft (images and their blobs included) before
+ * this dispatch runs, so the stores below only back an image the draft still holds:
+ * the live draft's File, a queued turn's File, then the persisted IndexedDB blob
+ * (AppSnap / reload-hydration window). Null when nothing backs the id.
  */
 async function composerImageFile(threadId: string, imageId: string): Promise<File | null> {
+	const staged = stagedComposerImageFile(threadId, imageId);
+	if (staged) return staged;
 	const draft = useComposerDraftStore.getState().draftsByThreadId[ThreadId.makeUnsafe(threadId)];
 	if (!draft) return null;
 	const live = draft.images.find((image) => image.id === imageId);
