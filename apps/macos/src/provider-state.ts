@@ -32,7 +32,7 @@ import { fetchGlobalOmpModelSnapshot, fetchOmpModelRoles } from "./omp-catalog.t
 import { currentModelFromOmpState, modelRoleLabel, sessionIdFromUri, setModelRoleRequest } from "./chat-sessions-map.ts";
 import { canAnswer } from "./approval-runtime.ts";
 import { approvalCanSubmit, approvalDisplayStatus } from "./approval-view.ts";
-import type { ArtifactReceipt } from "./artifact-transfer.ts";
+import type { ArtifactReceipt } from "../../../packages/protocol/src/artifacts.ts";
 import { ompSettingsCatalog, SETTINGS_SECTIONS } from "./capability-catalog.ts";
 import { composerAxesFromTask, resolveComposerControls } from "./composer-runtime.ts";
 import { isCediaWorkbenchPalette } from "./cedia-theme.ts";

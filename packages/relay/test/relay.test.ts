@@ -9,8 +9,8 @@ import {
 	createCediaRelayRequest,
 	parseCediaRelayMessage,
 	MAX_RELAY_PAYLOAD_BYTES,
-	type CediaRelayJson,
 } from "../src/index.ts";
+import type { Json } from "../../protocol/src/index.ts";
 import { CediaRelayServer } from "../src/server.ts";
 import {
 	decrypt,
@@ -212,7 +212,7 @@ describe("Cedia relay protocol", () => {
 			daemonKeyPair,
 			autoReconnect: false,
 			createWebSocket: fixture.factory,
-			handler: async (request): Promise<{ status: number; body: CediaRelayJson }> => {
+			handler: async (request): Promise<{ status: number; body: Json }> => {
 				calls.push({ method: request.method, path: request.path, token: request.token });
 				return revoked ? { status: 401, body: { error: { code: "unauthorized", message: "revoked" } } } : { status: 200, body: { ok: true, path: request.path } };
 			},
@@ -368,7 +368,7 @@ describe("Cedia relay protocol", () => {
 		expect(() => client.request({ method: "GET", path: "/v1/health" })).toThrow(CediaRelayCapacityError);
 		await expect(first).rejects.toBeInstanceOf(CediaRelayRequestTimeoutError);
 		release = true;
-		const tooLarge = { data: "x".repeat(MAX_RELAY_PAYLOAD_BYTES) } as unknown as CediaRelayJson;
+		const tooLarge = { data: "x".repeat(MAX_RELAY_PAYLOAD_BYTES) } as unknown as Json;
 		expect(() => createCediaRelayRequest({ id: "too-large", epoch: 1, method: "POST", path: "/v1/mutate", token: "t", body: tooLarge })).toThrow();
 		client.close();
 		await server.stop();

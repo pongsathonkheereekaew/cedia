@@ -8,7 +8,6 @@ import {
 	serializeCediaRelayMessage,
 	validateCediaRelayPairingOffer,
 	type CediaRelayHandlerResponse,
-	type CediaRelayJson,
 	type CediaRelayPairingOffer,
 	type CediaRelayResponse,
 	CediaRelayOfferError,
@@ -17,6 +16,7 @@ import {
 	DEFAULT_RELAY_REQUEST_TIMEOUT_MS,
 } from "./protocol.ts";
 import { createSocketTransport, subscribeSocket, type CediaRelaySocket, type CediaRelayWebSocketFactory } from "./transport.ts";
+import type { Json } from "../../protocol/src/index.ts";
 
 export type CediaRelayClientState = "idle" | "connecting" | "open" | "closed";
 
@@ -77,7 +77,7 @@ export interface CediaRelayClientOptions {
 export interface CediaRelayRequestInput {
 	method: string;
 	path: string;
-	body?: CediaRelayJson;
+	body?: Json;
 	/** Optional caller-owned request ID. It is never rewritten or retried. */
 	requestId?: string;
 }

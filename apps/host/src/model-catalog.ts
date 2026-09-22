@@ -1,4 +1,5 @@
 import { OmpRpcClient } from "../../../packages/omp-adapter/src/client.ts";
+import type { ModelCatalogModel, ModelCatalogResult, ModelReasoningEffort } from "../../../packages/protocol/src/models.ts";
 
 const MODEL_CATALOG_CACHE_MS = 30_000;
 
@@ -10,32 +11,8 @@ export interface OmpModelCatalogOptions {
 	readonly now?: () => number;
 }
 
-export interface OmpCatalogModel {
-	readonly id: string;
-	readonly provider?: string;
-	readonly slug: string;
-	readonly name: string;
-	readonly label: string;
-	readonly available: boolean;
-	readonly reason?: string;
-	readonly description?: string;
-	readonly upstreamProviderId?: string;
-	readonly upstreamProviderName?: string;
-	readonly supportedReasoningEfforts?: readonly { readonly value: string; readonly label: string }[];
-	readonly defaultReasoningEffort?: string;
-	readonly contextWindow?: number;
-	readonly contextWindowOptions?: readonly { readonly value: string; readonly label: string; readonly isDefault: true }[];
-	readonly maxOutputTokens?: number;
-}
-
-export interface OmpModelCatalogResult {
-	readonly models: readonly OmpCatalogModel[];
-	readonly source: "omp";
-	readonly cached: boolean;
-}
-
 export interface OmpModelCatalog {
-	list(): Promise<OmpModelCatalogResult>;
+	list(): Promise<ModelCatalogResult>;
 	invalidate(): void;
 }
 
@@ -78,7 +55,7 @@ function providerQualifiedSlug(provider: string | undefined, id: string): string
 	return id.startsWith(prefix) ? id : `${prefix}${id}`;
 }
 
-function reasoningEfforts(row: Record<string, unknown>): readonly { readonly value: string; readonly label: string }[] | undefined {
+function reasoningEfforts(row: Record<string, unknown>): readonly ModelReasoningEffort[] | undefined {
 	const thinking = record(row.thinking) ?? record(row.reasoning);
 	// OMP's `models --json`/`get_available_models` response uses a direct
 	// `thinking: string[]` ladder. Host-normalized responses use descriptor
@@ -115,8 +92,8 @@ function reasoningEfforts(row: Record<string, unknown>): readonly { readonly val
  * provider-model shape. This is pure so the renderer and host can be checked
  * against the same provider-qualified identity rules without spawning OMP.
  */
-export function normalizeOmpModelCatalog(value: unknown): OmpCatalogModel[] {
-	const bySlug = new Map<string, OmpCatalogModel>();
+export function normalizeOmpModelCatalog(value: unknown): ModelCatalogModel[] {
+	const bySlug = new Map<string, ModelCatalogModel>();
 	for (const item of rawModels(value)) {
 		const row = record(item);
 		if (!row) continue;
@@ -193,16 +170,16 @@ export function metadataArgs(options: OmpModelCatalogOptions, cwd: string): stri
 export function createOmpModelCatalog(options: OmpModelCatalogOptions = {}): OmpModelCatalog {
 	const now = options.now ?? Date.now;
 	const cwd = text(options.cwd) ?? process.cwd();
-	let cached: { readonly expiresAt: number; readonly models: readonly OmpCatalogModel[] } | undefined;
-	let inflight: Promise<OmpModelCatalogResult> | undefined;
+	let cached: { readonly expiresAt: number; readonly models: readonly ModelCatalogModel[] } | undefined;
+	let inflight: Promise<ModelCatalogResult> | undefined;
 
-	const list = async (): Promise<OmpModelCatalogResult> => {
+	const list = async (): Promise<ModelCatalogResult> => {
 		const current = cached;
 		if (current && current.expiresAt > now()) {
 			return { source: "omp", models: current.models, cached: true };
 		}
 		if (inflight) return inflight;
-		const operation = (async (): Promise<OmpModelCatalogResult> => {
+		const operation = (async (): Promise<ModelCatalogResult> => {
 			const client = await OmpRpcClient.start({
 				executable: options.ompExecutable,
 				env: options.ompEnv,

@@ -17,7 +17,7 @@ import {
 	type ProviderListSkillsInput,
 } from "@synara/contracts";
 import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState, type TranscriptEntry } from "../../src/state.ts";
-import type { Json } from "../../../../packages/protocol/src/index.ts";
+import type { Command, EventPage, Json, Project, Session, SessionEvent } from "../../../../packages/protocol/src/index.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
 import { readComposerImageBlob } from "../vendor/synara/apps/web/src/lib/composerImageBlobStore";
@@ -67,53 +67,6 @@ export interface AgentWindowBridge {
 	send?(channel: string, input?: unknown): void;
 	on?(channel: string, listener: (event: unknown, ...args: unknown[]) => void): void;
 	removeListener?(channel: string, listener: (event: unknown, ...args: unknown[]) => void): void;
-}
-
-export interface CediaProject {
-	id: string;
-	path: string;
-	name: string;
-	pinned?: boolean;
-	archived?: boolean;
-	createdAt: string;
-	updatedAt?: string;
-}
-
-export interface CediaSession {
-	id: string;
-	projectId: string;
-	title: string;
-	cwd: string;
-	sessionFile?: string;
-	incarnation: string;
-	status: "idle" | "running" | "stopped" | "recovery_required" | string;
-	archived?: boolean;
-	pinned?: boolean;
-	createdAt: string;
-	updatedAt: string;
-	[key: string]: unknown;
-}
-
-interface CediaEvent {
-	sessionId: string;
-	incarnation: string;
-	sequence: number;
-	timestamp: string;
-	frame: unknown;
-}
-
-interface CediaEventPage {
-	events: CediaEvent[];
-	cursor: number;
-	hasMore: boolean;
-}
-
-interface CediaCommand {
-	status?: string;
-	result?: unknown;
-	ack?: unknown;
-	error?: string;
-	[key: string]: unknown;
 }
 
 interface RequestBridge extends AgentWindowBridge {
@@ -247,31 +200,35 @@ function promptWithAttachedContext(prompt: string, labels: readonly string[]): s
 	return `${prompt}\n\nAttached context:\n${labels.map(label => `- ${label}`).join("\n")}`;
 }
 
-function reduceEvents(state: TaskState, events: readonly CediaEvent[]): TaskState {
+/**
+ * The frame as the reducer reads it, keeping the envelope's timestamp.
+ *
+ * The durable event envelope owns the timestamp, while the shared reducer
+ * intentionally receives only the frame payload. Preserve the envelope timestamp
+ * on object frames so lifecycle projections (turns, messages, tools) retain an
+ * ordering timestamp without maintaining a second reducer in this adapter.
+ */
+function frameWithEnvelopeTimestamp(frame: Json, timestamp: string): Json {
+	const row = typeof frame === "object" && frame !== null && !Array.isArray(frame) ? frame : undefined;
+	if (!row || typeof row.timestamp === "string") return frame;
+	return { ...row, timestamp };
+}
+
+function reduceEvents(state: TaskState, events: readonly SessionEvent[]): TaskState {
 	return applyEventPage(state, {
 		events: events.map(event => ({
 			sessionId: event.sessionId,
 			incarnation: event.incarnation,
 			sequence: event.sequence,
 			timestamp: event.timestamp,
-			// The durable event envelope owns the timestamp, while the shared
-			// reducer intentionally receives only the frame payload. Preserve the
-			// envelope timestamp on object frames so lifecycle projections (turns,
-			// messages, tools) retain an ordering timestamp without maintaining a
-			// second reducer in this adapter.
-			frame: (() => {
-				const frame = record(event.frame);
-				return frame && typeof frame.timestamp !== "string"
-					? { ...frame, timestamp: event.timestamp } as Json
-					: event.frame as Json;
-			})(),
+			frame: frameWithEnvelopeTimestamp(event.frame, event.timestamp),
 		})),
 		cursor: events.at(-1)?.sequence ?? state.cursor,
 		hasMore: false,
 	});
 }
 
-function asProjects(value: unknown): CediaProject[] {
+function asProjects(value: unknown): Project[] {
 	return array(value).flatMap(item => {
 		const row = record(item);
 		if (!row) return [];
@@ -284,15 +241,14 @@ function asProjects(value: unknown): CediaProject[] {
 			id,
 			path,
 			name,
-			...(typeof row.pinned === "boolean" ? { pinned: row.pinned } : {}),
-			...(typeof row.archived === "boolean" ? { archived: row.archived } : {}),
+			pinned: row.pinned === true,
+			archived: row.archived === true,
 			createdAt,
-			...(typeof row.updatedAt === "string" && row.updatedAt.trim() ? { updatedAt: row.updatedAt.trim() } : {}),
 		}];
 	});
 }
 
-function asSessions(value: unknown): CediaSession[] {
+function asSessions(value: unknown): Session[] {
 	return array(value).flatMap(item => {
 		const row = record(item);
 		if (!row) return [];
@@ -300,21 +256,29 @@ function asSessions(value: unknown): CediaSession[] {
 		const projectId = string(row?.projectId);
 		const title = string(row?.title) ?? "New task";
 		const cwd = string(row?.cwd) ?? "";
+		const sessionFile = string(row?.sessionFile) ?? "";
 		const incarnation = string(row?.incarnation);
 		const createdAt = string(row?.createdAt);
 		const updatedAt = string(row?.updatedAt) ?? createdAt;
+		const status = row.status;
 		if (!id || !projectId || !cwd || !incarnation || !createdAt || !updatedAt) return [];
 		return [{
-			...row,
 			id,
 			projectId,
 			title,
 			cwd,
+			sessionFile,
 			incarnation,
-			status: string(row?.status) ?? "idle",
+			// Anything outside the host's own status vocabulary is not a state a client
+			// may act on, so it reads as the quiet one.
+			status: status === "running" || status === "stopped" || status === "recovery_required" ? status : "idle",
+			archived: row.archived === true,
+			pinned: row.pinned === true,
 			createdAt,
 			updatedAt,
-		} as CediaSession];
+			// Null for an ordinary task, the source task's id for a sidechat fork.
+			sidechatSourceThreadId: string(row.sidechatSourceThreadId) ?? null,
+		}];
 	});
 }
 
@@ -338,7 +302,7 @@ function id(): string {
 	return `cedia-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function splitIdeTarget(target: string, projects: readonly CediaProject[]): { cwd: string; path?: string; line?: number } {
+function splitIdeTarget(target: string, projects: readonly Project[]): { cwd: string; path?: string; line?: number } {
 	if (!target.startsWith("/") || target.includes("\0")) throw new Error("IDE target must be an absolute path");
 	let path = target;
 	let line: number | undefined;
@@ -413,7 +377,7 @@ export function modelFromFrame(frame: unknown): { id: string; provider?: string;
 	return undefined;
 }
 
-function latestModel(state: TaskState, session: CediaSession): { id: string; provider?: string; effort?: string } | undefined {
+function latestModel(state: TaskState, session: Session): { id: string; provider?: string; effort?: string } | undefined {
 	const direct = modelFromFrame(session);
 	if (direct) return direct;
 	for (let index = state.transcript.length - 1; index >= 0; index -= 1) {
@@ -433,7 +397,7 @@ function modelSlug(model: { id: string; provider?: string }): string {
 	return model.id.startsWith(prefix) ? model.id : `${prefix}${model.id}`;
 }
 
-function selectionFor(session: CediaSession, state: TaskState, modelBySession?: ReadonlyMap<string, string>): ModelSelectionLike {
+function selectionFor(session: Session, state: TaskState, modelBySession?: ReadonlyMap<string, string>): ModelSelectionLike {
 	const model = latestModel(state, session);
 	const id = model ? modelSlug(model) : modelBySession?.get(session.id) ?? OMP_UNRESOLVED_MODEL;
 	return {
@@ -599,7 +563,7 @@ function latestTurnFromState(state: TaskState): TurnProjection | null {
 	return latest;
 }
 
-function pendingInteractions(value: unknown, session: CediaSession, now: string): unknown[] {
+function pendingInteractions(value: unknown, session: Session, now: string): unknown[] {
 	return array(value).flatMap(item => {
 		const row = record(item);
 		const token = string(row?.token) ?? string(row?.requestId);
@@ -607,7 +571,7 @@ function pendingInteractions(value: unknown, session: CediaSession, now: string)
 		const request = record(row?.request) ?? row ?? {};
 		const method = string(request.method) ?? "confirm";
 		return [{
-			interactionKind: /input|select|password|editor/i.test(method) ? "userInput" : "approval",
+			interactionKind: /input|select|editor/i.test(method) ? "userInput" : "approval",
 			requestId: token,
 			threadId: session.id,
 			turnId: null,
@@ -623,8 +587,8 @@ function pendingInteractions(value: unknown, session: CediaSession, now: string)
 }
 
 function threadProjection(
-	session: CediaSession,
-	project: CediaProject | undefined,
+	session: Session,
+	project: Project | undefined,
 	state: TaskState,
 	now: string,
 	modelBySession?: ReadonlyMap<string, string>,
@@ -700,7 +664,7 @@ function threadProjection(
 	};
 }
 
-function shellThreadProjection(thread: Record<string, unknown>, session: CediaSession): Record<string, unknown> {
+function shellThreadProjection(thread: Record<string, unknown>, session: Session): Record<string, unknown> {
 	const copy = { ...thread };
 	// The host updates status on agent_start/terminal agent_end. Cached detail
 	// may belong to a task no longer subscribed to; it cannot own shell liveness.
@@ -738,8 +702,8 @@ function shellThreadProjection(thread: Record<string, unknown>, session: CediaSe
  * stop updating - keep this in step with {@link threadProjection}'s parameters.
  */
 function threadSnapshotKey(input: {
-	readonly session: CediaSession;
-	readonly project: CediaProject | undefined;
+	readonly session: Session;
+	readonly project: Project | undefined;
 	readonly cursor: number;
 	readonly ui: readonly unknown[];
 	readonly model?: string;
@@ -751,7 +715,7 @@ function threadSnapshotKey(input: {
 		session.id, session.projectId, session.title, session.status, session.incarnation,
 		session.updatedAt, session.cwd, session.pinned === true, session.archived === true,
 		string(session.sidechatSourceThreadId) ?? "",
-		input.project ? [input.project.id, input.project.name, input.project.path, input.project.pinned === true, input.project.archived === true, input.project.updatedAt] : null,
+		input.project ? [input.project.id, input.project.name, input.project.path, input.project.pinned === true, input.project.archived === true, input.project.createdAt] : null,
 		input.cursor,
 		input.model ?? "",
 		input.usage ? [input.usage.usedTokens, input.usage.maxTokens] : null,
@@ -762,20 +726,20 @@ function threadSnapshotKey(input: {
 
 /** The same idea for the shell: what a shell snapshot is built from, not what it renders. */
 function shellSnapshotKey(data: {
-	readonly projects: readonly CediaProject[];
-	readonly sessions: readonly CediaSession[];
+	readonly projects: readonly Project[];
+	readonly sessions: readonly Session[];
 	readonly states: ReadonlyMap<string, TaskState>;
 }): string {
 	return JSON.stringify([
-		data.projects.map(project => [project.id, project.path, project.name, project.pinned === true, project.archived === true, project.updatedAt]),
+		data.projects.map(project => [project.id, project.path, project.name, project.pinned === true, project.archived === true, project.createdAt]),
 		data.sessions.map(session => [session.id, session.projectId, session.title, session.status, session.incarnation, session.updatedAt, session.cwd, session.pinned === true, session.archived === true]),
 		[...data.states].map(([id, state]) => [id, state.cursor, state.transcript.length]),
 	]);
 }
 
 export function projectCediaShellSnapshot(
-	projects: readonly CediaProject[],
-	sessions: readonly CediaSession[],
+	projects: readonly Project[],
+	sessions: readonly Session[],
 	snapshotSequence: number,
 	updatedAt: string,
 	options: ShellProjectionOptions = {},
@@ -796,7 +760,9 @@ export function projectCediaShellSnapshot(
 		isPinned: project.pinned === true,
 		spaceId: null,
 		createdAt: project.createdAt,
-		updatedAt: project.updatedAt ?? project.createdAt,
+		// A project row has one timestamp: the host never updates it, so the sidebar
+		// must read `createdAt` rather than invent a second one.
+		updatedAt: project.createdAt,
 	}));
 	const projectMap = new Map(projects.map(project => [project.id, project]));
 	const threads = sessions.map(session => shellThreadProjection(threadProjection(session, projectMap.get(session.projectId), initialState(), updatedAt, options.modelBySession), session));
@@ -888,6 +854,21 @@ function normalizeOmpModels(value: unknown): OmpModelRow[] {
 		});
 	}
 	return [...bySlug.values()];
+}
+
+/**
+ * A catalog answer's rows.
+ *
+ * A host answer that carries no list is a host bug, not an empty catalog:
+ * collapsing it to `[]` would let the picker claim OMP advertises no models, and
+ * would make `setModelIfRequested` report that an advertised model no longer
+ * exists. Rows themselves stay loosely typed: OMP's own `get_available_models`
+ * envelope is normalized field by field in `normalizeOmpModels`.
+ */
+function catalogModels(value: unknown): unknown[] {
+	const row = record(value);
+	if (!row || !Array.isArray(row.models)) throw new Error("Cedia host did not return a model catalog");
+	return row.models;
 }
 
 /** Pure adapter-side catalog projection, shared by provider tests and the native API. */
@@ -1024,11 +1005,11 @@ class CediaAgentAdapter {
 		}
 	}
 
-	async projects(): Promise<CediaProject[]> {
+	async projects(): Promise<Project[]> {
 		return asProjects(await this.request("GET", "/v1/projects"));
 	}
 
-	async sessions(projectId?: string): Promise<CediaSession[]> {
+	async sessions(projectId?: string): Promise<Session[]> {
 		const query = projectId === undefined ? "" : `?projectId=${encodeURIComponent(projectId)}`;
 		return asSessions(await this.request("GET", `/v1/sessions${query}`));
 	}
@@ -1101,19 +1082,19 @@ class CediaAgentAdapter {
 		}
 	}
 
-	async session(sessionId: string): Promise<CediaSession> {
+	async session(sessionId: string): Promise<Session> {
 		const value = await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}`);
 		const rows = asSessions([value]);
 		if (!rows[0]) throw new Error(`Cedia session '${sessionId}' is unavailable`);
 		return rows[0];
 	}
 
-	async events(session: CediaSession): Promise<{ state: TaskState; cursor: number }> {
+	async events(session: Session): Promise<{ state: TaskState; cursor: number }> {
 		const cached = this.#eventCache.get(session.id);
 		let state = cached?.incarnation === session.incarnation ? cached.state : initialState();
 		let cursor = cached?.incarnation === session.incarnation ? cached.cursor : 0;
 		for (;;) {
-			const page = await this.request<CediaEventPage>("GET", `/v1/sessions/${encodeURIComponent(session.id)}/events?after=${cursor}&limit=500`);
+			const page = await this.request<EventPage>("GET", `/v1/sessions/${encodeURIComponent(session.id)}/events?after=${cursor}&limit=500`);
 			const pageEvents = await Promise.all(page.events.map(event => this.hydrateEvent(session.id, event)));
 			state = reduceEvents(state, pageEvents);
 			cursor = page.cursor;
@@ -1122,13 +1103,13 @@ class CediaAgentAdapter {
 		}
 	}
 
-	async ui(session: CediaSession): Promise<unknown[]> {
+	async ui(session: Session): Promise<unknown[]> {
 		const value = await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(session.id)}/ui`);
 		const row = record(value);
 		return array(row?.requests ?? value);
 	}
 
-	async hydrateEvent(sessionId: string, event: CediaEvent): Promise<CediaEvent> {
+	async hydrateEvent(sessionId: string, event: SessionEvent): Promise<SessionEvent> {
 		const reference = frameReference(event.frame);
 		if (!reference) return event;
 		let text = "";
@@ -1144,7 +1125,7 @@ class CediaAgentAdapter {
 		return { ...event, frame: JSON.parse(text) };
 	}
 
-	async readShellData(hydrateTranscripts: boolean): Promise<{ projects: CediaProject[]; sessions: CediaSession[]; states: Map<string, TaskState> }> {
+	async readShellData(hydrateTranscripts: boolean): Promise<{ projects: Project[]; sessions: Session[]; states: Map<string, TaskState> }> {
 		// An archived project is a removed one: its tasks leave the list with it, so the sidebar
 		// cannot show orphan groups. A task opened directly still renders through `threadSnapshot`.
 		const projects = (await this.projects()).filter(project => project.archived !== true);
@@ -1184,7 +1165,7 @@ class CediaAgentAdapter {
 			isPinned: project.pinned === true,
 			spaceId: null,
 			createdAt: project.createdAt,
-			updatedAt: project.updatedAt ?? project.createdAt,
+			updatedAt: project.createdAt,
 			...(full ? { deletedAt: null } : {}),
 		}));
 		const projectMap = new Map(data.projects.map(project => [project.id, project]));
@@ -1272,8 +1253,8 @@ class CediaAgentAdapter {
 		try { await refresh; } finally { if (this.#threadRefreshes.get(threadId) === refresh) this.#threadRefreshes.delete(threadId); }
 	}
 
-	async sendCommand(session: CediaSession, commandId: string, command: string, payload?: Record<string, unknown>): Promise<CediaCommand> {
-		return await this.request<CediaCommand>("POST", `/v1/sessions/${encodeURIComponent(session.id)}/commands`, {
+	async sendCommand(session: Session, commandId: string, command: string, payload?: Record<string, unknown>): Promise<Command> {
+		return await this.request<Command>("POST", `/v1/sessions/${encodeURIComponent(session.id)}/commands`, {
 			commandId,
 			incarnation: session.incarnation,
 			command,
@@ -1282,7 +1263,7 @@ class CediaAgentAdapter {
 	}
 
 	/** The session's own rewind points, in order: OMP's `get_branch_messages` answers `{entryId, text}`. */
-	async userMessageEntries(session: CediaSession): Promise<Array<{ entryId: string; text: string }>> {
+	async userMessageEntries(session: Session): Promise<Array<{ entryId: string; text: string }>> {
 		const command = await this.sendCommand(session, id(), "get_branch_messages");
 		const rows = array(record(record(command.result)?.data)?.messages);
 		return rows.flatMap(row => {
@@ -1300,7 +1281,7 @@ class CediaAgentAdapter {
 	 * the current leaf and the shared reducer already reads that response shape, so the journal
 	 * cursor stays where it is and only the transcript is swapped.
 	 */
-	async resyncTranscript(session: CediaSession): Promise<void> {
+	async resyncTranscript(session: Session): Promise<void> {
 		const command = await this.sendCommand(session, id(), "get_messages");
 		const messages = array(record(record(command.result)?.data)?.messages);
 		const { state, cursor } = await this.events(session);
@@ -1348,7 +1329,7 @@ class CediaAgentAdapter {
 		await this.sendCommand(session, string(row.commandId) ?? id(), "prompt", { message: text });
 	}
 
-	async ensureStarted(session: CediaSession): Promise<CediaSession> {
+	async ensureStarted(session: Session): Promise<Session> {
 		if (session.status === "recovery_required") throw new Error("OMP session requires reconciliation before sending a turn");
 		if (session.status === "running") return session;
 		const value = await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(session.id)}/start`);
@@ -1358,13 +1339,13 @@ class CediaAgentAdapter {
 		return started;
 	}
 
-	async setModelIfRequested(session: CediaSession, selection: ModelSelectionLike | undefined): Promise<void> {
+	async setModelIfRequested(session: Session, selection: ModelSelectionLike | undefined): Promise<void> {
 		if (!selection || selection.model === OMP_UNRESOLVED_MODEL) return;
 		// Model discovery is global OMP metadata. Reading it through the host route
 		// avoids starting an arbitrary existing task just to populate the picker and
 		// keeps selection and the provider.listModels surface on one catalog.
 		const catalog = await this.request<unknown>("GET", "/v1/models");
-		const rows = normalizeOmpModels(catalog);
+		const rows = normalizeOmpModels(catalogModels(catalog));
 		const exact = rows.filter(row => row.slug === selection.model);
 		const bare = rows.filter(row => row.id === selection.model);
 		const matches = exact.length > 0 ? exact : bare;
@@ -1517,7 +1498,7 @@ class CediaAgentAdapter {
 		const token = string(command.requestId);
 		if (!threadId || !token) throw new Error("UI response requires a thread and request id");
 		const session = await this.session(threadId);
-		const result = await this.request<CediaCommand>("POST", `/v1/sessions/${encodeURIComponent(threadId)}/ui`, {
+		const result = await this.request<Command>("POST", `/v1/sessions/${encodeURIComponent(threadId)}/ui`, {
 			commandId: string(command.commandId) ?? id(),
 			incarnation: session.incarnation,
 			token,
@@ -1527,31 +1508,35 @@ class CediaAgentAdapter {
 	}
 
 	async listModels(): Promise<{ models: unknown[]; source: string }> {
+		let catalog: unknown;
 		try {
-			const catalog = await this.request<unknown>("GET", "/v1/models");
-			const rows = normalizeOmpModels(catalog);
-			return {
-				source: "omp",
-				models: rows.map(row => ({
-					slug: row.slug,
-					name: row.label,
-					...(row.reason ? { description: row.reason } : {}),
-					...(row.upstreamProviderId ? { upstreamProviderId: row.upstreamProviderId } : {}),
-					...(row.upstreamProviderName ? { upstreamProviderName: row.upstreamProviderName } : {}),
-					...(row.efforts ? { supportedReasoningEfforts: row.efforts.map(value => ({ value, label: value })) } : {}),
-					...(row.defaultReasoningEffort ? { defaultReasoningEffort: row.defaultReasoningEffort } : {}),
-					...(row.contextWindow ? {
-						contextWindow: row.contextWindow,
-						contextWindowOptions: [{ value: String(row.contextWindow), label: String(row.contextWindow), isDefault: true }],
-					} : {}),
-					...(row.maxOutputTokens ? { maxOutputTokens: row.maxOutputTokens } : {}),
-				})),
-			};
+			catalog = await this.request<unknown>("GET", "/v1/models");
 		} catch {
-			// The picker remains honest when OMP metadata is temporarily unavailable;
-			// importantly, no existing task was started as a discovery side effect.
+			// OMP metadata is optional and this read is discovery, not a turn: with the
+			// route itself unavailable the picker is simply empty, and no existing task
+			// was started as a discovery side effect.
 			return { models: [], source: "omp" };
 		}
+		// An answer that arrived without a list is not the same fact as an unavailable
+		// catalogue, so it surfaces instead of reading as "OMP offers nothing".
+		const rows = normalizeOmpModels(catalogModels(catalog));
+		return {
+			source: "omp",
+			models: rows.map(row => ({
+				slug: row.slug,
+				name: row.label,
+				...(row.reason ? { description: row.reason } : {}),
+				...(row.upstreamProviderId ? { upstreamProviderId: row.upstreamProviderId } : {}),
+				...(row.upstreamProviderName ? { upstreamProviderName: row.upstreamProviderName } : {}),
+				...(row.efforts ? { supportedReasoningEfforts: row.efforts.map(value => ({ value, label: value })) } : {}),
+				...(row.defaultReasoningEffort ? { defaultReasoningEffort: row.defaultReasoningEffort } : {}),
+				...(row.contextWindow ? {
+					contextWindow: row.contextWindow,
+					contextWindowOptions: [{ value: String(row.contextWindow), label: String(row.contextWindow), isDefault: true }],
+				} : {}),
+				...(row.maxOutputTokens ? { maxOutputTokens: row.maxOutputTokens } : {}),
+			})),
+		};
 	}
 
 	async getThreadState(threadId: string): Promise<TaskState> {

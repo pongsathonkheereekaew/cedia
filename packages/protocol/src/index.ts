@@ -23,6 +23,13 @@ export interface Session {
   archived: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Set when this session is a sidechat fork: the id of the task it was forked
+   * from. `null` for an ordinary session; the host stamps it on every session
+   * row it serves, because that relationship decides whether a client may
+   * re-open an existing fork id instead of creating a new task.
+   */
+  sidechatSourceThreadId?: string | null;
 }
 
 export type CommandStatus = "claimed" | "acknowledged" | "completed" | "failed" | "outcome_unknown" | "not_dispatched";
@@ -105,10 +112,30 @@ export interface UiResponseRequest {
   answer: string | boolean | { cancelled: true; timedOut?: boolean };
 }
 
+/**
+ * One page of a session's event journal.
+ *
+ * A host that bounds a session's journal (retention drops that session's oldest
+ * frames once it crosses a cap) owes every reader two extra facts, so a short
+ * page is never mistaken for a whole history:
+ *
+ * - `firstSequence` is the oldest sequence the host still holds, 0 when the
+ *   session has no events at all.
+ * - `historyTruncated` says retention dropped older frames, so this page is not
+ *   the session's whole history.
+ *
+ * Both are optional because a client also builds pages of its own (a local
+ * replay, a test fixture) where no host retention decision exists; a bounded
+ * host always sends both.
+ */
 export interface EventPage {
   events: SessionEvent[];
   cursor: number;
   hasMore: boolean;
+  /** Oldest sequence the host still holds; 0 when the session has no events. */
+  firstSequence?: number;
+  /** True when the host dropped this session's oldest events. */
+  historyTruncated?: boolean;
 }
 
 export interface HostDescriptor {

@@ -12,7 +12,6 @@ import {
 	serializeCediaRelayMessage,
 	type CediaRelayHandlerRequest,
 	type CediaRelayHandlerResponse,
-	type CediaRelayJson,
 	type CediaRelayRequest,
 	type CediaRelayResponse,
 	CediaRelayProtocolError,
@@ -20,6 +19,7 @@ import {
 	DEFAULT_RELAY_MAX_REQUEST_IDS,
 	DEFAULT_RELAY_REQUEST_TIMEOUT_MS,
 } from "./protocol.ts";
+import type { Json } from "../../protocol/src/index.ts";
 
 export type CediaRelayRequestHandler = (
 	request: CediaRelayHandlerRequest,
@@ -50,7 +50,7 @@ function asError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error));
 }
 
-function jsonError(code: string, message: string): CediaRelayJson {
+function jsonError(code: string, message: string): Json {
 	return { error: { code, message } };
 }
 
@@ -58,7 +58,7 @@ function isResponse(value: unknown): value is CediaRelayResponse {
 	return typeof value === "object" && value !== null && (value as { type?: unknown }).type === "response";
 }
 
-function responseFor(request: CediaRelayRequest, status: number, body: CediaRelayJson): CediaRelayResponse {
+function responseFor(request: CediaRelayRequest, status: number, body: Json): CediaRelayResponse {
 	return {
 		protocolVersion: request.protocolVersion,
 		type: "response",

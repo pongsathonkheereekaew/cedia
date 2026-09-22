@@ -3523,6 +3523,88 @@ Also closed as this item's tail: `scripts/shell-render-fixture.ts` (deleted) —
 Initialize Git, Pull and the worktree setup card driven in the shipped window
 (rides the next `package:mac` batch with the other owed receipts).
 
+### Host hardening: a bounded journal, one wire shape per row, a tested perimeter (2026-09-23)
+
+Closes §10 item 65 (a), (c), (d) and (e). (b) — splitting the 709-line
+`service.ts` — is deliberately **not** done: the item's own close condition does
+not name it, and it stays listed below as measured, unstarted work.
+
+**(a) The events table is bounded, and its doc now says so.** `store.ts`
+documented a "bounded journal" while appending without a cap, and a fork
+hydration writes a transcript-sized row, so a session's projection drifted
+toward a second transcript on disk. The caps are measured, not guessed:
+`MAX_SESSION_EVENTS = 20_000` and `MAX_SESSION_EVENT_BYTES = 33_554_432`, chosen
+against the real distribution of the 305 session transcripts under
+`~/.omp/agent/sessions` (p50 39 entries, p90 848, p99 3 525, max 19 578) and
+against a measured hydration frame (141 KB → 86 KB, 2.31 MB → 2.16 MB, 37.9 MB →
+2.19 MB, i.e. 2.1–5.8 KB per message). Retention runs inside the append
+transaction: a count cap by dense-sequence span, a byte cap from a running total
+(seeded once per session, only stored after commit), newest event always kept.
+Readers are told: the events page carries `firstSequence` and `historyTruncated`,
+and a frame retention dropped answers `history_truncated` — distinguishable from
+the `not_found` of a sequence that never existed.
+
+**(d) The perimeter is tested.** Six new tests (10 new host tests in total):
+`http.test.ts` locks that an Origin-bearing request is refused *before*
+authentication and before any write, that the `Host` header must be the
+listener's own loopback name and port, and the exact 16 MiB body boundary (a body
+of exactly 16 MiB is read then rejected as invalid JSON; 16 MiB + 1 is
+`too_large` while streaming). `remote.test.ts` (new) locks pairing as owner-only,
+that the offer validates against the relay package's own validator and pins
+`relay.paseo.sh:443` + protocol version 1, that pairing opens exactly one live
+control connection, that `disable` really closes it (code 1000) and a later pair
+builds a second one, and that `remote.json` is `0600` and its disabled state
+survives a reopen. `router.test.ts` locks `workspace-suggestion` with an injected
+judge (answer forwarded verbatim, prompt bounded at 2 000 chars, `{ mode: null }`
+without a judge — no network) and the retention route contract. The author
+mutation-checked the cap tests (disabling the count-cap branch fails the test),
+and the byte-cap test caught two real bugs in the first implementation.
+
+**(c) One definition per wire shape.** The extension-UI request union was declared
+four times with three different memberships, and the drift had a user-visible
+cost: iOS built a request only for the four methods it knew and silently dropped
+anything else, so a prompt macOS rendered never appeared on the phone. Now
+`packages/protocol/src/ui.ts` (201 lines, new) is the only declaration, and it
+carries **OMP's four methods** — `select`, `confirm`, `input`, `editor` — verified
+against the pinned RPC (`upstream/omp/.../rpc-types.ts`, v18.1.18), which has no
+`password`, `multi_select` or `schemaform` at all. macOS's three speculative
+members, their parser arms, their carousel projections and the field-level
+extras of the same kind (confirm `scopes`/`dangerous`, select `multiple`,
+`optionDetails` value/label) are deleted, with no producer anywhere in the tree;
+`ApprovalFieldKind` is now derived from the union, so a method a client cannot
+render is a compile error. Both clients refuse an unknown method **out loud** with
+one shared sentence in `lastError` instead of dropping it, and the iOS parser
+keeps the `optionDetails` descriptions the phone already rendered. The rest of the
+item's list converged too: `CediaRelayJson` is deleted in favour of protocol
+`Json`, the adapter's `CediaProject`/`CediaSession`/`CediaEvent`/`CediaEventPage`/
+`CediaCommand` are the protocol rows (`sidechatSourceThreadId` became a real
+optional field on `Session` instead of hiding behind an index signature, and the
+`as CediaSession` cast is gone), `EventPage` owns the retention fields, and
+`packages/protocol/src/artifacts.ts` + `models.ts` (new) own the artifact and
+catalog rows the host was serving without a definition — macOS's receipt no longer
+drops the `sourcePath`/`sourceHashes` provenance the host computes.
+
+**(e) iOS lists models without a session.** The phone read models and providers
+through the per-session command envelope, so an unstarted session could not show
+a picker at all. Both now use the sessionless `GET /v1/models` and
+`GET /v1/providers` the agent window and the CLI already use; a catalog answer
+whose list is missing is an error, not an empty catalog, and the failure path
+keeps the picker closed with the host's own message.
+
+**Still open, recorded not hidden.** (b) `apps/host/src/service.ts` is 709 lines
+and still owns its ~10 concerns; the item lists the split as a measured gap but
+its close condition does not require it, so it remains unstarted rather than
+half-done. No client renders `historyTruncated` yet: the host states it and the
+window's reader carries the field, but the transcript surface that would show a
+truncation notice does not exist, so nothing claims one.
+
+Receipt: host **156 pass / 0 fail** (20 files, +10); `apps/macos` **700 pass / 3
+fail** — the patch-set drift, `menus-contract` (needs `rg`) and the theme-handoff
+assertion, all pre-existing; agent-window root + vendor `tsc` clean, `vite build`
+clean, **86 pass / 0 fail**; iOS `typecheck` clean, **166 pass / 0 fail**;
+protocol + omp-adapter + relay **80 pass / 0 fail**; root `tsc --noEmit` unchanged
+at the 10 pre-existing errors; `ci-validate` CI-OK.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

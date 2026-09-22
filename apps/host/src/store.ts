@@ -3,9 +3,12 @@
  *
  * OMP remains the execution and transcript authority.  This store keeps only
  * Cedia's durable projection: projects, session ownership metadata, command
- * idempotency/ack state, and a bounded journal of frames needed by the host
- * and mobile clients.  It deliberately has no provider, process, or network
- * responsibilities.
+ * idempotency/ack state, and a journal of frames needed by the host and mobile
+ * clients.  That journal is bounded per session by
+ * {@link MAX_SESSION_EVENTS} and {@link MAX_SESSION_EVENT_BYTES}; when the caps
+ * force the oldest frames out, every reader of the session's events is told so
+ * (`historyTruncated`) instead of being handed a shorter history silently.  It
+ * deliberately has no provider, process, or network responsibilities.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -35,6 +38,28 @@ export const DEFAULT_EVENT_PAGE_SIZE = 200 as const;
 export const MAX_EVENT_PAGE_SIZE = 1_000 as const;
 export const DEFAULT_COMMAND_PAGE_SIZE = 100 as const;
 export const MAX_COMMAND_PAGE_SIZE = 10_000 as const;
+
+/**
+ * Per-session journal retention.
+ *
+ * A fork journals its whole inherited transcript as one `get_messages` frame, so
+ * a single hydration frame costs a transcript rather than an event. Measured
+ * against OMP 18.2.8 on the author's machine: a 141 KB transcript hydrated as an
+ * 86 KB frame (41 messages), a 2.31 MB transcript as a 2.16 MB frame (372), and
+ * the largest local session (37.9 MB, 686 messages) as a 2.19 MB frame. Across
+ * the 305 real OMP session files there, a transcript held 39 entries at the
+ * median, 848 at p90, 3,525 at p99, and 19,578 at most.
+ *
+ * Both caps are set to keep a normal session whole: the count cap sits just
+ * above the heaviest transcript observed, and the byte cap works out to ~1.7 KB
+ * per event, between the measured mean hydration message (2.1-5.8 KB) and an
+ * ordinary wire frame (tens to hundreds of bytes). A session that crosses a cap
+ * is a genuinely extreme one - or a fork of one - and it now loses its oldest
+ * frames instead of growing the state directory without bound.
+ */
+export const MAX_SESSION_EVENTS = 20_000 as const;
+/** 32 MiB, the byte half of the same bound. */
+export const MAX_SESSION_EVENT_BYTES = 33_554_432 as const;
 
 const OWNER_LOCK_FILENAME = "owner-lock.sqlite";
 const JOURNAL_FILENAME = "journal.sqlite";
@@ -123,6 +148,20 @@ export interface StorePaths {
 	stateDir: string;
 	journalPath: string;
 	ownerLockPath: string;
+}
+
+/**
+ * One page of a session's journal, plus the two facts retention owes a reader.
+ *
+ * Narrows the protocol {@link EventPage}'s optional retention fields to required:
+ * this store always bounds a session's journal, so every page it hands out
+ * carries them.
+ */
+export interface SessionEventPage extends EventPage {
+	/** Oldest sequence the journal still holds; 0 when the session has no events at all. */
+	firstSequence: number;
+	/** True when retention dropped the session's oldest events: this page is not the whole history. */
+	historyTruncated: boolean;
 }
 
 /** Stable, machine-readable errors raised by the durable store. */
@@ -520,6 +559,14 @@ export class DurableStore {
 	private readonly ownerLockPath: string;
 	private readonly db: DatabaseSync;
 	private readonly ownerDb: DatabaseSync;
+	/**
+	 * Bytes each session's journal holds right now, so retention can decide whether
+	 * an append crossed the byte cap without re-reading every retained frame.
+	 * Seeded from the table on a session's first append and then maintained exactly:
+	 * the owner lock makes this process the only writer, and retention only deletes
+	 * a prefix (whose freed bytes come back from the delete itself).
+	 */
+	private readonly retainedJournalBytes = new Map<string, number>();
 	private closed = false;
 
 	private constructor(paths: StorePaths, db: DatabaseSync, ownerDb: DatabaseSync) {
@@ -780,6 +827,7 @@ export class DurableStore {
 		this.transaction(() => {
 			this.db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
 		});
+		this.retainedJournalBytes.delete(sessionId);
 	}
 
 	claimCommand(input: ClaimCommandInput): ClaimCommandResult {
@@ -896,8 +944,13 @@ export class DurableStore {
 		const normalizedSessionId = requireString(sessionId, "sessionId");
 		const normalizedIncarnation = requireString(incarnation, "incarnation", INCARNATION_MAX_BYTES);
 		const frameJson = canonicalizeJson(frame);
-		return this.transaction(() => {
+		const frameBytes = Buffer.byteLength(frameJson, "utf8");
+		let retainedAfterAppend = 0;
+		const event = this.transaction(() => {
 			this.getSessionOrThrow(normalizedSessionId);
+			// Seed the session's byte total before the insert, so the total retained
+			// below counts this frame exactly once.
+			const retained = this.#journalBytes(normalizedSessionId) + frameBytes;
 			const row = this.db.prepare("SELECT COALESCE(MAX(sequence), 0) AS sequence FROM events WHERE session_id = ?").get(normalizedSessionId) as Row;
 			const previous = row.sequence;
 			if (typeof previous !== "number" || !Number.isSafeInteger(previous) || previous < 0) throw new DurableStoreSchemaError("Invalid event sequence projection");
@@ -911,11 +964,24 @@ export class DurableStore {
 				timestamp,
 				frameJson,
 			);
+			retainedAfterAppend = this.#retainJournal(normalizedSessionId, retained);
 			return { sessionId: normalizedSessionId, incarnation: normalizedIncarnation, sequence, timestamp, frame: parseJson(frameJson, "events.frame_json") };
 		});
+		// Only a committed append may move the running total, or a rolled-back
+		// transaction would leave retention believing in bytes that are still there.
+		this.retainedJournalBytes.set(normalizedSessionId, retainedAfterAppend);
+		return event;
 	}
 
-	readEvents(sessionId: string, after: number = 0, limit: number = DEFAULT_EVENT_PAGE_SIZE): EventPage {
+	/**
+	 * Read one page of a session's journal, oldest first.
+	 *
+	 * `historyTruncated` is retention's other half: whatever the client's cursor,
+	 * the page says when the journal no longer holds this session's oldest events,
+	 * so a reader at `after: 0` cannot mistake the oldest frame it received for the
+	 * beginning of the task.
+	 */
+	readEvents(sessionId: string, after: number = 0, limit: number = DEFAULT_EVENT_PAGE_SIZE): SessionEventPage {
 		this.assertOpen();
 		const normalizedSessionId = requireString(sessionId, "sessionId");
 		this.getSessionOrThrow(normalizedSessionId);
@@ -924,7 +990,77 @@ export class DurableStore {
 		const rows = this.db.prepare("SELECT session_id, incarnation, sequence, timestamp, frame_json FROM events WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC LIMIT ?").all(normalizedSessionId, cursor, pageSize + 1);
 		const hasMore = rows.length > pageSize;
 		const events = rows.slice(0, pageSize).map(row => eventFromRow(row as Row));
-		return { events, cursor: events.length > 0 ? events[events.length - 1]!.sequence : cursor, hasMore };
+		return { events, cursor: events.length > 0 ? events[events.length - 1]!.sequence : cursor, hasMore, ...this.#journalHead(normalizedSessionId) };
+	}
+
+	/** Oldest retained sequence of one session, and whether retention cut its head off. */
+	#journalHead(sessionId: string): { firstSequence: number; historyTruncated: boolean } {
+		const row = this.db.prepare("SELECT MIN(sequence) AS first FROM events WHERE session_id = ?").get(sessionId) as Row;
+		const first = row.first ?? 0;
+		if (typeof first !== "number" || !Number.isSafeInteger(first) || first < 0) throw new DurableStoreSchemaError("Invalid event sequence bounds");
+		return { firstSequence: first, historyTruncated: first > 1 };
+	}
+
+	/**
+	 * Bytes one session's journal holds now: its running total, or a one-off count of
+	 * the table the first time this host appends to a session (a journal written before
+	 * it opened the store). The append path stores the post-append total.
+	 */
+	#journalBytes(sessionId: string): number {
+		const cached = this.retainedJournalBytes.get(sessionId);
+		if (cached !== undefined) return cached;
+		const row = this.db.prepare("SELECT COALESCE(SUM(LENGTH(CAST(frame_json AS BLOB))), 0) AS bytes FROM events WHERE session_id = ?").get(sessionId) as Row;
+		const bytes = row.bytes;
+		if (typeof bytes !== "number" || !Number.isSafeInteger(bytes) || bytes < 0) throw new DurableStoreSchemaError("Invalid journal byte total");
+		return bytes;
+	}
+
+	/**
+	 * Drop the oldest events of one session until it is inside both retention caps.
+	 *
+	 * Called inside the append transaction with the exact post-append byte total, and
+	 * always keeps the newest event: even a fork whose single hydration frame is
+	 * larger than the byte cap is readable, it just is not accompanied by the rest
+	 * of a long history. Returns the retained total.
+	 */
+	#retainJournal(sessionId: string, retained: number): number {
+		const bounds = this.db.prepare("SELECT MIN(sequence) AS first, MAX(sequence) AS last FROM events WHERE session_id = ?").get(sessionId) as Row;
+		const first = bounds.first;
+		const last = bounds.last;
+		if (typeof first !== "number" || typeof last !== "number" || first < 1 || last < first) throw new DurableStoreSchemaError("Invalid event sequence bounds");
+		// Sequences are dense and only a prefix is ever deleted, so the row count is the
+		// span between the two bounds: two index probes instead of a COUNT(*) scan.
+		if (last - first + 1 > MAX_SESSION_EVENTS) retained -= this.#deleteEventsBefore(sessionId, last - MAX_SESSION_EVENTS + 1);
+		if (retained > MAX_SESSION_EVENT_BYTES) {
+			// Walk from the oldest up, never past the newest event, and stop as soon as
+			// the remainder fits: the walk costs one row per row dropped. The running
+			// total is only projected here; the delete below reports the real one.
+			const rows = this.db.prepare("SELECT sequence, LENGTH(CAST(frame_json AS BLOB)) AS bytes FROM events WHERE session_id = ? AND sequence < ? ORDER BY sequence ASC LIMIT ?").all(sessionId, last, MAX_SESSION_EVENTS) as Row[];
+			let cut: number | undefined;
+			let projected = retained;
+			for (const row of rows) {
+				const sequence = row.sequence;
+				const rowBytes = row.bytes;
+				if (typeof sequence !== "number" || typeof rowBytes !== "number") throw new DurableStoreSchemaError("Invalid event row");
+				if (projected <= MAX_SESSION_EVENT_BYTES) break;
+				projected -= rowBytes;
+				cut = sequence + 1;
+			}
+			if (cut !== undefined) retained -= this.#deleteEventsBefore(sessionId, cut);
+		}
+		return retained;
+	}
+
+	/** Delete one session's events below a sequence and report the bytes they held. */
+	#deleteEventsBefore(sessionId: string, sequence: number): number {
+		const rows = this.db.prepare("DELETE FROM events WHERE session_id = ? AND sequence < ? RETURNING LENGTH(CAST(frame_json AS BLOB)) AS bytes").all(sessionId, sequence) as Row[];
+		let freed = 0;
+		for (const row of rows) {
+			const bytes = row.bytes;
+			if (typeof bytes !== "number" || !Number.isSafeInteger(bytes) || bytes < 0) throw new DurableStoreSchemaError("Invalid deleted journal bytes");
+			freed += bytes;
+		}
+		return freed;
 	}
 
 	/** Mark work interrupted by a previous owner as unknown; never retry it. */

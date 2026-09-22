@@ -9,7 +9,8 @@ import type {
   UiResponseRequest,
 } from "../../../../packages/protocol/src/index.ts";
 import { isRecord, nonEmptyString, type LoginProviderOption, type ModelOption, type PendingUiRequest } from "./types.ts";
-import { parseArtifactChunk, parseArtifactReceipt, type ArtifactChunk, type ArtifactReceipt } from "./artifacts.ts";
+import type { ArtifactChunk, ArtifactReceipt } from "../../../../packages/protocol/src/artifacts.ts";
+import { parseArtifactChunk, parseArtifactReceipt } from "./artifacts.ts";
 import { parseHostReview, type HostReviewPayload } from "./review-sheet.ts";
 import type { ClientTransport, TransportMethod } from "./transport.ts";
 
@@ -313,39 +314,48 @@ export class CediaApi {
     return this.request<unknown>("POST", `/v1/sessions/${encoded(sessionId)}/reconcile`, { acknowledgeUnknown: true }).then(body => objectBody<Session>(body, "reconciled session"));
   }
 
-  /** OMP model catalog, exposed through the host command envelope. */
-  getAvailableModels(sessionId: string, input: CommandRequest): Promise<Command> {
-    if (input.command !== "get_available_models") throw new TypeError("getAvailableModels requires get_available_models command");
-    return this.sendCommand(sessionId, input);
-  }
-
   setModel(sessionId: string, input: CommandRequest): Promise<Command> {
     if (input.command !== "set_model") throw new TypeError("setModel requires set_model command");
     return this.sendCommand(sessionId, input);
   }
 
-  getLoginProviders(sessionId: string, input: CommandRequest): Promise<Command> {
-    if (input.command !== "get_login_providers") throw new TypeError("getLoginProviders requires get_login_providers command");
-    return this.sendCommand(sessionId, input);
+  /**
+   * The OMP model catalog, read without a session.
+   *
+   * Same route the agent window and the CLI use, so a paired phone can list models
+   * before a session exists and never starts OMP to learn what is available.
+   */
+  listModels(): Promise<ModelOption[]> {
+    return this.request<unknown>("GET", "/v1/models").then(body => modelsFromCatalog(body));
+  }
+
+  /**
+   * OMP provider login state, read without a session. Credential material never
+   * appears in this answer, so the phone only learns which providers exist.
+   */
+  listLoginProviders(): Promise<LoginProviderOption[]> {
+    return this.request<unknown>("GET", "/v1/providers").then(body => loginProvidersFromCatalog(body));
   }
 }
 
-export function modelsFromCommand(command: Command): ModelOption[] {
-  const data = command.result ?? command.ack;
-  const candidates = isRecord(data) ? data.data ?? data.models ?? data.result : data;
-  const values = Array.isArray(candidates) ? candidates : isRecord(candidates) && Array.isArray(candidates.models) ? candidates.models : [];
-  return values.flatMap((value): ModelOption[] => {
+/**
+ * A catalog answer whose list is missing or not a list is a failed read, not an empty
+ * catalog: collapsing it to `[]` would make the screen claim OMP advertised nothing.
+ */
+export function modelsFromCatalog(body: unknown): ModelOption[] {
+  const rows = isRecord(body) ? body.models : undefined;
+  if (!Array.isArray(rows)) throw new Error("Cedia host returned an invalid models catalog");
+  return rows.flatMap((value: unknown): ModelOption[] => {
     if (typeof value === "string" && value.trim()) return [{ id: value, label: value }];
     if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim()) return [];
     return [{ id: value.id, label: typeof value.label === "string" ? value.label : value.id, ...(typeof value.provider === "string" ? { provider: value.provider } : {}), ...(typeof value.available === "boolean" ? { available: value.available } : {}), ...(typeof value.reason === "string" ? { reason: value.reason } : {}) }];
   });
 }
 
-export function loginProvidersFromCommand(command: Command): LoginProviderOption[] {
-  const data = command.result ?? command.ack;
-  const nested = isRecord(data) ? data.data ?? data.providers ?? data.result : data;
-  const values = Array.isArray(nested) ? nested : isRecord(nested) && Array.isArray(nested.providers) ? nested.providers : [];
-  return values.flatMap((value): LoginProviderOption[] => {
+export function loginProvidersFromCatalog(body: unknown): LoginProviderOption[] {
+  const rows = isRecord(body) ? body.providers : undefined;
+  if (!Array.isArray(rows)) throw new Error("Cedia host returned an invalid providers catalog");
+  return rows.flatMap((value: unknown): LoginProviderOption[] => {
     if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim()) return [];
     return [{
       id: value.id,

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-export interface ArtifactReceipt { sha256: string; name: string; size: number; sessionId: string; createdAt: string }
-export interface ArtifactChunk { receipt: ArtifactReceipt; offset: number; data: string; complete: boolean }
+import type { ArtifactChunk, ArtifactReceipt } from "../../../packages/protocol/src/artifacts.ts";
+
 export async function downloadArtifact(client: { getArtifactChunk(sessionId: string, sha256: string, offset: number): Promise<ArtifactChunk> }, sessionId: string, receipt: ArtifactReceipt): Promise<Buffer> {
   if (receipt.sessionId !== sessionId || !/^[a-f0-9]{64}$/.test(receipt.sha256) || !Number.isSafeInteger(receipt.size) || receipt.size < 0 || receipt.size > 256 * 1024 * 1024) throw new Error("Invalid artifact receipt");
   const chunks: Buffer[] = []; let offset = 0;

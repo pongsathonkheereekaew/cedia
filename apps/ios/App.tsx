@@ -32,7 +32,6 @@ import {
   createCachedSnapshot,
   DEFAULT_CACHE_TTL_MS,
   isSafeExternalUrl,
-  loginProvidersFromCommand,
   createCommandId,
   createInitialMobileState,
   isCacheFresh,
@@ -196,22 +195,6 @@ function jsonRecord(value: unknown): Record<string, Json> {
 function frameType(frame: Record<string, unknown>): string {
   const value = frame.type ?? frame.kind ?? frame.event;
   return typeof value === "string" ? value : "event";
-}
-
-function commandData(command: Command): unknown {
-  if (isRecord(command.result)) return command.result.data ?? command.result;
-  if (isRecord(command.ack)) return command.ack.data ?? command.ack;
-  return command.result ?? command.ack;
-}
-
-function modelOptions(command: Command): ModelOption[] {
-  const data = commandData(command);
-  const list = Array.isArray(data) ? data : isRecord(data) && Array.isArray(data.models) ? data.models : [];
-  return list.flatMap((value): ModelOption[] => {
-    if (typeof value === "string" && value.trim()) return [{ id: value, label: value }];
-    if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim()) return [];
-    return [{ id: value.id, label: typeof value.label === "string" ? value.label : value.id, ...(typeof value.provider === "string" ? { provider: value.provider } : {}), ...(typeof value.available === "boolean" ? { available: value.available } : {}), ...(typeof value.reason === "string" ? { reason: value.reason } : {}) }];
-  });
 }
 
 function statusColor(status: MobileTaskState["connection"], palette: Palette): string {
@@ -1007,6 +990,41 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
     }
   }, [api, catchUp, setConnection]);
 
+  /**
+   * Sessionless catalog reads.
+   *
+   * The phone lists models and providers the way the agent window and the CLI do, so a
+   * paired phone needs no started session. A failed read keeps the last catalogue and
+   * reports the host's own message instead of painting an empty list.
+   */
+  const loadModelCatalog = useCallback(async () => {
+    if (!api) {
+      setConnection("offline", "Attach the Cedia host transport to connect to your Mac");
+      return;
+    }
+    try {
+      const models = await api.listModels();
+      dispatch({ type: "models", models });
+      setShowModelPicker(true);
+    } catch (error) {
+      setConnection("offline", error instanceof Error ? error.message : String(error));
+    }
+  }, [api, setConnection]);
+
+  const loadLoginProviders = useCallback(async () => {
+    if (!api) {
+      setConnection("offline", "Attach the Cedia host transport to connect to your Mac");
+      return;
+    }
+    try {
+      const providers = await api.listLoginProviders();
+      dispatch({ type: "login_providers", providers });
+      setShowLoginPicker(true);
+    } catch (error) {
+      setConnection("offline", error instanceof Error ? error.message : String(error));
+    }
+  }, [api, setConnection]);
+
   const dispatchCommand = useCallback(async (input: { command: string; payload?: Record<string, Json>; commandId?: string; retryUnknown?: boolean; attempt?: number }): Promise<Command | undefined> => {
     const session = stateRef.current.session;
     if (!api || !session) return undefined;
@@ -1032,20 +1050,11 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
       if (command.status === "outcome_unknown") setConnection("unknown", command.error);
       else if (command.status === "acknowledged" || command.status === "claimed") setConnection("running");
       else await catchUp(session.id);
-      if (input.command === "get_available_models") {
-        const models = modelOptions(command);
-        dispatch({ type: "models", models });
-        setShowModelPicker(true);
-      }
-      if (input.command === "get_login_providers") {
-        dispatch({ type: "login_providers", providers: loginProvidersFromCommand(command) });
-        setShowLoginPicker(true);
-      }
       if (input.command === "set_thinking_level" && (command.status === "completed" || command.status === "acknowledged")) {
         void refreshOmpState();
       }
       if (input.command === "login" && (command.status === "completed" || command.status === "acknowledged" || command.status === "claimed")) {
-        void dispatchCommand({ command: "get_login_providers" });
+        void loadLoginProviders();
       }
       return command;
     } catch (error) {
@@ -1084,7 +1093,7 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
       setConnection("unknown", "The command outcome is unknown. Retry only from its card.");
       return undefined;
     }
-  }, [api, catchUp, refreshOmpState, setConnection]);
+  }, [api, catchUp, loadLoginProviders, refreshOmpState, setConnection]);
 
   const sendPrompt = useCallback(() => {
     if (syncing) return;
@@ -1303,8 +1312,8 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
             if (!iosComposerAllowsCommand(iosComposerHonesty(stateRef.current), command.command)) return;
             void dispatchCommand(command);
           }}
-          onOpenModels={() => { void dispatchCommand({ command: "get_available_models" }); }}
-          onOpenLogin={() => { void dispatchCommand({ command: "get_login_providers" }); }}
+          onOpenModels={() => { void loadModelCatalog(); }}
+          onOpenLogin={() => { void loadLoginProviders(); }}
           onStartLogin={providerId => { void dispatchCommand({ command: "login", payload: { providerId } }); }}
           onOpenLoginUrl={url => { void openLoginUrl(url); }}
           onOpenArtifacts={openArtifacts}

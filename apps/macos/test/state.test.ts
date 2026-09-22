@@ -158,17 +158,16 @@ describe("Cedia task reducer", () => {
 	});
 	it("accepts exact broker interactive envelopes without auto-approving", () => {
 		const envelope = { kind: "interactive", token: "tok-1", request: { method: "confirm", id: "request-1", title: "Write file?", message: "a.txt" } };
-		expect(parseCediaUiRequest(envelope)).toMatchObject({ token: "tok-1", request: envelope.request });
+		const parsed = parseCediaUiRequest(envelope);
+		expect(parsed.ok).toBe(true);
+		expect(parsed.ok && parsed.request).toMatchObject({ token: "tok-1", request: envelope.request });
 		let state = reduceTaskState(createInitialTaskState(), { type: "ui_request", event: envelope });
 		expect(state.uiRequests).toHaveLength(1);
 		expect(state.uiRequests[0]?.request.method).toBe("confirm");
 		state = reduceTaskState(state, { type: "ui_resolved", token: "tok-1" });
 		expect(state.uiRequests).toHaveLength(0);
-		expect(parseCediaUiRequest({ ...envelope, request: { ...envelope.request, message: 42 } })).toBeUndefined();
-		expect(parseCediaUiRequest({ kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } })?.request.method).toBe("password");
-		expect(parseCediaUiRequest({ kind: "interactive", token: "tok-m", request: { method: "multi_select", id: "m1", title: "Pick", options: ["a", "b"] } })?.request.method).toBe("multi_select");
-		expect(parseCediaUiRequest({ kind: "interactive", token: "tok-s", request: { method: "schemaform", id: "s1", title: "Form" } })?.request.method).toBe("schemaform");
-		expect(parseCediaUiRequest({ kind: "interactive", token: "tok-c", request: { method: "confirm", id: "c1", title: "Allow?", message: "run", scopes: ["cwd"], dangerous: true } })?.request).toMatchObject({ scopes: ["cwd"], dangerous: true });
+		expect(parseCediaUiRequest({ ...envelope, request: { ...envelope.request, message: 42 } })).toEqual({ ok: false, reason: "malformed" });
+		expect(parseCediaUiRequest({ kind: "presentation", token: "tok-1", request: envelope.request })).toEqual({ ok: false, reason: "not-interactive" });
 		expect(parseCediaUiRequest({
 			kind: "interactive",
 			token: "tok-r",
@@ -177,13 +176,57 @@ describe("Cedia task reducer", () => {
 				id: "s1",
 				title: "Pick",
 				options: ["a", "b"],
-				required: true,
 				optionDetails: [{ value: "a", label: "Alpha", description: "first" }, { description: "second" }],
 			},
-		})?.request).toMatchObject({
-			required: true,
-			optionDetails: [{ value: "a", label: "Alpha", description: "first" }, { description: "second" }],
+		})).toMatchObject({
+			ok: true,
+			request: {
+				request: {
+					method: "select",
+					// A frame field the wire cannot carry (`label`) is not projected:
+					// only OMP's positional description survives.
+					optionDetails: [{ description: "first" }, {}],
+				},
+			},
 		});
+	});
+
+	it("round-trips every interactive method the wire can carry", () => {
+		const requests = [
+			{ method: "confirm", id: "c1", title: "Allow?", message: "run it" },
+			{ method: "select", id: "s1", title: "Pick", options: ["a", "b"], optionDetails: [{ description: "first" }, {}], timeout: 1_000 },
+			{ method: "input", id: "i1", title: "Name", placeholder: "type here", timeout: 0 },
+			{ method: "editor", id: "e1", title: "Edit", prefill: "draft", promptStyle: true },
+		] as const;
+		for (const request of requests) {
+			const parsed = parseCediaUiRequest({ kind: "interactive", token: `tok-${request.id}`, request });
+			expect(parsed.ok).toBe(true);
+			expect(parsed.ok && parsed.request.request).toEqual(request);
+			expect(parsed.ok && parsed.request.token).toBe(`tok-${request.id}`);
+		}
+	});
+
+	it("states an unknown method instead of dropping the request", () => {
+		const refusals = [
+			{ method: "password", id: "p1", title: "Secret" },
+			{ method: "multi_select", id: "m1", title: "Pick", options: ["a", "b"] },
+			{ method: "schemaform", id: "sf1", title: "Form" },
+		];
+		for (const request of refusals) {
+			const envelope = { kind: "interactive", token: `tok-${request.id}`, request };
+			expect(parseCediaUiRequest(envelope)).toEqual({ ok: false, reason: "unknown-method", method: request.method });
+			// The Mac keeps the reason: the request is never silently dropped.
+			const state = reduceTaskState(createInitialTaskState(), { type: "ui_request", event: envelope });
+			expect(state.uiRequests).toHaveLength(0);
+			expect(state.lastError).toBe(`Cedia cannot show this request: the host sent unsupported method "${request.method}"; OMP can send select, confirm, input, editor.`);
+		}
+		// The live-frame path states the same reason and keeps no phantom request.
+		const live = applyFrame(createInitialTaskState(), { type: "cedia_ui", event: { kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } } });
+		expect(live.uiRequests).toHaveLength(0);
+		expect(live.lastError).toContain(`unsupported method "password"`);
+		// Repeating the same violation (a poll of the host's pending list) is a no-op.
+		const once = reduceTaskState(createInitialTaskState(), { type: "ui_request", event: { kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } } });
+		expect(reduceTaskState(once, { type: "ui_request", event: { kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } } })).toBe(once);
 	});
 
 	it("does not treat message fragments with no journal sequence as duplicates", () => {

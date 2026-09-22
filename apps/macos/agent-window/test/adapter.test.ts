@@ -176,6 +176,30 @@ describe("Cedia Agent Window native adapter", () => {
 		expect(reads).toBe(2);
 	});
 
+	it("carries a forked task's source task from the session row into both snapshots", async () => {
+		// The adapter used to declare its own session row with an index signature, so
+		// `sidechatSourceThreadId` — the field the host really sends and the split pane
+		// really reads — was invisible to the compiler (§10 item 65c).
+		const forked = { ...session, id: "side-1", sidechatSourceThreadId: session.id };
+		const { bridge } = fakeBridge();
+		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			const request = input as Request;
+			if (request.path === "/v1/sessions/side-1") return forked;
+			if (request.path === `/v1/sessions?projectId=${project.id}`) return [session, forked];
+			if (request.path?.startsWith("/v1/sessions/side-1/")) return bridge.invoke(channel, { ...request, path: `/v1/sessions/${session.id}/${request.path.slice("/v1/sessions/side-1/".length)}` });
+			return bridge.invoke(channel, request);
+		} } });
+
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: "side-1" });
+		expect(detail.thread.sidechatSourceThreadId).toBe(session.id);
+		expect(Schema.is(OrchestrationThreadDetailSnapshot)(detail)).toBe(true);
+
+		const shell = await api.orchestration.getShellSnapshot();
+		const rows = shell.threads as ReadonlyArray<{ id: string; sidechatSourceThreadId: string | null }>;
+		expect(rows.find(row => row.id === "side-1")?.sidechatSourceThreadId).toBe(session.id);
+		expect(rows.find(row => row.id === session.id)?.sidechatSourceThreadId).toBeNull();
+	});
+
 	it("forks side chats through OMP without submitting renderer-provided history", async () => {
 		const { bridge, calls } = fakeBridge();
 		const api = createCediaNativeApi({ bridge });
@@ -597,6 +621,25 @@ describe("Cedia Agent Window native adapter", () => {
 		})]);
 		expect(calls.some(call => call.path === "/v1/models")).toBe(true);
 		expect(calls.some(call => call.path.endsWith("/start"))).toBe(false);
+	});
+
+	it("refuses a catalog answer that carries no model list", async () => {
+		const { bridge } = fakeBridge();
+		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			if ((input as Request).path === "/v1/models") return { source: "omp" };
+			return bridge.invoke(channel, input as Request);
+		} } });
+
+		// "The host answered with no catalog" and "the picker has nothing to show" are
+		// different facts: only the second may be silent, or a broken host reads as
+		// "OMP advertises no models".
+		await expect(api.provider.listModels({ provider: "omp" })).rejects.toThrow("did not return a model catalog");
+
+		const unreachable = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			if ((input as Request).path === "/v1/models") throw new Error("relay unavailable");
+			return bridge.invoke(channel, input as Request);
+		} } });
+		await expect(unreachable.provider.listModels({ provider: "omp" })).resolves.toEqual({ models: [], source: "omp" });
 	});
 
 	it("persists the picker selection through OMP before Synara submits the turn", async () => {

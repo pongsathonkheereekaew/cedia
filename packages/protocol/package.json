@@ -5,7 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./artifacts": "./src/artifacts.ts",
     "./editor": "./src/editor.ts",
-    "./terminal-queries": "./src/terminal-queries.js"
+    "./models": "./src/models.ts",
+    "./terminal-queries": "./src/terminal-queries.js",
+    "./ui": "./src/ui.ts"
   }
 }

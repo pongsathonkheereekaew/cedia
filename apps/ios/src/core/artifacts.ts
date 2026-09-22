@@ -1,5 +1,9 @@
 import { fromByteArray, toByteArray } from "base64-js";
 import type { Json } from "../../../../packages/protocol/src/index.ts";
+// The receipt, its source hashes and the chunk are the protocol's own rows
+// (§10 item 65c), declared once in `packages/protocol/src/artifacts.ts`;
+// `core/index.ts` re-exports them for the app.
+import type { ArtifactChunk, ArtifactReceipt, ArtifactSourceHash } from "../../../../packages/protocol/src/artifacts.ts";
 
 /** The host keeps immutable artifact bytes up to 256 MiB. */
 export const CEDIA_HOST_ARTIFACT_MAX_BYTES = 256 * 1024 * 1024;
@@ -11,28 +15,6 @@ export const CEDIA_MOBILE_ARTIFACT_MAX_BYTES = 32 * 1024 * 1024;
 export const CEDIA_MOBILE_TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 export const CEDIA_ARTIFACT_CHUNK_MAX_BYTES = 96 * 1024;
 export const CEDIA_ARTIFACT_MAX_SOURCE_HASHES = 1_000;
-
-export interface ArtifactSourceHash {
-  readonly path: string;
-  readonly sha256: string;
-}
-
-export interface ArtifactReceipt {
-  readonly sha256: string;
-  readonly name: string;
-  readonly size: number;
-  readonly sourcePath: string;
-  readonly sessionId: string;
-  readonly sourceHashes: readonly ArtifactSourceHash[];
-  readonly createdAt: string;
-}
-
-export interface ArtifactChunk {
-  readonly receipt: ArtifactReceipt;
-  readonly offset: number;
-  readonly data: string;
-  readonly complete: boolean;
-}
 
 export type ArtifactKind = "text" | "image" | "audio" | "video" | "binary";
 

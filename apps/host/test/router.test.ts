@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RPC_COMMAND_TYPES } from "../../../packages/omp-adapter/src/types.ts";
 import { DeviceAuth } from "../src/auth.ts";
 import { createHostGit } from "../src/git.ts";
-import { createRouter, type HostResponse } from "../src/router.ts";
+import { createRouter, type HostResponse, type HostRouter } from "../src/router.ts";
 import { CediaHost } from "../src/service.ts";
-import { DurableStore } from "../src/store.ts";
+import { DurableStore, MAX_SESSION_EVENTS } from "../src/store.ts";
+import type { WorkspaceJudge } from "../src/workspace-mode.ts";
 import { fileURLToPath } from "node:url";
 
 const fixtureExecutable = fileURLToPath(new URL("./fixtures/fake-host-launcher", import.meta.url));
@@ -20,20 +22,20 @@ interface RouterFixture {
   store: DurableStore;
   host: CediaHost;
   auth: DeviceAuth;
-  router: ReturnType<typeof createRouter>;
+  router: HostRouter;
 }
 
 const fixtures: RouterFixture[] = [];
 const directories: string[] = [];
 
-function makeFixture(withOmp = false): RouterFixture {
+function makeFixture(withOmp = false, workspaceJudge?: WorkspaceJudge): RouterFixture {
   const directory = mkdtempSync(join(tmpdir(), "cedia-router-"));
   directories.push(directory);
   const projectPath = join(directory, "project");
   mkdirSync(projectPath, { recursive: true });
   const store = DurableStore.open({ stateDir: directory, recover: false });
   const auth = new DeviceAuth(join(directory, "devices"));
-  const host = new CediaHost({ store, stateDir: directory, ...(withOmp ? { ompExecutable: fixtureExecutable, ompEnv: { CEDIA_NODE: fixtureNode } } : {}) });
+  const host = new CediaHost({ store, stateDir: directory, ...(withOmp ? { ompExecutable: fixtureExecutable, ompEnv: { CEDIA_NODE: fixtureNode } } : {}), ...(workspaceJudge ? { workspaceJudge } : {}) });
   const fixture = { directory, projectPath, store, host, auth, router: createRouter(host, auth, { git: createHostGit({ store }) }) };
   fixtures.push(fixture);
   return fixture;
@@ -116,6 +118,58 @@ describe("authenticated Cedia host router", () => {
     expect(all).toMatchObject({ status: 200, body: expect.arrayContaining([expect.objectContaining({ id: "router-sidechat", sidechatSourceThreadId: source.id })]) });
     const models = await request(fixture, "GET", "/v1/models");
     expect(models).toMatchObject({ status: 200, body: { source: "omp", models: expect.any(Array), cached: false } });
+  });
+
+  it("serves workspace suggestions from the configured judge, and no opinion without one", async () => {
+    const asked: string[] = [];
+    const fixture = makeFixture(false, { suggest: async prompt => { asked.push(prompt); return { mode: "worktree", probability: 0.91, confidence: 0.82 }; } });
+    expect(await request(fixture, "POST", "/v1/workspace-suggestion", { prompt: "  rewrite the history  " }))
+      .toEqual({ status: 200, body: { mode: "worktree", probability: 0.91, confidence: 0.82 } });
+    expect(asked).toEqual(["  rewrite the history  "]);
+    // The route is the only thing between a client and the judge, so the bound it
+    // applies to the prompt is the bound the judge is asked about.
+    await request(fixture, "POST", "/v1/workspace-suggestion", { prompt: "x".repeat(3_000) });
+    expect(asked[1]).toHaveLength(2_000);
+    // A body without a prompt never reaches the judge.
+    expect(await request(fixture, "POST", "/v1/workspace-suggestion", { prompt: 42 })).toMatchObject({ status: 400, body: { error: { code: "invalid_body" } } });
+    expect(asked).toHaveLength(2);
+
+    // No judge is the default for every existing host: "no opinion" is an answer a
+    // client keeps its own default for, not an error.
+    const plain = makeFixture();
+    expect(await request(plain, "POST", "/v1/workspace-suggestion", { prompt: "do something risky" })).toEqual({ status: 200, body: { mode: null } });
+  });
+
+  it("tells an events reader when retention dropped the journal's oldest frames", async () => {
+    const fixture = makeFixture();
+    const project = fixture.store.createProject({ path: fixture.projectPath });
+    const session = fixture.store.createSession({ projectId: project.id, incarnation: "inc-1" });
+    // Seed a journal that outgrew the cap before this host appended to it - an older
+    // build wrote it, or a fork hydrated a long transcript - then let the next append
+    // enforce retention, which is when the store says it prunes.
+    const seed = new DatabaseSync(fixture.store.paths.journalPath);
+    try {
+      seed.exec("BEGIN IMMEDIATE");
+      const insert = seed.prepare("INSERT INTO events (session_id, incarnation, sequence, timestamp, frame_json) VALUES (?, 'inc-1', ?, '2026-01-01T00:00:00.000Z', ?)");
+      for (let sequence = 1; sequence <= MAX_SESSION_EVENTS; sequence += 1) insert.run(session.id, sequence, JSON.stringify({ type: "fixture_frame", index: sequence }));
+      seed.exec("COMMIT");
+    } finally { seed.close(); }
+    fixture.store.appendEvent(session.id, "inc-1", { type: "fixture_frame", index: MAX_SESSION_EVENTS + 1 });
+
+    const page = await request(fixture, "GET", `/v1/sessions/${session.id}/events?after=0`);
+    expect(page.status).toBe(200);
+    // A client that reattaches at `after: 0` is told where the journal now starts
+    // instead of being handed a short page it would read as the whole task.
+    expect(page.body).toMatchObject({ firstSequence: 2, historyTruncated: true, cursor: 201, hasMore: true });
+    // A frame retention dropped is a different answer from a frame that never existed:
+    // one is this session's lost history, the other is a bad sequence.
+    expect(await request(fixture, "GET", `/v1/sessions/${session.id}/events/1/frame`)).toMatchObject({ status: 404, body: { error: { code: "history_truncated" } } });
+    expect(await request(fixture, "GET", `/v1/sessions/${session.id}/events/${MAX_SESSION_EVENTS + 2}/frame`)).toMatchObject({ status: 404, body: { error: { code: "not_found" } } });
+    expect(await request(fixture, "GET", `/v1/sessions/${session.id}/events/2/frame`)).toMatchObject({ status: 200, body: { sequence: 2, offset: 0, text: expect.any(String), sha256: expect.any(String) } });
+
+    const plain = fixture.store.createSession({ projectId: project.id, incarnation: "inc-2" });
+    fixture.store.appendEvent(plain.id, "inc-2", { type: "fixture_frame", index: 1 });
+    expect((await request(fixture, "GET", `/v1/sessions/${plain.id}/events`)).body).toMatchObject({ firstSequence: 1, historyTruncated: false });
   });
 
   it("requires a device token and exposes only the negotiated health contract", async () => {

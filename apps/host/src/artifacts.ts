@@ -2,11 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { workspacePath } from "./workspaces.ts";
+import type { ArtifactChunk, ArtifactReceipt, ArtifactSourceHash } from "../../../packages/protocol/src/artifacts.ts";
 
-export interface ArtifactReceipt {
-  sha256: string; name: string; size: number; sourcePath: string; sessionId: string;
-  sourceHashes: { path: string; sha256: string }[]; createdAt: string;
-}
 /** Immutable copied bytes; no mutable workspace URL can masquerade as a build receipt. */
 export class ArtifactStore {
   readonly #root: string;
@@ -16,7 +13,7 @@ export class ArtifactStore {
     if (sourcePaths.length > 1000) throw new Error("Too many source inputs");
     const bytes = this.#read(cwd, path);
     const sha256 = this.#hash(bytes);
-    const sourceHashes = sourcePaths.map(path => ({ path, sha256: this.#hash(this.#read(cwd, path)) }));
+    const sourceHashes: ArtifactSourceHash[] = sourcePaths.map(path => ({ path, sha256: this.#hash(this.#read(cwd, path)) }));
     const directory = join(this.#root, sessionId); mkdirSync(directory, { recursive: true, mode: 0o700 });
     const receipt: ArtifactReceipt = { sha256, name: basename(path), size: bytes.length, sourcePath: path, sessionId, sourceHashes, createdAt: new Date().toISOString() };
     const content = join(directory, sha256);
@@ -36,7 +33,7 @@ export class ArtifactStore {
     this.#validate(sessionId, sha256);
     return JSON.parse(readFileSync(join(this.#root, sessionId, `${sha256}.json`), "utf8")) as ArtifactReceipt;
   }
-  read(sessionId: string, sha256: string, offset = 0, length = 96 * 1024): { receipt: ArtifactReceipt; offset: number; data: string; complete: boolean } {
+  read(sessionId: string, sha256: string, offset = 0, length = 96 * 1024): ArtifactChunk {
     const receipt = this.receipt(sessionId, sha256);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > 96 * 1024) throw new Error("Invalid artifact range");
     const bytes = readFileSync(join(this.#root, sessionId, sha256));

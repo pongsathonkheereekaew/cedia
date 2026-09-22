@@ -12,6 +12,9 @@ import {
 	DurableStoreCommandTransitionError,
 	DurableStoreOwnershipError,
 	DurableStoreSchemaError,
+	MAX_EVENT_PAGE_SIZE,
+	MAX_SESSION_EVENTS,
+	MAX_SESSION_EVENT_BYTES,
 	canonicalizeJson,
 	commandPayloadHash,
 } from "../src/store.ts";
@@ -211,6 +214,105 @@ describe("DurableStore", () => {
 		expect(third.events.map(event => event.sequence)).toEqual([5]);
 		expect(third.hasMore).toBe(false);
 		expect(store.readEvents(two.id)).toMatchObject({ events: [{ sequence: 1, frame: { index: 99 } }] });
+	});
+
+	it("drops the oldest events and reports truncation when a session's journal exceeds the count cap", () => {
+		const { store } = temporaryStore(false);
+		const project = store.createProject({ path: projectDirectory(store.paths.stateDir, "retention-project") });
+		const session = store.createSession({ projectId: project.id, incarnation: "inc-1" });
+		// A journal can outgrow the cap before this host ever appends to it: an older
+		// build wrote it, or a fork hydrated a long transcript into it. Seeding the
+		// fixture directly reaches that state without 20k commits in the test.
+		const seed = new DatabaseSync(store.paths.journalPath);
+		try {
+			seed.exec("BEGIN IMMEDIATE");
+			const insert = seed.prepare("INSERT INTO events (session_id, incarnation, sequence, timestamp, frame_json) VALUES (?, 'inc-1', ?, '2026-01-01T00:00:00.000Z', ?)");
+			for (let sequence = 1; sequence <= MAX_SESSION_EVENTS; sequence += 1) insert.run(session.id, sequence, JSON.stringify({ index: sequence - 1 }));
+			seed.exec("COMMIT");
+		} finally { seed.close(); }
+
+		const appended = store.appendEvent(session.id, "inc-1", { index: MAX_SESSION_EVENTS });
+		expect(appended.sequence).toBe(MAX_SESSION_EVENTS + 1);
+		// The oldest frame is gone and the session says so to every reader, including
+		// one at `after: 0` that would otherwise read a short journal as the whole task.
+		const oldest = store.readEvents(session.id, 0, 5);
+		expect(oldest.events.map(event => event.sequence)).toEqual([2, 3, 4, 5, 6]);
+		expect(oldest).toMatchObject({ cursor: 6, hasMore: true, firstSequence: 2, historyTruncated: true });
+		// A client whose cursor is inside the dropped range is told the same thing
+		// instead of being handed an empty page it could mistake for the end.
+		const behind = store.readEvents(session.id, 1, 5);
+		expect(behind.events.map(event => event.sequence)).toEqual([2, 3, 4, 5, 6]);
+		expect(behind).toMatchObject({ cursor: 6, firstSequence: 2, historyTruncated: true });
+		// Oldest-first pagination still walks the retained journal exactly once.
+		const walked: number[] = [];
+		let cursor = 0;
+		for (;;) {
+			const page = store.readEvents(session.id, cursor, 1_000);
+			walked.push(...page.events.map(event => event.sequence));
+			cursor = page.cursor;
+			if (!page.hasMore) break;
+		}
+		expect(walked).toHaveLength(MAX_SESSION_EVENTS);
+		expect(walked[0]).toBe(2);
+		expect(walked.at(-1)).toBe(MAX_SESSION_EVENTS + 1);
+		expect(walked.every((sequence, index) => index === 0 || sequence === walked[index - 1]! + 1)).toBe(true);
+		expect(store.readEvents(session.id, cursor, 1_000)).toMatchObject({ events: [], cursor: MAX_SESSION_EVENTS + 1, hasMore: false, firstSequence: 2, historyTruncated: true });
+		// The newest frame - the one just appended - survived the cut.
+		expect(store.readEvents(session.id, MAX_SESSION_EVENTS, 5)).toMatchObject({ events: [{ sequence: MAX_SESSION_EVENTS + 1, frame: { index: MAX_SESSION_EVENTS } }] });
+	});
+
+	it("keeps the newest frames and stops at the byte cap", () => {
+		const { store } = temporaryStore(false);
+		const project = store.createProject({ path: projectDirectory(store.paths.stateDir, "retention-bytes-project") });
+		const session = store.createSession({ projectId: project.id, incarnation: "inc-1" });
+		// 1 MiB frames are the shape a fork hydration has: 40 of them need more bytes
+		// than the cap holds, so retention has to cut into the middle of the journal.
+		const frames = Array.from({ length: 40 }, (_unused, index) => ({ type: "cedia_hydration", text: "x".repeat(1_000_000), index: index + 1 }));
+		const sizes = frames.map(frame => Buffer.byteLength(canonicalizeJson(frame), "utf8"));
+		expect(sizes.reduce((sum, size) => sum + size, 0)).toBeGreaterThan(MAX_SESSION_EVENT_BYTES);
+		for (const frame of frames) store.appendEvent(session.id, "inc-1", frame);
+
+		// What retention must leave behind: the largest suffix of the journal that fits
+		// under the byte cap, which is the newest frames and nothing older.
+		let kept = 0;
+		let keptBytes = 0;
+		for (let index = sizes.length - 1; index >= 0; index -= 1) {
+			const size = sizes[index]!;
+			if (keptBytes + size > MAX_SESSION_EVENT_BYTES) break;
+			keptBytes += size;
+			kept += 1;
+		}
+		expect(kept).toBeGreaterThan(1);
+		expect(kept).toBeLessThan(frames.length);
+		const firstSequence = frames.length - kept + 1;
+		const probe = new DatabaseSync(store.paths.journalPath);
+		try {
+			expect(probe.prepare("SELECT COUNT(*) AS count, MIN(sequence) AS first, COALESCE(SUM(LENGTH(CAST(frame_json AS BLOB))), 0) AS bytes FROM events WHERE session_id = ?").get(session.id)).toEqual({
+				count: kept,
+				first: firstSequence,
+				bytes: keptBytes,
+			});
+		} finally { probe.close(); }
+		const page = store.readEvents(session.id, 0, MAX_EVENT_PAGE_SIZE);
+		expect(page.historyTruncated).toBe(true);
+		expect(page.firstSequence).toBe(firstSequence);
+		expect(page.events[0]!.sequence).toBe(firstSequence);
+		expect(page.events.at(-1)!.sequence).toBe(frames.length);
+		// The newest frame is readable through the cursor a client at the tail holds.
+		expect(store.readEvents(session.id, frames.length - 1, 5)).toMatchObject({ events: [{ frame: { index: frames.length } }] });
+	});
+
+	it("reports no truncation for a session that stays inside retention", () => {
+		const { store } = temporaryStore(false);
+		const project = store.createProject({ path: projectDirectory(store.paths.stateDir, "retained-project") });
+		const session = store.createSession({ projectId: project.id, incarnation: "inc-1" });
+		store.appendEvent(session.id, "inc-1", { index: 0 });
+		store.appendEvent(session.id, "inc-1", { index: 1 });
+		expect(store.readEvents(session.id)).toMatchObject({ firstSequence: 1, historyTruncated: false });
+		expect(store.readEvents(session.id, 2)).toMatchObject({ events: [], cursor: 2, hasMore: false, firstSequence: 1, historyTruncated: false });
+		// A session that never had an event is not truncated either.
+		const empty = store.createSession({ projectId: project.id, incarnation: "inc-2" });
+		expect(store.readEvents(empty.id)).toMatchObject({ events: [], cursor: 0, hasMore: false, firstSequence: 0, historyTruncated: false });
 	});
 
 	it("keeps a raw frame's own prototype-named keys intact in the journal", () => {

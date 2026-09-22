@@ -6,7 +6,8 @@
 
 import { Buffer } from "node:buffer";
 import type { CommandRequest, Project, Session } from "../../../packages/protocol/src/index.ts";
-import type { CediaUiRequest, TranscriptEntry } from "./state.ts";
+import type { CediaUiRequest } from "../../../packages/protocol/src/ui.ts";
+import type { TranscriptEntry } from "./state.ts";
 import type { ThinkingParams } from "./thinking-params.ts";
 
 /**
@@ -1198,32 +1199,21 @@ export function resolveOmpModelPickProvider(
 /** One question the native chat carousel can present for a host UI request. */
 export interface OmpUiQuestion {
 	readonly id: string;
-	readonly kind: "text" | "single_select" | "multi_select";
+	readonly kind: "text" | "single_select";
 	readonly title: string;
 	readonly message?: string;
 	readonly options?: ReadonlyArray<{ readonly id: string; readonly label: string; readonly value: string | boolean }>;
 }
 
-function uiQuestionOptions(
-	options: readonly string[],
-	optionDetails?: readonly { readonly value?: string; readonly label?: string; readonly description?: string }[],
-): OmpUiQuestion["options"] {
-	return options.map((option, index) => ({
-		id: option,
-		label: optionDetails?.[index]?.label ?? option,
-		value: option,
-	}));
-}
-
 /**
  * Project a host UI request into one native carousel question.
  *
- * `password` and `schemaform` deliberately return undefined: the native surface
- * must not collect secrets or render untrusted form HTML, so those stay on the
- * IDE dock. Confirm options mirror the dock's order and wording (`Allow`,
- * `Deny`, then one scoped allow per scope).
+ * Every method the wire can carry is answered here; a select is always single
+ * choice, because OMP's `select` has no multi-value form and its options are
+ * plain strings that are their own labels. Confirm options mirror the dock's
+ * order and wording (`Allow`, then `Deny`).
  */
-export function uiQuestionFromRequest(request: CediaUiRequest): OmpUiQuestion | undefined {
+export function uiQuestionFromRequest(request: CediaUiRequest): OmpUiQuestion {
 	switch (request.method) {
 		case "confirm":
 			return {
@@ -1234,29 +1224,19 @@ export function uiQuestionFromRequest(request: CediaUiRequest): OmpUiQuestion | 
 				options: [
 					{ id: "allow", label: "Allow", value: true },
 					{ id: "deny", label: "Deny", value: false },
-					...(request.scopes ?? []).map(scope => ({ id: scope, label: `Allow scoped \u00B7 ${scope}`, value: `scope:${scope}` })),
 				],
 			};
 		case "select":
 			return {
 				id: request.id,
-				kind: request.multiple === true ? "multi_select" : "single_select",
+				kind: "single_select",
 				title: request.title,
-				options: uiQuestionOptions(request.options, request.optionDetails),
-			};
-		case "multi_select":
-			return {
-				id: request.id,
-				kind: "multi_select",
-				title: request.title,
-				options: uiQuestionOptions(request.options, request.optionDetails),
+				options: request.options.map(option => ({ id: option, label: option, value: option })),
 			};
 		case "input":
 			return { id: request.id, kind: "text", title: request.title, ...(request.placeholder !== undefined ? { message: request.placeholder } : {}) };
 		case "editor":
 			return { id: request.id, kind: "text", title: request.title, ...(request.prefill !== undefined ? { message: request.prefill } : {}) };
-		default:
-			return undefined;
 	}
 }
 
@@ -1283,33 +1263,28 @@ function unwrapCarouselAnswer(value: unknown): unknown {
 
 /**
  * Map whatever the workbench hands back from the carousel into the answer shape
- * the host accepts. The workbench may answer with a bare value or an array
- * (multi select); anything empty or of the wrong shape is a cancellation rather
- * than an invented answer.
+ * the host accepts. The workbench may answer with a bare value or an array;
+ * anything empty or of the wrong shape is a cancellation rather than an
+ * invented answer.
  */
 export function uiAnswerValue(request: CediaUiRequest, value: unknown): string | boolean | { readonly cancelled: true } {
 	const answer = unwrapCarouselAnswer(value);
 	if (answer === undefined || answer === null || answer === "") return { cancelled: true };
 	if (Array.isArray(answer)) {
-		const items = answer.filter((item): item is string => typeof item === "string" && item.length > 0);
-		if (items.length === 0) return { cancelled: true };
-		if (request.method === "select" || request.method === "multi_select") return items.join("\n");
+		// No method Cedia renders collects more than one value, so a multi-value
+		// answer is a shape this surface never asked for.
 		return { cancelled: true };
 	}
 	switch (request.method) {
 		case "confirm":
 			if (typeof answer === "boolean") return answer;
 			if (typeof answer !== "string") return { cancelled: true };
-			if (answer.startsWith("scope:")) return answer;
 			if (answer === "true") return true;
 			if (answer === "false") return false;
 			return { cancelled: true };
 		case "select":
-		case "multi_select":
 		case "input":
 		case "editor":
 			return typeof answer === "string" ? answer : { cancelled: true };
-		default:
-			return { cancelled: true };
 	}
 }

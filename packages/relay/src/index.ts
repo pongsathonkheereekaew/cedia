@@ -37,7 +37,6 @@ export {
 export type {
 	CediaRelayHandlerRequest,
 	CediaRelayHandlerResponse,
-	CediaRelayJson,
 	CediaRelayMessage,
 	CediaRelayPairingOffer,
 	CediaRelayRequest,

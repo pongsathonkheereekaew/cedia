@@ -8,9 +8,8 @@ import {
   parseArtifactChunk,
   parseArtifactReceipt,
   readArtifactBytes,
-  type ArtifactChunk,
-  type ArtifactReceipt,
 } from "../core/artifacts.ts";
+import type { ArtifactChunk, ArtifactReceipt } from "../../../../packages/protocol/src/artifacts.ts";
 
 function sha256(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -38,6 +37,19 @@ describe("mobile artifact integrity", () => {
     expect(artifactKind(receipt)).toBe("text");
     expect(artifactMimeType(receipt)).toBe("text/plain");
     expect(artifactKind({ name: "mix.mp4" })).toBe("video");
+  });
+
+  test("requires a receipt's provenance instead of dropping it", () => {
+    // The Mac extension used to carry a trimmed receipt that silently lost
+    // `sourcePath`/`sourceHashes` (§10 item 65c); the reader must refuse a row that
+    // does not carry them rather than showing a receipt nobody can trace.
+    const bytes = new TextEncoder().encode("hello");
+    const receipt = receiptFor(bytes);
+    const { sourcePath: _sourcePath, ...withoutSourcePath } = receipt;
+    expect(() => parseArtifactReceipt(withoutSourcePath, "s1")).toThrow("Invalid artifact source path");
+    expect(() => parseArtifactReceipt({ ...receipt, sourceHashes: [{ path: "src/demo.ts", sha256: "not-a-hash" }] }, "s1")).toThrow("Invalid artifact source hash");
+    const withProvenance = { ...receipt, sourceHashes: [{ path: "src/demo.ts", sha256: sha256("input") }] };
+    expect(parseArtifactReceipt(withProvenance, "s1").sourceHashes).toEqual([{ path: "src/demo.ts", sha256: sha256("input") }]);
   });
 
   test("reconstructs bounded chunks and verifies the immutable hash", async () => {

@@ -157,10 +157,9 @@ describe("ios composer honesty", () => {
     expect(iosComposerAllowsCommand(running, "abort")).toBe(true);
   });
 
-  test("allows compact and model catalog commands without inventing prompt dispatch", () => {
+  test("allows compact without inventing prompt dispatch", () => {
     const offline = honesty({ connection: "offline" });
     expect(iosComposerAllowsCommand(offline, "compact")).toBe(true);
-    expect(iosComposerAllowsCommand(offline, "get_available_models")).toBe(true);
     expect(iosComposerAllowsCommand(offline, "prompt")).toBe(false);
   });
 });

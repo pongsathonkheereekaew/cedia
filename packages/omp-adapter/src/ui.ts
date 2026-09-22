@@ -7,14 +7,26 @@
  * answer into one `extension_ui_response` frame.  It deliberately does not
  * open URLs, render a dialog, execute tools, or create another OMP harness.
  *
- * Wire shapes are copied from OMP v18.1.18 at
- * `packages/coding-agent/src/modes/rpc/rpc-types.ts` (pinned by
- * `upstream-lock.json`).  Keeping the definitions local avoids coupling the
- * adapter to OMP's private packages and lets a host detect malformed/future
- * frames without bringing down the session.
+ * The wire shapes themselves are declared once in `@cedia/protocol` (see
+ * `packages/protocol/src/ui.ts`), which is also what the Mac and phone clients
+ * read, so a broker and a client cannot disagree about which methods exist.
+ * A host still detects malformed/future frames without bringing down the
+ * session: `#parseRequest` answers one explicitly.
  */
 
+import type { CediaUiPresentationRequest, CediaUiRequest, SelectUiRequest, UiInteractiveEvent, UiPresentationEvent } from "../../protocol/src/ui.ts";
 import type { RpcExtensionUIResponse } from "./types.ts";
+
+// The wire shapes live in `@cedia/protocol`.  These four names are how the
+// adapter's own API has always spelled them; each is the protocol declaration.
+export type ExtensionUiInteractiveRequest = CediaUiRequest;
+
+export type ExtensionUiPresentation = CediaUiPresentationRequest;
+
+/** One live interactive request, as this broker emits and records it. */
+export type ExtensionUiInteractiveEvent = UiInteractiveEvent;
+
+export type ExtensionUiPresentationEvent = UiPresentationEvent;
 
 /** A serialisable handle valid only for one broker incarnation. */
 export type ExtensionUiToken = string;
@@ -27,113 +39,6 @@ export const MAX_EXTENSION_UI_DIAGNOSTICS = 100;
 
 /** Default number of distinct interactive upstream ids remembered per broker. */
 export const MAX_EXTENSION_UI_REQUEST_IDS = 10_000;
-
-export type ExtensionUiSelectOptionDetail = Readonly<{
-	description?: string;
-}>;
-
-export interface ExtensionUiSelectRequest {
-	readonly id: string;
-	readonly method: "select";
-	readonly title: string;
-	readonly options: readonly string[];
-	readonly optionDetails?: readonly ExtensionUiSelectOptionDetail[];
-	readonly timeout?: number;
-}
-
-export interface ExtensionUiConfirmRequest {
-	readonly id: string;
-	readonly method: "confirm";
-	readonly title: string;
-	readonly message: string;
-	readonly timeout?: number;
-}
-
-export interface ExtensionUiInputRequest {
-	readonly id: string;
-	readonly method: "input";
-	readonly title: string;
-	readonly placeholder?: string;
-	readonly timeout?: number;
-}
-
-export interface ExtensionUiEditorRequest {
-	readonly id: string;
-	readonly method: "editor";
-	readonly title: string;
-	readonly prefill?: string;
-	readonly promptStyle?: boolean;
-}
-
-/** Interactive requests that require an explicit host answer. */
-export type ExtensionUiInteractiveRequest =
-	| ExtensionUiSelectRequest
-	| ExtensionUiConfirmRequest
-	| ExtensionUiInputRequest
-	| ExtensionUiEditorRequest;
-
-export interface ExtensionUiNotifyPresentation {
-	readonly id: string;
-	readonly method: "notify";
-	readonly message: string;
-	readonly notifyType?: "info" | "warning" | "error";
-}
-
-export interface ExtensionUiStatusPresentation {
-	readonly id: string;
-	readonly method: "setStatus";
-	readonly statusKey: string;
-	readonly statusText?: string;
-}
-
-export interface ExtensionUiWidgetPresentation {
-	readonly id: string;
-	readonly method: "setWidget";
-	readonly widgetKey: string;
-	readonly widgetLines?: readonly string[];
-	readonly widgetPlacement?: "aboveEditor" | "belowEditor";
-}
-
-export interface ExtensionUiTitlePresentation {
-	readonly id: string;
-	readonly method: "setTitle";
-	readonly title: string;
-}
-
-export interface ExtensionUiEditorTextPresentation {
-	readonly id: string;
-	readonly method: "set_editor_text";
-	readonly text: string;
-}
-
-export interface ExtensionUiOpenUrlPresentation {
-	readonly id: string;
-	readonly method: "open_url";
-	readonly url: string;
-	readonly launchUrl?: string;
-	readonly instructions?: string;
-}
-
-/** Presentation events are fire-and-forget; they never receive a response. */
-export type ExtensionUiPresentation =
-	| ExtensionUiNotifyPresentation
-	| ExtensionUiStatusPresentation
-	| ExtensionUiWidgetPresentation
-	| ExtensionUiTitlePresentation
-	| ExtensionUiEditorTextPresentation
-	| ExtensionUiOpenUrlPresentation;
-
-export interface ExtensionUiInteractiveEvent {
-	readonly kind: "interactive";
-	/** Opaque token supplied to `respond`/`cancel`, never the upstream id. */
-	readonly token: ExtensionUiToken;
-	readonly request: ExtensionUiInteractiveRequest;
-}
-
-export interface ExtensionUiPresentationEvent {
-	readonly kind: "presentation";
-	readonly request: ExtensionUiPresentation;
-}
 
 /** Emitted after OMP cancels an outstanding interactive request by target id. */
 export interface ExtensionUiServerCancelEvent {
@@ -543,7 +448,7 @@ export class ExtensionUiBroker {
 					return this.#invalidFrame("select optionDetails must be an array of objects with optional descriptions", frame, id);
 				}
 			}
-			const request: ExtensionUiSelectRequest = {
+			const request: SelectUiRequest = {
 				id,
 				method,
 				title: frame.title,

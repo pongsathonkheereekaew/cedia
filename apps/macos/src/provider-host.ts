@@ -30,7 +30,7 @@ import { fetchGlobalOmpModelSnapshot, fetchOmpModelRoles } from "./omp-catalog.t
 import { currentModelFromOmpState, modelRoleLabel, sessionIdFromUri, setModelRoleRequest } from "./chat-sessions-map.ts";
 import { canAnswer } from "./approval-runtime.ts";
 import { approvalCanSubmit, approvalDisplayStatus } from "./approval-view.ts";
-import type { ArtifactReceipt } from "./artifact-transfer.ts";
+import type { ArtifactReceipt } from "../../../packages/protocol/src/artifacts.ts";
 import { ompSettingsCatalog, SETTINGS_SECTIONS } from "./capability-catalog.ts";
 import { composerAxesFromTask, resolveComposerControls } from "./composer-runtime.ts";
 import { isCediaWorkbenchPalette } from "./cedia-theme.ts";
@@ -183,14 +183,19 @@ export const hostConcern: Partial<CediaTaskViewProviderApi> = {
 					if (!current()) return;
 					const requests = pending.flatMap(item => {
 						const parsed = parseCediaUiRequest(item);
-						if (!parsed) return [];
-						const seen = this.uiSeen.get(parsed.token) ?? Date.now();
-						this.uiSeen.set(parsed.token, seen);
+						if (!parsed.ok) {
+							// A request this surface cannot render is stated, not dropped. The
+							// reducer owns that line and needs the envelope it refused.
+							if (parsed.reason === "unknown-method") this.setState({ type: "ui_request", event: item });
+							return [];
+						}
+						const seen = this.uiSeen.get(parsed.request.token) ?? Date.now();
+						this.uiSeen.set(parsed.request.token, seen);
 						return [{
-							...parsed,
-							sessionId: parsed.sessionId ?? activeSession.id,
-							incarnation: parsed.incarnation ?? activeSession.incarnation,
-							receivedAt: parsed.receivedAt ?? seen,
+							...parsed.request,
+							sessionId: parsed.request.sessionId ?? activeSession.id,
+							incarnation: parsed.request.incarnation ?? activeSession.incarnation,
+							receivedAt: parsed.request.receivedAt ?? seen,
 						}];
 					});
 					for (const token of [...this.uiSeen.keys()]) {

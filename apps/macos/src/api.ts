@@ -1,4 +1,4 @@
-import type { ArtifactReceipt, ArtifactChunk } from "./artifact-transfer.ts";
+import type { ArtifactReceipt, ArtifactChunk } from "../../../packages/protocol/src/artifacts.ts";
 /**
  * HTTP client for the Cedia Mac host.
  *

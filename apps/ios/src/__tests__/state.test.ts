@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EventPage, Json, Project, Session } from "../../../../packages/protocol/src/index.ts";
-import { applyEventPage, applyMobileEvent, createInitialMobileState, isCacheFresh, reduceMobileState } from "../core/state.ts";
+import { applyEventPage, applyMobileEvent, createInitialMobileState, isCacheFresh, parsePendingUiRequest, reduceMobileState } from "../core/state.ts";
 
 const project: Project = { id: "p1", path: "/work/aetheria", name: "Aetheria", pinned: false, archived: false, createdAt: "2026-09-12T00:00:00.000Z" };
 const session: Session = { id: "s1", projectId: project.id, title: "Card pass", cwd: project.path, sessionFile: "/state/s1/session.jsonl", incarnation: "inc-1", status: "running", archived: false, createdAt: "2026-09-12T00:00:00.000Z", updatedAt: "2026-09-12T00:00:00.000Z" };
@@ -89,6 +89,63 @@ describe("mobile transcript projection", () => {
     expect(state.uiRequests[0]).toBe(original);
     state = reduceMobileState(state, { type: "ui_sync", events: [] });
     expect(state.uiRequests).toHaveLength(0);
+  });
+});
+
+describe("mobile pending UI requests", () => {
+  const unsupported = "Cedia cannot show this request: the host sent unsupported method";
+
+  test("round-trips every interactive method the wire can carry", () => {
+    const requests = [
+      { method: "confirm", id: "c1", title: "Allow?", message: "run it" },
+      { method: "select", id: "s1", title: "Pick", options: ["a", "b"], optionDetails: [{ description: "first" }, {}], timeout: 1_000 },
+      { method: "input", id: "i1", title: "Name", placeholder: "type here", timeout: 0 },
+      { method: "editor", id: "e1", title: "Edit", prefill: "draft", promptStyle: true },
+    ] as const;
+    for (const request of requests) {
+      const parsed = parsePendingUiRequest({ kind: "interactive", token: `tok-${request.id}`, request });
+      expect(parsed.ok).toBe(true);
+      expect(parsed.ok && parsed.request.request).toEqual(request);
+      expect(parsed.ok && parsed.request.token).toBe(`tok-${request.id}`);
+    }
+  });
+
+  test("states an unknown method instead of dropping the request", () => {
+    const refusals = [
+      { method: "password", id: "p1", title: "Secret" },
+      { method: "multi_select", id: "m1", title: "Pick", options: ["a", "b"] },
+      { method: "schemaform", id: "sf1", title: "Form" },
+    ];
+    for (const request of refusals) {
+      const envelope = { kind: "interactive", token: `tok-${request.id}`, request };
+      expect(parsePendingUiRequest(envelope)).toEqual({ ok: false, reason: "unknown-method", method: request.method });
+      // The host's live list is authoritative, so a request the Mac renders may
+      // not vanish here: the phone says why it cannot show it.
+      const state = reduceMobileState(createInitialMobileState({ session }), { type: "ui_sync", events: [envelope] });
+      expect(state.uiRequests).toHaveLength(0);
+      expect(state.lastError).toBe(`${unsupported} "${request.method}"; OMP can send select, confirm, input, editor.`);
+    }
+    const live = applyMobileEvent(createInitialMobileState({ session }), event(1, { type: "cedia_ui", event: { kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } } }));
+    expect(live.uiRequests).toHaveLength(0);
+    expect(live.lastError).toBe(`${unsupported} "password"; OMP can send select, confirm, input, editor.`);
+    // A repeated poll of the same violation does not churn the state object.
+    const once = reduceMobileState(createInitialMobileState({ session }), { type: "ui_sync", events: [{ kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } }] });
+    expect(reduceMobileState(once, { type: "ui_sync", events: [{ kind: "interactive", token: "tok-p", request: { method: "password", id: "p1", title: "Secret" } }] })).toEqual(once);
+  });
+
+  test("names a malformed or non-interactive envelope rather than calling it unknown", () => {
+    expect(parsePendingUiRequest({ kind: "presentation", token: "t1", request: { method: "notify", id: "n1", message: "hi" } })).toEqual({ ok: false, reason: "not-interactive" });
+    expect(parsePendingUiRequest({ kind: "interactive", token: "t1", request: { method: "confirm", id: "c1", title: "Allow?" } })).toEqual({ ok: false, reason: "malformed" });
+    expect(parsePendingUiRequest({ kind: "interactive", token: "t1", request: { method: "select", id: "s1", title: "Pick", options: ["a", "b"], optionDetails: [{ description: "first" }] } })).toEqual({ ok: false, reason: "malformed" });
+  });
+
+  test("keeps the select descriptions the sheet renders, and drops fields the wire cannot carry", () => {
+    const parsed = parsePendingUiRequest({
+      kind: "interactive",
+      token: "t1",
+      request: { method: "select", id: "s1", title: "Pick", options: ["a"], optionDetails: [{ description: "first", label: "Alpha" }] },
+    });
+    expect(parsed.ok && parsed.request.request).toEqual({ method: "select", id: "s1", title: "Pick", options: ["a"], optionDetails: [{ description: "first" }] });
   });
 });
 

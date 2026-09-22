@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import type { Json } from "../../../../packages/protocol/src/index.ts";
-import { CediaApi, CediaHostError, loginProvidersFromCommand } from "../core/api.ts";
-import type { ArtifactReceipt } from "../core/artifacts.ts";
+import { CediaApi, CediaHostError } from "../core/api.ts";
+import type { ArtifactReceipt } from "../../../../packages/protocol/src/artifacts.ts";
 import type { ClientTransport } from "../core/transport.ts";
-import type { Command, CommandRequest } from "../../../../packages/protocol/src/index.ts";
+import type { CommandRequest } from "../../../../packages/protocol/src/index.ts";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -40,6 +40,18 @@ describe("mobile host API", () => {
     };
     const api = new CediaApi({ transport, digestSha256: async value => sha256(value) });
     await expect(api.getEvents("s1")).rejects.toThrow("failed integrity verification");
+  });
+
+  test("keeps the host's journal-retention marker on the page it returns", async () => {
+    const transport: ClientTransport = {
+      request: async () => ({ status: 200, body: { events: [], cursor: 42, hasMore: false, firstSequence: 40, historyTruncated: true } }),
+    };
+    const page = await new CediaApi({ transport }).getEvents("s1");
+    // Retention is a protocol fact now (§10 item 65c), not a host-local extra: a phone
+    // that reattaches must be able to read where this task's journal really starts
+    // instead of reading a short event list as the whole history.
+    expect(page.firstSequence).toBe(40);
+    expect(page.historyTruncated).toBe(true);
   });
 
   test("hydrates generic command responses behind the relay response reference", async () => {
@@ -101,25 +113,6 @@ describe("mobile host API", () => {
     const api = new CediaApi({ transport });
     await expect(api.getReview("s1")).resolves.toEqual({ available: true, branch: "main", diff: "", untracked: [] });
     expect(paths).toEqual(["GET /v1/sessions/s1/review"]);
-  });
-
-  test("reads login providers from the command envelope without opening a URL", () => {
-    const command = {
-      sessionId: "s1",
-      commandId: "cmd-1",
-      deviceId: "phone",
-      incarnation: "inc-1",
-      kind: "get_login_providers",
-      payload: {},
-      payloadHash: "hash",
-      status: "completed",
-      createdAt: "now",
-      updatedAt: "now",
-      result: { data: { providers: [{ id: "openai", name: "OpenAI", authenticated: true }, { name: "No id" }] } },
-    } as unknown as Command;
-    expect(loginProvidersFromCommand(command)).toEqual([
-      { id: "openai", name: "OpenAI", available: true, authenticated: true },
-    ]);
   });
 
   test("preserves the host's refusal code, status, and message", async () => {

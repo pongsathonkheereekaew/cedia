@@ -14,6 +14,8 @@ import type {
 	Session,
 	SessionEvent,
 } from "../../../packages/protocol/src/index.ts";
+import { isUiInteractiveMethod, parseUiSelectOptionDetails, unsupportedUiMethodMessage, type PendingUiRequest, type UiRequestParseResult } from "../../../packages/protocol/src/ui.ts";
+import type { LoginProviderOption } from "../../../packages/protocol/src/models.ts";
 import { draftViewKey } from "./workbench-mode.ts";
 import { createWorkPanelState, reduceWorkPanel, type WorkPanelAction, type WorkPanelState } from "./work-panel.ts";
 
@@ -44,12 +46,12 @@ export interface SlashCommandOption {
 	readonly source?: string;
 }
 
-export interface LoginProviderOption {
-	readonly id: string;
-	readonly name: string;
-	readonly available?: boolean;
-	readonly authenticated?: boolean;
-}
+/**
+ * The login picker's provider row is the protocol's projection of the
+ * provider-auth row (§10 item 65c), so the reducer, the menus and the phone
+ * cannot disagree about which provider is signed in.
+ */
+export type { LoginProviderOption };
 
 export interface UiPresentation {
 	readonly id: string;
@@ -87,95 +89,6 @@ export interface PendingCommand {
 	readonly error?: string;
 	readonly createdAt: number;
 	readonly updatedAt: number;
-}
-
-export interface ConfirmUiRequest {
-	readonly method: "confirm";
-	readonly id: string;
-	readonly title: string;
-	readonly message: string;
-	readonly timeout?: number;
-	readonly scopes?: readonly string[];
-	readonly dangerous?: boolean;
-}
-
-export interface SelectUiRequest {
-	readonly method: "select";
-	readonly id: string;
-	readonly title: string;
-	readonly options: readonly string[];
-	readonly optionDetails?: readonly { readonly value?: string; readonly label?: string; readonly description?: string }[];
-	readonly timeout?: number;
-	readonly multiple?: boolean;
-	readonly required?: boolean;
-}
-
-export interface InputUiRequest {
-	readonly method: "input";
-	readonly id: string;
-	readonly title: string;
-	readonly placeholder?: string;
-	readonly timeout?: number;
-	readonly secret?: boolean;
-	readonly required?: boolean;
-}
-
-export interface EditorUiRequest {
-	readonly method: "editor";
-	readonly id: string;
-	readonly title: string;
-	readonly prefill?: string;
-	readonly promptStyle?: boolean;
-	readonly required?: boolean;
-}
-
-export interface PasswordUiRequest {
-	readonly method: "password";
-	readonly id: string;
-	readonly title: string;
-	readonly placeholder?: string;
-	readonly timeout?: number;
-	readonly required?: boolean;
-}
-
-export interface MultiSelectUiRequest {
-	readonly method: "multi_select";
-	readonly id: string;
-	readonly title: string;
-	readonly options: readonly string[];
-	readonly optionDetails?: readonly { readonly value?: string; readonly label?: string; readonly description?: string }[];
-	readonly timeout?: number;
-	readonly required?: boolean;
-}
-
-export interface SchemaFormUiRequest {
-	readonly method: "schemaform";
-	readonly id: string;
-	readonly title: string;
-	readonly message?: string;
-	readonly timeout?: number;
-}
-
-export type CediaUiRequest =
-	| ConfirmUiRequest
-	| SelectUiRequest
-	| InputUiRequest
-	| EditorUiRequest
-	| PasswordUiRequest
-	| MultiSelectUiRequest
-	| SchemaFormUiRequest;
-
-export interface PendingUiRequest {
-	readonly kind: "interactive";
-	readonly token: string;
-	readonly request: CediaUiRequest;
-	readonly sessionId?: string;
-	readonly incarnation?: string;
-	readonly cwd?: string;
-	readonly tool?: string;
-	readonly target?: string;
-	readonly status?: "pending" | "stale" | "timeout" | "responded_elsewhere" | "cancelled" | "approved" | "denied";
-	readonly receivedAt?: number;
 }
 
 export interface TaskState {
@@ -642,10 +555,6 @@ function optionalRequestText(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function stringList(value: unknown): value is readonly string[] {
-	return Array.isArray(value) && value.length > 0 && value.every(item => typeof item === "string" && item.trim().length > 0);
-}
-
 function uiRequestExtras(value: Record<string, unknown>, request: Record<string, unknown>): Pick<PendingUiRequest, "sessionId" | "incarnation" | "cwd" | "tool" | "target" | "status"> {
 	const status = request.status ?? value.status;
 	const allowed = status === "stale" || status === "timeout" || status === "responded_elsewhere" || status === "cancelled" || status === "approved" || status === "denied" || status === "pending";
@@ -659,67 +568,64 @@ function uiRequestExtras(value: Record<string, unknown>, request: Record<string,
 	};
 }
 
-function parseOptionDetails(value: unknown, optionCount: number): readonly { readonly value?: string; readonly label?: string; readonly description?: string }[] | undefined {
-	if (value === undefined) return undefined;
-	if (!Array.isArray(value) || value.length !== optionCount) return undefined;
-	const rows: { value?: string; label?: string; description?: string }[] = [];
-	for (const item of value) {
-		if (!isRecord(item)) return undefined;
-		if (item.value !== undefined && typeof item.value !== "string") return undefined;
-		if (item.label !== undefined && typeof item.label !== "string") return undefined;
-		if (item.description !== undefined && typeof item.description !== "string") return undefined;
-		rows.push({
-			...(typeof item.value === "string" ? { value: item.value } : {}),
-			...(typeof item.label === "string" ? { label: item.label } : {}),
-			...(typeof item.description === "string" ? { description: item.description } : {}),
-		});
+function uiRequestFromEnvelope(value: unknown): UiRequestParseResult {
+	// The method decides first, against the shared protocol union: a request the
+	// wire cannot carry is refused by name instead of being called malformed.
+	if (!isRecord(value) || value.kind !== "interactive" || !nonEmptyString(value.token) || !isRecord(value.request)) {
+		return { ok: false, reason: "not-interactive" };
 	}
-	return rows;
-}
-
-function optionalRequired(request: Record<string, unknown>): { required?: true } {
-	return request.required === true ? { required: true } : {};
-}
-
-function uiRequestFromEnvelope(value: unknown): PendingUiRequest | undefined {
-	if (!isRecord(value) || value.kind !== "interactive" || !nonEmptyString(value.token) || !isRecord(value.request)) return undefined;
 	const request = value.request;
-	if (!nonEmptyString(request.id) || !nonEmptyString(request.title) || !finiteTimeout(request.timeout)) return undefined;
+	const method = request.method;
+	if (typeof method !== "string") return { ok: false, reason: "malformed" };
+	if (!isUiInteractiveMethod(method)) return { ok: false, reason: "unknown-method", method };
+	if (!nonEmptyString(request.id) || !nonEmptyString(request.title) || !finiteTimeout(request.timeout)) {
+		return { ok: false, reason: "malformed" };
+	}
 	const extras = uiRequestExtras(value, request);
-	switch (request.method) {
+	switch (method) {
 		case "confirm":
-			return typeof request.message === "string" ? { kind: "interactive", token: value.token, request: { method: "confirm", id: request.id, title: request.title, message: request.message, ...(request.timeout === undefined ? {} : { timeout: request.timeout }), ...(stringList(request.scopes) ? { scopes: request.scopes } : {}), ...(typeof request.dangerous === "boolean" ? { dangerous: request.dangerous } : {}) }, ...extras } : undefined;
+			return typeof request.message === "string"
+				? { ok: true, request: { kind: "interactive", token: value.token, request: { method, id: request.id, title: request.title, message: request.message, ...(request.timeout === undefined ? {} : { timeout: request.timeout }) }, ...extras } }
+				: { ok: false, reason: "malformed" };
 		case "select": {
-			if (!Array.isArray(request.options) || request.options.length === 0 || !request.options.every(nonEmptyString)) return undefined;
-			const optionDetails = parseOptionDetails(request.optionDetails, request.options.length);
-			if (request.optionDetails !== undefined && optionDetails === undefined) return undefined;
-			return { kind: "interactive", token: value.token, request: { method: "select", id: request.id, title: request.title, options: [...request.options], ...(optionDetails === undefined ? {} : { optionDetails }), ...(request.timeout === undefined ? {} : { timeout: request.timeout }), ...(request.multiple === true ? { multiple: true } : {}), ...optionalRequired(request) }, ...extras };
-		}
-		case "multi_select": {
-			if (!Array.isArray(request.options) || request.options.length === 0 || !request.options.every(nonEmptyString)) return undefined;
-			const optionDetails = parseOptionDetails(request.optionDetails, request.options.length);
-			if (request.optionDetails !== undefined && optionDetails === undefined) return undefined;
-			return { kind: "interactive", token: value.token, request: { method: "multi_select", id: request.id, title: request.title, options: [...request.options], ...(optionDetails === undefined ? {} : { optionDetails }), ...(request.timeout === undefined ? {} : { timeout: request.timeout }), ...optionalRequired(request) }, ...extras };
+			if (!Array.isArray(request.options) || request.options.length === 0 || !request.options.every(nonEmptyString)) {
+				return { ok: false, reason: "malformed" };
+			}
+			const optionDetails = parseUiSelectOptionDetails(request.optionDetails, request.options.length);
+			if (request.optionDetails !== undefined && optionDetails === undefined) return { ok: false, reason: "malformed" };
+			return { ok: true, request: { kind: "interactive", token: value.token, request: { method, id: request.id, title: request.title, options: [...request.options], ...(optionDetails === undefined ? {} : { optionDetails }), ...(request.timeout === undefined ? {} : { timeout: request.timeout }) }, ...extras } };
 		}
 		case "input":
-			return (request.placeholder === undefined || typeof request.placeholder === "string") ? { kind: "interactive", token: value.token, request: { method: "input", id: request.id, title: request.title, ...(typeof request.placeholder === "string" ? { placeholder: request.placeholder } : {}), ...(request.timeout === undefined ? {} : { timeout: request.timeout }), ...(request.secret === true ? { secret: true } : {}), ...optionalRequired(request) }, ...extras } : undefined;
-		case "password":
-			return (request.placeholder === undefined || typeof request.placeholder === "string") ? { kind: "interactive", token: value.token, request: { method: "password", id: request.id, title: request.title, ...(typeof request.placeholder === "string" ? { placeholder: request.placeholder } : {}), ...(request.timeout === undefined ? {} : { timeout: request.timeout }), ...optionalRequired(request) }, ...extras } : undefined;
+			return request.placeholder === undefined || typeof request.placeholder === "string"
+				? { ok: true, request: { kind: "interactive", token: value.token, request: { method, id: request.id, title: request.title, ...(typeof request.placeholder === "string" ? { placeholder: request.placeholder } : {}), ...(request.timeout === undefined ? {} : { timeout: request.timeout }) }, ...extras } }
+				: { ok: false, reason: "malformed" };
 		case "editor":
-			return (request.prefill === undefined || typeof request.prefill === "string") && (request.promptStyle === undefined || typeof request.promptStyle === "boolean") ? { kind: "interactive", token: value.token, request: { method: "editor", id: request.id, title: request.title, ...(typeof request.prefill === "string" ? { prefill: request.prefill } : {}), ...(typeof request.promptStyle === "boolean" ? { promptStyle: request.promptStyle } : {}), ...optionalRequired(request) }, ...extras } : undefined;
-		case "schemaform":
-			return { kind: "interactive", token: value.token, request: { method: "schemaform", id: request.id, title: request.title, ...(typeof request.message === "string" ? { message: request.message } : {}), ...(request.timeout === undefined ? {} : { timeout: request.timeout }) }, ...extras };
-		default:
-			return undefined;
+			return (request.prefill === undefined || typeof request.prefill === "string") && (request.promptStyle === undefined || typeof request.promptStyle === "boolean")
+				? { ok: true, request: { kind: "interactive", token: value.token, request: { method, id: request.id, title: request.title, ...(typeof request.prefill === "string" ? { prefill: request.prefill } : {}), ...(typeof request.promptStyle === "boolean" ? { promptStyle: request.promptStyle } : {}) }, ...extras } }
+				: { ok: false, reason: "malformed" };
 	}
 }
 
-export function parseCediaUiRequest(value: unknown): PendingUiRequest | undefined {
+/**
+ * Parse one pending-UI envelope.  A request is either represented completely or
+ * refused with the reason, so an unknown method is stated rather than dropped.
+ */
+export function parseCediaUiRequest(value: unknown): UiRequestParseResult {
 	return uiRequestFromEnvelope(value);
 }
 
 export function isCediaUiRequest(value: unknown): value is PendingUiRequest {
-	return uiRequestFromEnvelope(value) !== undefined;
+	return uiRequestFromEnvelope(value).ok;
+}
+
+/**
+ * State one request whose method OMP cannot send.  The Mac keeps the reason as
+ * its single error line rather than dropping the request; the same violation
+ * repeating (a poll of the host's pending list) leaves the state untouched.
+ */
+function stateStatingUnknownUiMethod(state: TaskState, method: string): TaskState {
+	const lastError = unsupportedUiMethodMessage(method);
+	return state.lastError === lastError ? state : { ...state, lastError };
 }
 
 function presentationFromEnvelope(value: unknown): UiPresentation | undefined {
@@ -823,8 +729,12 @@ export function applyFrame(state: TaskState, frameValue: Json, sequence?: number
 		return next;
 	}
 	if (type === "cedia_ui" && isRecord(frame.event)) {
-		const ui = uiRequestFromEnvelope(frame.event);
-		if (ui && !next.uiRequests.some(request => request.token === ui.token)) next = { ...next, uiRequests: [...next.uiRequests, ui] };
+		const parsed = uiRequestFromEnvelope(frame.event);
+		if (parsed.ok && !next.uiRequests.some(request => request.token === parsed.request.token)) {
+			next = { ...next, uiRequests: [...next.uiRequests, parsed.request] };
+		} else if (!parsed.ok && parsed.reason === "unknown-method") {
+			next = stateStatingUnknownUiMethod(next, parsed.method);
+		}
 		const presentation = presentationFromEnvelope(frame.event);
 		if (presentation) {
 			const presentations = [...next.presentations.filter(item => item.id !== presentation.id), presentation].slice(-20);
@@ -981,12 +891,13 @@ export function reduceTaskState(state: TaskState, action: TaskAction): TaskState
 			return { ...state, pendingCommands: { ...state.pendingCommands, [action.commandId]: { ...prior, status: action.status, ...(action.error === undefined ? {} : { error: action.error }), updatedAt: Date.now() } } };
 		}
 		case "ui_request": {
-			const request = uiRequestFromEnvelope(action.event);
-			if (!request || state.uiRequests.some(item => item.token === request.token)) return state;
+			const parsed = uiRequestFromEnvelope(action.event);
+			if (!parsed.ok) return parsed.reason === "unknown-method" ? stateStatingUnknownUiMethod(state, parsed.method) : state;
+			if (state.uiRequests.some(item => item.token === parsed.request.token)) return state;
 			return {
 				...state,
 				uiRequests: [...state.uiRequests, {
-					...request,
+					...parsed.request,
 					sessionId: state.session?.id,
 					incarnation: state.session?.incarnation,
 				}],

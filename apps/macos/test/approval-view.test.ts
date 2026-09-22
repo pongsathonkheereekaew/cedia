@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-	APPROVAL_MULTISELECT_REASON,
 	APPROVAL_OFFLINE_LINE,
 	APPROVAL_REQUIRED_REASON,
 	approvalCanSubmit,
@@ -52,12 +51,16 @@ describe("approval view", () => {
 		expect(approvalCanSubmit("pending", "offline")).toBe(false);
 	});
 
-	it("classifies password, multi-select, and unsupported schema without inventing Always allow", () => {
-		expect(approvalFieldKind("password")).toBe("password");
-		expect(approvalFieldKind("input", { secret: true })).toBe("password");
-		expect(approvalFieldKind("select", { multiple: true })).toBe("multi_select");
-		expect(approvalFieldKind("schemaform")).toBe("schemaform");
-		expect(approvalFieldKind("widget")).toBe("unsupported");
+	it("classifies exactly the interactive methods OMP can send", () => {
+		expect(approvalFieldKind("confirm")).toBe("confirm");
+		expect(approvalFieldKind("select")).toBe("select");
+		expect(approvalFieldKind("input")).toBe("input");
+		expect(approvalFieldKind("editor")).toBe("editor");
+		// A method outside the wire union has no control; it is never guessed at.
+		expect(approvalFieldKind("password")).toBe("unsupported");
+		expect(approvalFieldKind("multi_select")).toBe("unsupported");
+		expect(approvalFieldKind("schemaform")).toBe("unsupported");
+		expect(approvalFieldKind("toString")).toBe("unsupported");
 		expect(approvalDefaultFocus(true)).toBe("cancel");
 		expect(approvalDefaultFocus(false)).toBe("submit");
 		expect(approvalNeedsExpand("short")).toBe(false);
@@ -65,21 +68,21 @@ describe("approval view", () => {
 	});
 
 	it("aligns option details by index without inventing extra options", () => {
-		expect(approvalOptionRows(undefined, [{ value: "ghost", label: "Ghost" }])).toEqual([]);
+		expect(approvalOptionRows(undefined, [{ description: "Ghost" }])).toEqual([]);
 		expect(approvalOptionRows(["a", "b"], [{ description: "First" }, { description: "Second" }])).toEqual([
 			{ value: "a", label: "a", description: "First" },
 			{ value: "b", label: "b", description: "Second" },
 		]);
 		expect(
 			approvalOptionRows(["keep", "", "c"], [
-				{ value: "alpha", label: "Alpha", description: "A" },
 				{ description: "skipped empty" },
-				{ value: "", label: "Gamma" },
-				{ value: "extra", label: "Extra" },
+				{ description: "not aligned" },
+				{ description: "Gamma" },
+				{ description: "extra" },
 			]),
 		).toEqual([
-			{ value: "alpha", label: "Alpha", description: "A" },
-			{ value: "c", label: "Gamma" },
+			{ value: "keep", label: "keep", description: "skipped empty" },
+			{ value: "c", label: "c", description: "Gamma" },
 		]);
 	});
 
@@ -105,16 +108,11 @@ describe("approval view", () => {
 		expect(approvalSubmitBlockedReason({ method: "confirm", required: true, value: "" })).toBeUndefined();
 		expect(approvalSubmitBlockedReason({ method: "input", required: true, value: true })).toBeUndefined();
 		expect(approvalSubmitBlockedReason({ method: "input", required: true, value: "   " })).toBe(APPROVAL_REQUIRED_REASON);
-		expect(approvalSubmitBlockedReason({ method: "password", required: true, value: "" })).toBe(APPROVAL_REQUIRED_REASON);
 		expect(approvalSubmitBlockedReason({ method: "editor", required: true })).toBe(APPROVAL_REQUIRED_REASON);
 		expect(approvalSubmitBlockedReason({ method: "input", required: true, value: "keep spaces" })).toBeUndefined();
 		expect(approvalSubmitBlockedReason({ method: "select", required: true, value: "" })).toBe(APPROVAL_REQUIRED_REASON);
-		expect(approvalSubmitBlockedReason({ method: "select", required: true, value: [] })).toBe(APPROVAL_REQUIRED_REASON);
-		expect(approvalSubmitBlockedReason({ method: "multi_select", required: true, value: [] })).toBe(APPROVAL_MULTISELECT_REASON);
-		expect(approvalSubmitBlockedReason({ method: "multi_select", required: true, value: ["a"] })).toBeUndefined();
-		expect(approvalSubmitBlockedReason({ method: "multi_select", required: false, value: [] })).toBeUndefined();
-		expect(approvalSubmitBlockedReason({ method: "select", multiple: true, required: true, value: ["a"] })).toBeUndefined();
-		expect(approvalSubmitBlockedReason({ method: "select", multiple: true, required: true, value: [] })).toBe(APPROVAL_MULTISELECT_REASON);
+		expect(approvalSubmitBlockedReason({ method: "select", required: true, value: "a" })).toBeUndefined();
+		expect(approvalSubmitBlockedReason({ method: "select", required: false, value: "" })).toBeUndefined();
 		expect(approvalFocusTarget({ invalid: true, dangerous: true })).toBe("control");
 		expect(approvalFocusTarget({ dangerous: true })).toBe("cancel");
 		expect(approvalFocusTarget({})).toBe("submit");

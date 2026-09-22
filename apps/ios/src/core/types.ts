@@ -9,9 +9,23 @@ import type {
   UiResponseRequest,
 } from "../../../../packages/protocol/src/index.ts";
 import type { VirtualTerminalSnapshot } from "./virtual-terminal.ts";
+import type { LoginProviderOption } from "../../../../packages/protocol/src/models.ts";
+import type { CediaUiRequest, PendingUiRequest, UiRequestParseResult } from "../../../../packages/protocol/src/ui.ts";
 
 export type { Command, CommandRequest, EventPage, Json, Project, Session, SessionEvent, UiResponseRequest };
 export type { VirtualTerminalIdentity, VirtualTerminalOutput, VirtualTerminalSnapshot } from "./virtual-terminal.ts";
+/**
+ * The interactive request union and the pending-request envelope are declared
+ * once, in `@cedia/protocol`: the phone renders exactly the methods the Mac
+ * renders, and a method outside the union is refused with a reason on both.
+ */
+export type { CediaUiRequest, PendingUiRequest, UiRequestParseResult };
+/**
+ * The login picker's provider row is the protocol's projection of the
+ * provider-auth row (§10 item 65c), so the phone and the Mac menus cannot
+ * disagree about which provider is signed in.
+ */
+export type { LoginProviderOption };
 
 export type ConnectionState = "offline" | "connecting" | "connected" | "running" | "reconnecting" | "unknown";
 
@@ -43,13 +57,6 @@ export interface ModelOption {
   readonly [key: string]: unknown;
 }
 
-export interface LoginProviderOption {
-  readonly id: string;
-  readonly name: string;
-  readonly available?: boolean;
-  readonly authenticated?: boolean;
-}
-
 /** Non-interactive OMP UI notices. Login URLs stay here until the user opens them. */
 export interface UiPresentation {
   readonly id: string;
@@ -74,54 +81,6 @@ export interface PendingCommand {
   readonly error?: string;
   readonly createdAt: number;
   readonly updatedAt: number;
-}
-
-export interface ConfirmUiRequest {
-  readonly method: "confirm";
-  readonly id: string;
-  readonly title: string;
-  readonly message: string;
-  readonly timeout?: number;
-}
-
-export interface SelectUiRequest {
-  readonly method: "select";
-  readonly id: string;
-  readonly title: string;
-  readonly options: readonly string[];
-  readonly optionDetails?: readonly { readonly description?: string }[];
-  readonly timeout?: number;
-}
-
-export interface InputUiRequest {
-  readonly method: "input";
-  readonly id: string;
-  readonly title: string;
-  readonly placeholder?: string;
-  readonly timeout?: number;
-}
-
-export interface EditorUiRequest {
-  readonly method: "editor";
-  readonly id: string;
-  readonly title: string;
-  readonly prefill?: string;
-  readonly promptStyle?: boolean;
-}
-
-export type CediaUiRequest = ConfirmUiRequest | SelectUiRequest | InputUiRequest | EditorUiRequest;
-
-export interface PendingUiRequest {
-  readonly kind: "interactive";
-  readonly token: string;
-  readonly request: CediaUiRequest;
-  readonly sessionId?: string;
-  readonly incarnation?: string;
-  readonly cwd?: string;
-  readonly tool?: string;
-  readonly target?: string;
-  readonly status?: "pending" | "stale" | "timeout" | "responded_elsewhere" | "cancelled" | "approved" | "denied";
-  readonly receivedAt?: number;
 }
 
 export interface CachedTaskSnapshot {

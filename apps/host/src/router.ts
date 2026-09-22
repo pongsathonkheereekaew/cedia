@@ -16,6 +16,8 @@ import { ResponseChunks } from "./response-chunks.ts";
 
 export interface HostRequest { method: string; path: string; token?: string; body?: unknown }
 export interface HostResponse { status: number; body: unknown }
+/** The router's published shape: one request in, one response out. */
+export type HostRouter = (request: HostRequest) => Promise<HostResponse>;
 export interface VoiceTranscriptionInput {
   provider: string;
   cwd: string;
@@ -63,7 +65,7 @@ function gitFailure(error: unknown, runtimePaths: readonly string[]): HostError 
 }
 
 /** Identical authenticated application router for loopback HTTP and encrypted relay. */
-export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService } = {}) {
+export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService } = {}): HostRouter {
   const responses = new ResponseChunks();
   return async (request: HostRequest): Promise<HostResponse> => {
     try {
@@ -162,8 +164,14 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
           result = host.store.updateSession(id, b);
         } else if (action === "events" && parts.length === 6 && parts[5] === "frame" && method === "GET") {
           const sequence = integer(parts[4]!, 0);
-          const event = host.store.readEvents(id, sequence - 1, 1).events[0];
-          if (!event || event.sequence !== sequence) throw new HostError("not_found", "Event not found", 404);
+          const page = host.store.readEvents(id, sequence - 1, 1);
+          const event = page.events[0];
+          if (!event || event.sequence !== sequence) {
+            // Retention dropped it, or it never existed; a client can act on the
+            // difference, and a bare 404 leaves a fork hydration guessing.
+            if (page.firstSequence > sequence) throw new HostError("history_truncated", "That event was dropped by journal retention", 404);
+            throw new HostError("not_found", "Event not found", 404);
+          }
           const text = JSON.stringify(event.frame); const offset = integer(url.searchParams.get("offset"), 0);
           result = { sequence, offset, text: text.slice(offset, offset + 24_000), length: text.length, sha256: createHash("sha256").update(text).digest("hex") };
         } else if (action === "artifacts" && parts.length === 5 && method === "GET" && extras.artifacts) result = extras.artifacts.read(id, parts[4]!, integer(url.searchParams.get("offset"), 0));
@@ -198,7 +206,10 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
             if (events.length && bytes + size > 128_000) break;
             events.push(projected); bytes += size;
           }
-          result = { events, cursor: events.at(-1)?.sequence ?? after, hasMore: page.hasMore || events.length < page.events.length };
+          // `firstSequence`/`historyTruncated` are the retention half of this page: a
+          // client that reattaches at `after: 0` is told where the journal starts now
+          // instead of reading a short page as the whole task.
+          result = { events, cursor: events.at(-1)?.sequence ?? after, hasMore: page.hasMore || events.length < page.events.length, firstSequence: page.firstSequence, historyTruncated: page.historyTruncated };
         }
         else if (action === "commands" && method === "GET") result = host.store.listCommands(id);
         else if (action === "commands" && method === "POST") {

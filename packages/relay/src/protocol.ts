@@ -7,7 +7,7 @@
  */
 
 import { importPublicKey } from "./crypto.ts";
-import { CEDIA_PROTOCOL_VERSION } from "../../protocol/src/index.ts";
+import { CEDIA_PROTOCOL_VERSION, type Json } from "../../protocol/src/index.ts";
 
 /** Version of the Cedia request/response envelope (shared with host HTTP). */
 export const CEDIA_RELAY_PROTOCOL_VERSION = CEDIA_PROTOCOL_VERSION;
@@ -17,14 +17,6 @@ export const MAX_RELAY_PAYLOAD_BYTES = 256 * 1024;
 export const DEFAULT_RELAY_REQUEST_TIMEOUT_MS = 30_000;
 export const DEFAULT_RELAY_MAX_PENDING_REQUESTS = 64;
 export const DEFAULT_RELAY_MAX_REQUEST_IDS = 4_096;
-
-export type CediaRelayJson =
-	| null
-	| boolean
-	| number
-	| string
-	| CediaRelayJson[]
-	| { [key: string]: CediaRelayJson };
 
 export interface CediaRelayPairingOffer {
 	v: typeof PASEO_RELAY_PROTOCOL_VERSION;
@@ -54,7 +46,7 @@ export interface CediaRelayRequest {
 	method: string;
 	path: string;
 	token: string;
-	body?: CediaRelayJson;
+	body?: Json;
 }
 
 export interface CediaRelayResponse {
@@ -63,7 +55,7 @@ export interface CediaRelayResponse {
 	id: string;
 	epoch: number;
 	status: number;
-	body: CediaRelayJson;
+	body: Json;
 }
 
 export type CediaRelayMessage = CediaRelayRequest | CediaRelayResponse;
@@ -72,12 +64,12 @@ export interface CediaRelayHandlerRequest {
 	method: string;
 	path: string;
 	token: string;
-	body?: CediaRelayJson;
+	body?: Json;
 }
 
 export interface CediaRelayHandlerResponse {
 	status: number;
-	body: CediaRelayJson;
+	body: Json;
 }
 
 export class CediaRelayProtocolError extends Error {
@@ -102,7 +94,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isJson(value: unknown, seen = new WeakSet<object>()): value is CediaRelayJson {
+function isJson(value: unknown, seen = new WeakSet<object>()): value is Json {
 	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
 	if (typeof value === "number") return Number.isFinite(value);
 	if (typeof value !== "object") return false;
@@ -199,7 +191,7 @@ function requireToken(value: unknown): string {
 	return requireString(value, "relay request token", 512);
 }
 
-function requireBody(value: unknown): CediaRelayJson {
+function requireBody(value: unknown): Json {
 	if (!isJson(value)) throw new CediaRelayProtocolError("relay request body must be JSON");
 	return value;
 }
@@ -262,7 +254,7 @@ export function createCediaRelayRequest(input: {
 	method: string;
 	path: string;
 	token: string;
-	body?: CediaRelayJson;
+	body?: Json;
 }): CediaRelayRequest {
 	const value: CediaRelayRequest = {
 		protocolVersion: CEDIA_RELAY_PROTOCOL_VERSION,
@@ -282,7 +274,7 @@ export function createCediaRelayResponse(input: {
 	id: string;
 	epoch: number;
 	status: number;
-	body: CediaRelayJson;
+	body: Json;
 }): CediaRelayResponse {
 	const value: CediaRelayResponse = {
 		protocolVersion: CEDIA_RELAY_PROTOCOL_VERSION,

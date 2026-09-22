@@ -6,7 +6,7 @@ import type { HostDescriptor } from "../../../packages/protocol/src/index.ts";
 import { DeviceAuth } from "./auth.ts";
 import { CediaHost, type HostOptions } from "./service.ts";
 import { DurableStore } from "./store.ts";
-import { createRouter } from "./router.ts";
+import { createRouter, type HostRouter } from "./router.ts";
 import { createHostGit, type HostGitService } from "./git.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { RemoteConnection } from "./remote.ts";
@@ -21,7 +21,7 @@ import { workspaceJudgeFromEnv } from "./workspace-mode.ts";
 export interface StartedHostServer {
   readonly host: CediaHost;
   readonly auth: DeviceAuth;
-  readonly router: ReturnType<typeof createRouter>;
+  readonly router: HostRouter;
   readonly descriptor: HostDescriptor;
   readonly editors: EditorConnections;
   stats(): { lastRequestAt: number; runningSessions: number; remotePaired: boolean };

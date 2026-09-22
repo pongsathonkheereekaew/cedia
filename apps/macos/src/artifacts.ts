@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 import type { CediaHostClient } from "./api.ts";
-import { downloadArtifact, type ArtifactReceipt } from "./artifact-transfer.ts";
+import { downloadArtifact } from "./artifact-transfer.ts";
+import type { ArtifactReceipt } from "../../../packages/protocol/src/artifacts.ts";
 export async function showArtifacts(client: CediaHostClient, sessionId: string, cacheDirectory: string): Promise<void> {
   const receipts = await client.listArtifacts(sessionId);
   const picked = await vscode.window.showQuickPick([{ label: "Capture a file…", receipt: undefined as ArtifactReceipt | undefined }, ...receipts.map(receipt => ({ label: receipt.name, description: `${receipt.size.toLocaleString()} bytes · ${receipt.sha256.slice(0, 12)}`, receipt }))], { title: "Task artifacts" });

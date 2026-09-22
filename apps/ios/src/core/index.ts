@@ -15,6 +15,7 @@ export * from "./pairing.ts";
 export * from "./relay.ts";
 export * from "./virtual-terminal.ts";
 export * from "./artifacts.ts";
+export type { ArtifactChunk, ArtifactReceipt, ArtifactSourceHash } from "../../../../packages/protocol/src/artifacts.ts";
 export * from "./product-prefs.ts";
 export * from "./task-header.ts";
 export * from "./dynamic-type.ts";

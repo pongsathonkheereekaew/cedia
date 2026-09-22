@@ -2,11 +2,11 @@ import {
   CediaRelayClient,
   validateCediaRelayPairingOffer,
   type CediaRelayClientOptions,
-  type CediaRelayJson,
   type CediaRelayPairingOffer,
   type CediaRelaySocket,
   type CediaRelayWebSocketFactory,
 } from "../../../../packages/relay/src/index.ts";
+import type { Json } from "../../../../packages/protocol/src/index.ts";
 import type { ClientTransport, TransportMethod } from "./transport.ts";
 
 /** Options for wiring the real encrypted relay client into the mobile API seam. */
@@ -54,7 +54,7 @@ export function createMobileRelayTransport(options: MobileRelayTransportOptions)
       return client.request({
         method,
         path,
-        ...(body === undefined ? {} : { body: body as CediaRelayJson }),
+        ...(body === undefined ? {} : { body: body as Json }),
       });
     },
   };

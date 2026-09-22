@@ -2,4 +2,5 @@ export { CediaHostClient, HostDescriptorError, HostHttpError, HostRequestTimeout
 export type { CediaHostClientOptions, FetchImplementation, HostDescriptorReadOptions } from "./api.ts";
 export type { NativeAction } from "./messages.ts";
 export { applyEvent, applyEventPage, applyFrame, createInitialTaskState, isCediaUiRequest, parseCediaUiRequest, reduceTaskState } from "./state.ts";
-export type { CediaEvent, CediaUiRequest, ConnectionStatus, ModelOption, PendingCommand, PendingUiRequest, RawFrame, TaskAction, TaskState, ToolStatus, TranscriptEntry } from "./state.ts";
+export type { CediaEvent, ConnectionStatus, ModelOption, PendingCommand, RawFrame, TaskAction, TaskState, ToolStatus, TranscriptEntry } from "./state.ts";
+export type { CediaUiRequest, PendingUiRequest, UiRequestParseResult } from "../../../packages/protocol/src/ui.ts";

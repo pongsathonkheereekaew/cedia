@@ -1,4 +1,5 @@
 import type { Command, EventPage, Json, Project, Session, SessionEvent } from "../../../../packages/protocol/src/index.ts";
+import { isUiInteractiveMethod, parseUiSelectOptionDetails, unsupportedUiMethodMessage } from "../../../../packages/protocol/src/ui.ts";
 import {
   type CediaUiRequest,
   type MobileAction,
@@ -11,6 +12,7 @@ import {
   type TranscriptRole,
   type ToolStatus,
   type UiPresentation,
+  type UiRequestParseResult,
   isRecord,
   isSafeExternalUrl,
   nonEmptyString,
@@ -305,47 +307,83 @@ function eventKey(event: MobileEvent, frame: Record<string, unknown>): string {
   return `frame:${firstString(frame, "eventId", "event_id", "id") ?? JSON.stringify(frame)}`;
 }
 
-function pendingUi(value: unknown): PendingUiRequest | undefined {
-  if (!isRecord(value) || value.kind !== "interactive" || !nonEmptyString(value.token) || !isRecord(value.request)) return undefined;
+/**
+ * Parse one pending-UI envelope.  The method decides first, against the shared
+ * protocol union: a request the wire cannot carry is refused by name, so the
+ * phone can state it instead of dropping a request the Mac renders.
+ */
+export function parsePendingUiRequest(value: unknown): UiRequestParseResult {
+  if (!isRecord(value) || value.kind !== "interactive" || !nonEmptyString(value.token) || !isRecord(value.request)) {
+    return { ok: false, reason: "not-interactive" };
+  }
   const request = value.request;
-  if (!nonEmptyString(request.id) || !nonEmptyString(request.title)) return undefined;
+  const method = request.method;
+  if (typeof method !== "string") return { ok: false, reason: "malformed" };
+  if (!isUiInteractiveMethod(method)) return { ok: false, reason: "unknown-method", method };
+  if (!nonEmptyString(request.id) || !nonEmptyString(request.title)) return { ok: false, reason: "malformed" };
   const timeoutValue = request.timeout;
   const timeout = typeof timeoutValue === "number" ? timeoutValue : undefined;
-  if (timeoutValue !== undefined && (typeof timeoutValue !== "number" || !Number.isSafeInteger(timeoutValue) || timeoutValue < 0)) return undefined;
+  if (timeoutValue !== undefined && (typeof timeoutValue !== "number" || !Number.isSafeInteger(timeoutValue) || timeoutValue < 0)) {
+    return { ok: false, reason: "malformed" };
+  }
   let normalized: CediaUiRequest | undefined;
-  if (request.method === "confirm" && typeof request.message === "string") {
-    normalized = { method: "confirm", id: request.id, title: request.title, message: request.message, ...(timeout === undefined ? {} : { timeout }) };
-  } else if (request.method === "select" && Array.isArray(request.options) && request.options.length > 0 && request.options.every(nonEmptyString)) {
+  if (method === "confirm" && typeof request.message === "string") {
+    normalized = { method, id: request.id, title: request.title, message: request.message, ...(timeout === undefined ? {} : { timeout }) };
+  } else if (method === "select" && Array.isArray(request.options) && request.options.length > 0 && request.options.every(nonEmptyString)) {
+    const optionDetails = parseUiSelectOptionDetails(request.optionDetails, request.options.length);
+    if (request.optionDetails !== undefined && optionDetails === undefined) return { ok: false, reason: "malformed" };
     normalized = {
-      method: "select",
+      method,
       id: request.id,
       title: request.title,
       options: [...request.options],
+      ...(optionDetails === undefined ? {} : { optionDetails }),
       ...(timeout === undefined ? {} : { timeout }),
     };
-  } else if (request.method === "input" && (request.placeholder === undefined || typeof request.placeholder === "string")) {
-    normalized = { method: "input", id: request.id, title: request.title, ...(typeof request.placeholder === "string" ? { placeholder: request.placeholder } : {}), ...(timeout === undefined ? {} : { timeout }) };
-  } else if (request.method === "editor" && (request.prefill === undefined || typeof request.prefill === "string") && (request.promptStyle === undefined || typeof request.promptStyle === "boolean")) {
-    normalized = { method: "editor", id: request.id, title: request.title, ...(typeof request.prefill === "string" ? { prefill: request.prefill } : {}), ...(typeof request.promptStyle === "boolean" ? { promptStyle: request.promptStyle } : {}) };
+  } else if (method === "input" && (request.placeholder === undefined || typeof request.placeholder === "string")) {
+    normalized = { method, id: request.id, title: request.title, ...(typeof request.placeholder === "string" ? { placeholder: request.placeholder } : {}), ...(timeout === undefined ? {} : { timeout }) };
+  } else if (method === "editor" && (request.prefill === undefined || typeof request.prefill === "string") && (request.promptStyle === undefined || typeof request.promptStyle === "boolean")) {
+    normalized = { method, id: request.id, title: request.title, ...(typeof request.prefill === "string" ? { prefill: request.prefill } : {}), ...(typeof request.promptStyle === "boolean" ? { promptStyle: request.promptStyle } : {}) };
   }
-  return normalized ? {
-    kind: "interactive",
-    token: value.token,
-    request: normalized,
-    ...(typeof value.sessionId === "string" && value.sessionId.trim() ? { sessionId: value.sessionId.trim() } : {}),
-    ...(typeof value.incarnation === "string" && value.incarnation.trim() ? { incarnation: value.incarnation.trim() } : {}),
-    ...(typeof request.cwd === "string" && request.cwd.trim() ? { cwd: request.cwd.trim() } : {}),
-    ...(typeof request.tool === "string" && request.tool.trim() ? { tool: request.tool.trim() } : {}),
-    ...(typeof request.target === "string" && request.target.trim() ? { target: request.target.trim() } : {}),
-    ...(value.status === "stale" || value.status === "timeout" || value.status === "responded_elsewhere" ? { status: value.status } : {}),
-    ...(typeof value.receivedAt === "number" && Number.isFinite(value.receivedAt) ? { receivedAt: value.receivedAt } : {}),
-  } : undefined;
+  if (!normalized) return { ok: false, reason: "malformed" };
+  return {
+    ok: true,
+    request: {
+      kind: "interactive",
+      token: value.token,
+      request: normalized,
+      ...(typeof value.sessionId === "string" && value.sessionId.trim() ? { sessionId: value.sessionId.trim() } : {}),
+      ...(typeof value.incarnation === "string" && value.incarnation.trim() ? { incarnation: value.incarnation.trim() } : {}),
+      ...(typeof request.cwd === "string" && request.cwd.trim() ? { cwd: request.cwd.trim() } : {}),
+      ...(typeof request.tool === "string" && request.tool.trim() ? { tool: request.tool.trim() } : {}),
+      ...(typeof request.target === "string" && request.target.trim() ? { target: request.target.trim() } : {}),
+      ...(value.status === "stale" || value.status === "timeout" || value.status === "responded_elsewhere" ? { status: value.status } : {}),
+      ...(typeof value.receivedAt === "number" && Number.isFinite(value.receivedAt) ? { receivedAt: value.receivedAt } : {}),
+    },
+  };
 }
 
-function uiFromFrame(frame: Record<string, unknown>): PendingUiRequest | undefined {
+/**
+ * State one request whose method OMP cannot send.  The phone keeps the reason
+ * on the one error line it renders; silently dropping the request is what let a
+ * request the Mac showed vanish here.
+ */
+function stateStatingUnknownUiMethod(state: MobileTaskState, method: string): MobileTaskState {
+  const lastError = unsupportedUiMethodMessage(method);
+  return state.lastError === lastError ? state : { ...state, lastError };
+}
+
+/**
+ * A `cedia_ui` frame carries either a presentation or an interactive envelope,
+ * and only an interactive one becomes a pending request.  A refusal that names
+ * an unknown method is handed back so the caller can state it.
+ */
+function interactiveFromFrame(frame: Record<string, unknown>): UiRequestParseResult | undefined {
   if (frameType(frame) !== "cedia_ui") return undefined;
-  const event = frame.event;
-  return pendingUi(event) ?? pendingUi(frame);
+  const fromEvent = parsePendingUiRequest(frame.event);
+  if (fromEvent.ok || fromEvent.reason === "unknown-method") return fromEvent;
+  const fromFrame = parsePendingUiRequest(frame);
+  return fromFrame.ok || fromFrame.reason === "unknown-method" ? fromFrame : fromEvent;
 }
 
 function presentationFromEnvelope(value: unknown): UiPresentation | undefined {
@@ -377,14 +415,19 @@ function applyFrame(state: MobileTaskState, frameValue: Json, key: string): Mobi
     return { ...state, virtualTerminals: applyVirtualTerminalFrame(state.virtualTerminals, frame) };
   }
   const presentation = presentationFromFrame(frame);
-  const ui = uiFromFrame(frame);
+  const ui = interactiveFromFrame(frame);
   if (presentation || ui) {
     let next = state;
     if (presentation) {
       next = { ...next, presentations: [...next.presentations.filter(item => item.id !== presentation.id), presentation].slice(-20) };
     }
-    if (ui && !next.uiRequests.some(item => item.token === ui.token)) {
-      next = { ...next, uiRequests: [...next.uiRequests, { ...ui, receivedAt: ui.receivedAt ?? Date.now() }], attentionCount: next.attentionCount + 1 };
+    if (ui?.ok) {
+      const request = ui.request;
+      if (!next.uiRequests.some(item => item.token === request.token)) {
+        next = { ...next, uiRequests: [...next.uiRequests, { ...request, receivedAt: request.receivedAt ?? Date.now() }], attentionCount: next.attentionCount + 1 };
+      }
+    } else if (ui && ui.reason === "unknown-method") {
+      next = stateStatingUnknownUiMethod(next, ui.method);
     }
     return next;
   }
@@ -513,15 +556,23 @@ export function reduceMobileState(state: MobileTaskState, action: MobileAction):
       return updateCommand(state, { ...current, status: commandStatus(action.command.status), ...(action.command.error ? { error: action.command.error } : {}), updatedAt: Date.now() });
     }
     case "ui_request": {
-      const request = pendingUi(action.event);
-      if (!request || state.uiRequests.some(item => item.token === request.token)) return state;
-      return { ...state, uiRequests: [...state.uiRequests, { ...request, receivedAt: request.receivedAt ?? Date.now() }], attentionCount: state.attentionCount + 1 };
+      const parsed = parsePendingUiRequest(action.event);
+      if (!parsed.ok) return parsed.reason === "unknown-method" ? stateStatingUnknownUiMethod(state, parsed.method) : state;
+      if (state.uiRequests.some(item => item.token === parsed.request.token)) return state;
+      return { ...state, uiRequests: [...state.uiRequests, { ...parsed.request, receivedAt: parsed.request.receivedAt ?? Date.now() }], attentionCount: state.attentionCount + 1 };
     }
     case "ui_sync": {
       const existing = new Map(state.uiRequests.map(request => [request.token, request]));
+      let unknownMethod: string | undefined;
       const requests = action.events.flatMap(event => {
-        const request = pendingUi(event);
-        if (!request) return [];
+        const parsed = parsePendingUiRequest(event);
+        if (!parsed.ok) {
+          // The host's live list is the authoritative one, so a request this
+          // build cannot render is stated rather than quietly left out.
+          if (parsed.reason === "unknown-method") unknownMethod = parsed.method;
+          return [];
+        }
+        const request = parsed.request;
         // Keep the mounted object for a token that is still pending. This lets
         // the native sheet retain its draft/focus while polling GET /ui.
         const mounted = existing.get(request.token);
@@ -536,7 +587,8 @@ export function reduceMobileState(state: MobileTaskState, action: MobileAction):
         };
         return [Object.keys(extras).length > 0 ? { ...mounted, ...extras } : mounted];
       });
-      return { ...state, uiRequests: requests, attentionCount: requests.length };
+      const next = { ...state, uiRequests: requests, attentionCount: requests.length };
+      return unknownMethod === undefined ? next : stateStatingUnknownUiMethod(next, unknownMethod);
     }
     case "ui_resolved":
       return { ...state, uiRequests: state.uiRequests.filter(request => request.token !== action.token), attentionCount: Math.max(0, state.attentionCount - 1) };

@@ -309,41 +309,44 @@ describe("composer attachments (fixtures only)", () => {
 });
 
 describe("native UI requests (fixtures only)", () => {
-	it("maps a confirm to allow, deny and scoped options in the dock's order", () => {
+	it("maps a confirm to allow and deny in the dock's order", () => {
 		const question = uiQuestionFromRequest({
 			method: "confirm",
 			id: "ui-1",
 			title: "Allow write?",
 			message: "write_file a.txt",
-			scopes: ["read this file"],
 		});
-		expect(question?.kind).toBe("single_select");
-		expect(question?.message).toBe("write_file a.txt");
-		expect(question?.options?.map(option => option.id)).toEqual(["allow", "deny", "read this file"]);
-		expect(question?.options?.map(option => option.value)).toEqual([true, false, "scope:read this file"]);
-		expect(question?.options?.map(option => option.label)).toEqual(["Allow", "Deny", "Allow scoped \u00B7 read this file"]);
+		expect(question.kind).toBe("single_select");
+		expect(question.message).toBe("write_file a.txt");
+		expect(question.options?.map(option => option.id)).toEqual(["allow", "deny"]);
+		expect(question.options?.map(option => option.value)).toEqual([true, false]);
+		expect(question.options?.map(option => option.label)).toEqual(["Allow", "Deny"]);
 	});
 
-	it("maps a multiple select to multi_select, prefers optionDetails labels, and joins array answers", () => {
+	it("maps a select to single choice, whose options are their own labels", () => {
 		const request = {
 			method: "select",
 			id: "ui-2",
-			title: "Pick files",
+			title: "Pick a file",
 			options: ["a.ts", "b.ts"],
-			optionDetails: [{ label: "Alpha" }, {}],
-			multiple: true,
+			optionDetails: [{ description: "Alpha" }, {}],
 		} as const;
 		const question = uiQuestionFromRequest(request);
-		expect(question?.kind).toBe("multi_select");
-		expect(question?.options?.map(option => option.label)).toEqual(["Alpha", "b.ts"]);
-		expect(question?.options?.map(option => option.value)).toEqual(["a.ts", "b.ts"]);
-		expect(uiAnswerValue(request, ["a.ts", "b.ts"])).toBe("a.ts\nb.ts");
+		expect(question.kind).toBe("single_select");
+		expect(question.options?.map(option => option.label)).toEqual(["a.ts", "b.ts"]);
+		expect(question.options?.map(option => option.value)).toEqual(["a.ts", "b.ts"]);
+		expect(uiAnswerValue(request, "a.ts")).toBe("a.ts");
 		expect(uiCarouselQuestionId(request)).toBe("ui-2");
 	});
 
-	it("never projects secrets or untrusted form HTML onto the native surface", () => {
-		expect(uiQuestionFromRequest({ method: "password", id: "ui-3", title: "Token" })).toBeUndefined();
-		expect(uiQuestionFromRequest({ method: "schemaform", id: "ui-4", title: "Form" })).toBeUndefined();
+	it("renders every method the wire can carry, so no request is left without a question", () => {
+		const methods = [
+			{ method: "confirm", id: "ui-c", title: "Allow?", message: "run" },
+			{ method: "select", id: "ui-s", title: "Pick", options: ["a"] },
+			{ method: "input", id: "ui-i", title: "Name" },
+			{ method: "editor", id: "ui-e", title: "Edit" },
+		] as const;
+		expect(methods.map(request => uiQuestionFromRequest(request).id)).toEqual(["ui-c", "ui-s", "ui-i", "ui-e"]);
 	});
 
 	it("maps empty answers to a cancellation and accepts only shaped answers", () => {
@@ -355,7 +358,6 @@ describe("native UI requests (fixtures only)", () => {
 		expect(uiAnswerValue(confirm, "yes")).toEqual({ cancelled: true });
 		expect(uiAnswerValue(confirm, true)).toBe(true);
 		expect(uiAnswerValue(confirm, false)).toBe(false);
-		expect(uiAnswerValue(confirm, "scope:read this file")).toBe("scope:read this file");
 	});
 
 	it("carries a placeholder or prefill as the text question's message", () => {
@@ -373,10 +375,10 @@ describe("native UI requests (fixtures only)", () => {
 		const confirm = { method: "confirm", id: "ui-8", title: "Allow?", message: "write_file a.txt" } as const;
 		expect(uiAnswerValue(confirm, { selectedValue: "true" })).toBe(true);
 		expect(uiAnswerValue(confirm, { selectedValue: "false" })).toBe(false);
-		expect(uiAnswerValue(confirm, { selectedValue: "scope:read this file" })).toBe("scope:read this file");
-		const multi = { method: "multi_select", id: "ui-9", title: "Pick", options: ["a.ts", "b.ts"] } as const;
-		expect(uiAnswerValue(multi, { selectedValues: ["a.ts", "b.ts"], freeformValue: undefined })).toBe("a.ts\nb.ts");
-		expect(uiAnswerValue(multi, { selectedValues: [], freeformValue: "notes" })).toBe("notes");
+		expect(uiAnswerValue(confirm, { selectedValue: "maybe" })).toEqual({ cancelled: true });
+		const select = { method: "select", id: "ui-9", title: "Pick", options: ["a.ts", "b.ts"] } as const;
+		expect(uiAnswerValue(select, { selectedValue: "a.ts" })).toBe("a.ts");
+		expect(uiAnswerValue(select, { selectedValues: ["a.ts"] })).toEqual({ cancelled: true });
 	});
 });
 

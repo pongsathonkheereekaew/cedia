@@ -1,3 +1,4 @@
+import type { CediaUiRequest, UiInteractiveMethod, UiSelectOptionDetail } from "../../../packages/protocol/src/ui.ts";
 import type { ApprovalStatus } from "./approval-runtime.ts";
 
 export type { ApprovalStatus };
@@ -37,25 +38,26 @@ export function approvalCanSubmit(status: ApprovalStatus, connection?: string): 
 	return connection === "connected" || connection === "running";
 }
 
-export type ApprovalFieldKind =
-	| "confirm"
-	| "select"
-	| "multi_select"
-	| "password"
-	| "input"
-	| "editor"
-	| "schemaform"
-	| "unsupported";
+/**
+ * The control a native approval surface draws.  Derived from the wire union, so
+ * a method OMP can send and this file does not know about is a compile error
+ * here; `unsupported` names a method that never reached the union (an older
+ * cached envelope, a defensive caller passing a plain string).
+ */
+export type ApprovalFieldKind = CediaUiRequest["method"] | "unsupported";
 
-export function approvalFieldKind(method: string, hints?: { readonly secret?: boolean; readonly multiple?: boolean }): ApprovalFieldKind {
-	if (method === "confirm") return "confirm";
-	if (method === "multi_select" || (method === "select" && hints?.multiple === true)) return "multi_select";
-	if (method === "select") return "select";
-	if (method === "password" || (method === "input" && hints?.secret === true)) return "password";
-	if (method === "input") return "input";
-	if (method === "editor") return "editor";
-	if (method === "schemaform") return "schemaform";
-	return "unsupported";
+/** Every interactive method, mapped to the control that answers it. */
+const APPROVAL_FIELD_KINDS: Readonly<Record<UiInteractiveMethod, ApprovalFieldKind>> = {
+	confirm: "confirm",
+	select: "select",
+	input: "input",
+	editor: "editor",
+};
+
+export function approvalFieldKind(method: string): ApprovalFieldKind {
+	// Own-key lookup rather than a switch with a default: a method added to the
+	// wire union without a control here fails to compile.
+	return Object.prototype.hasOwnProperty.call(APPROVAL_FIELD_KINDS, method) ? APPROVAL_FIELD_KINDS[method as UiInteractiveMethod] : "unsupported";
 }
 
 export function approvalDefaultFocus(dangerous?: boolean): "cancel" | "submit" {
@@ -81,28 +83,28 @@ export function approvalIdentityLines(request: ApprovalViewInput): readonly stri
 
 export const APPROVAL_OFFLINE_LINE = "Waiting for host";
 export const APPROVAL_REQUIRED_REASON = "This field is required.";
-export const APPROVAL_MULTISELECT_REASON = "Select at least one option.";
 
 export interface ApprovalOptionRow {
 	readonly value: string;
+	/** OMP's select options are plain strings, so they are their own labels. */
 	readonly label: string;
 	readonly description?: string;
 }
 
 export function approvalOptionRows(
 	options: readonly string[] | undefined,
-	details?: readonly { readonly value?: string; readonly label?: string; readonly description?: string }[],
+	details?: readonly UiSelectOptionDetail[],
 ): readonly ApprovalOptionRow[] {
 	if (!options) return [];
 	const rows: ApprovalOptionRow[] = [];
 	for (let index = 0; index < options.length; index++) {
-		const detail = details?.[index];
-		const value = typeof detail?.value === "string" && detail.value.length > 0 ? detail.value : options[index]!;
+		const value = options[index]!;
 		if (value.length === 0) continue;
+		const description = details?.[index]?.description;
 		rows.push({
 			value,
-			label: detail?.label || value,
-			...(typeof detail?.description === "string" ? { description: detail.description } : {}),
+			label: value,
+			...(typeof description === "string" ? { description } : {}),
 		});
 	}
 	return rows;
@@ -127,20 +129,16 @@ export function approvalOfflineLine(connection?: string): string | undefined {
 export function approvalSubmitBlockedReason(input: {
 	readonly method: string;
 	readonly required?: boolean;
-	readonly multiple?: boolean;
-	readonly value?: string | readonly string[] | boolean;
+	readonly value?: string | boolean;
 }): string | undefined {
 	if (input.method === "confirm" || input.value === true) return undefined;
 	if (input.required !== true) return undefined;
-	const kind = approvalFieldKind(input.method, { multiple: input.multiple === true });
-	if (kind === "input" || kind === "password" || kind === "editor") {
+	const kind = approvalFieldKind(input.method);
+	if (kind === "input" || kind === "editor") {
 		return typeof input.value === "string" && input.value.trim().length > 0 ? undefined : APPROVAL_REQUIRED_REASON;
 	}
-	if (kind === "select" || kind === "multi_select") {
-		if (Array.isArray(input.value) ? input.value.length > 0 : typeof input.value === "string" && input.value.length > 0) {
-			return undefined;
-		}
-		return kind === "multi_select" ? APPROVAL_MULTISELECT_REASON : APPROVAL_REQUIRED_REASON;
+	if (kind === "select") {
+		return typeof input.value === "string" && input.value.length > 0 ? undefined : APPROVAL_REQUIRED_REASON;
 	}
 	return undefined;
 }

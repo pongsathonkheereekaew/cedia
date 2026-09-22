@@ -15,7 +15,8 @@ import { EditorConnections } from "./editors.ts";
 import { NativeEditorBridge } from "./native-editor.ts";
 import { OmpHostDispatcher } from "../../../packages/omp-adapter/src/host.ts";
 import { suggestWorkspaceMode, type WorkspaceJudge, type WorkspaceSuggestion } from "./workspace-mode.ts";
-import { createOmpModelCatalog, type OmpModelCatalog, type OmpModelCatalogResult } from "./model-catalog.ts";
+import { createOmpModelCatalog, type OmpModelCatalog } from "./model-catalog.ts";
+import type { ModelCatalogResult } from "../../../packages/protocol/src/models.ts";
 
 export class HostError extends Error {
   readonly code: string;
@@ -140,7 +141,7 @@ export class CediaHost {
     return { ...session, sidechatSourceThreadId: this.#readSidechatMetadata(session.id)?.sourceThreadId ?? null };
   }
 
-  listModels(): Promise<OmpModelCatalogResult> {
+  listModels(): Promise<ModelCatalogResult> {
     this.#assertOpen();
     return this.#modelCatalog.list();
   }
