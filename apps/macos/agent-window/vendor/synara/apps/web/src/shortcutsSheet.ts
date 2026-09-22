@@ -51,19 +51,6 @@ interface ShortcutDefinition {
   description: string;
 }
 
-// Space jumps address the switcher's visual tab order, so slot 1 is always Void.
-const SPACE_JUMP_DEFINITIONS: readonly ShortcutDefinition[] = Array.from(
-  { length: 9 },
-  (_, index) => ({
-    command: `space.jump.${index + 1}` as KeybindingCommand,
-    label: index === 0 ? "Jump to Void" : `Jump to space ${index + 1}`,
-    description:
-      index === 0
-        ? "Switch straight to the Void tab of the space switcher."
-        : "Switch straight to this tab of the space switcher.",
-  }),
-);
-
 const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
   {
     command: "sidebar.addProject",
@@ -85,17 +72,6 @@ const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Import thread",
     description: "Bring an existing conversation into the current workspace.",
   },
-  {
-    command: "space.previous",
-    label: "Previous space",
-    description: "Switch to the previous project space and restore its last working context.",
-  },
-  {
-    command: "space.next",
-    label: "Next space",
-    description: "Switch to the next project space and restore its last working context.",
-  },
-  ...SPACE_JUMP_DEFINITIONS,
   {
     command: "chat.new",
     label: "New thread",

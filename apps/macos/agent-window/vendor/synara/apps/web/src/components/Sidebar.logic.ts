@@ -46,18 +46,10 @@ export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-
 export const SIDEBAR_THREAD_PREWARM_LIMIT = 10;
 export const DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY = "synara:show-debug-feature-flags-menu";
 export type SidebarNewThreadEnvMode = "local" | "worktree";
-export type SidebarView = "threads" | "studio";
 export type SidebarActionBadge = {
   readonly text: string;
   readonly accessibleLabel: string;
 };
-
-export function isProjectsSidebarSurface(input: {
-  readonly isOnSettings: boolean;
-  readonly isOnStudio: boolean;
-}): boolean {
-  return !input.isOnSettings && !input.isOnStudio;
-}
 
 /** Keep partial review counts visible without presenting them as exact. */
 export function resolvePullRequestReviewBadge(
@@ -205,8 +197,8 @@ function differentDisplayValue(
 
 /**
  * Display label for the container a thread lives in: real projects show their
- * user-facing name, while project-less containers (home chats, studio) read as
- * the app itself. Single rule shared by the Activity rows, pinned-row
+ * user-facing name, while project-less containers (home chats) read as the app
+ * itself. Single rule shared by the Activity rows, pinned-row
  * suffixes, and thread hover cards, so a chat's auto-generated slug folder
  * never leaks into the UI as a fake "project name".
  */
@@ -214,7 +206,7 @@ export function resolveThreadProjectLabel(
   project: Pick<Project, "kind" | "name" | "folderName"> | null | undefined,
 ): string {
   if (!project || project.kind !== "project") {
-    return "Synara";
+    return "Cedia";
   }
   return nonEmptyDisplayValue(project.name) ?? project.folderName;
 }
@@ -1378,27 +1370,6 @@ export function groupSidebarThreadsByProjectId(
     }
   }
   return byProjectId;
-}
-
-export function partitionSidebarThreadsByProjectIds<
-  T extends Pick<SidebarThreadSummary, "projectId">,
->(
-  threads: readonly T[],
-  studioProjectIds: ReadonlySet<ProjectId>,
-): {
-  readonly studioThreads: T[];
-  readonly nonStudioThreads: T[];
-} {
-  const studioThreads: T[] = [];
-  const nonStudioThreads: T[] = [];
-  for (const thread of threads) {
-    if (studioProjectIds.has(thread.projectId)) {
-      studioThreads.push(thread);
-    } else {
-      nonStudioThreads.push(thread);
-    }
-  }
-  return { studioThreads, nonStudioThreads };
 }
 
 // Centralizes the expensive per-project row derivation so Sidebar.tsx can mostly orchestrate UI state.

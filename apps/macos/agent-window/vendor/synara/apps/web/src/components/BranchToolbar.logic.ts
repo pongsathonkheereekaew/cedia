@@ -39,7 +39,7 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
 }
 
 /**
- * Studio threads use a concrete working directory as their entire workspace.
+ * A thread bound to a concrete working directory uses it as its entire workspace.
  * Branch-selector patches still speak in project/worktree terms, so normalize
  * them at this boundary instead of leaking worktree metadata into the thread.
  */

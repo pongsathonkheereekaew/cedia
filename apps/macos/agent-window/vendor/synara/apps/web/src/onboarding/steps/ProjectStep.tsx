@@ -61,8 +61,6 @@ export function ProjectStep(props: {
       const result = await createOrRecoverProjectFromPath({
         api,
         workspaceRoot,
-        // Files the project in Void; the sidebar follows it once the tour closes.
-        spaceId: null,
         defaultProvider: settings.defaultProvider,
         loadSnapshot: () => api.orchestration.getShellSnapshot().catch(() => null),
       });

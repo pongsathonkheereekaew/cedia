@@ -77,7 +77,7 @@ export function ProviderUsageResetCredits({
     try {
       const api = readNativeApi();
       const message =
-        "Use one Codex reset?\nThis spends one banked reset and cannot be undone. Synara will check your current account and usage first.";
+        "Use one Codex reset?\nThis spends one banked reset and cannot be undone. Cedia will check your current account and usage first.";
       const confirmed = api
         ? await api.dialogs.confirm(message)
         : await showConfirmDialogFallback(message);

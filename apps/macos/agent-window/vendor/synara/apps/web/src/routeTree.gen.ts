@@ -16,7 +16,6 @@ import { Route as ChatAutomationsRouteImport } from './routes/_chat.automations'
 import { Route as ChatSettingsRouteImport } from './routes/_chat.settings'
 import { Route as ChatAutomationsIndexRouteImport } from './routes/_chat.automations.index'
 import { Route as ChatAutomationsAutomationIdRouteImport } from './routes/_chat.automations.$automationId'
-import { Route as ChatStudioIndexRouteImport } from './routes/_chat.studio.index'
 
 const ChatRoute = ChatRouteImport.update({
   id: '/_chat',
@@ -53,11 +52,6 @@ const ChatAutomationsAutomationIdRoute =
     path: '/$automationId',
     getParentRoute: () => ChatAutomationsRoute,
   } as any)
-const ChatStudioIndexRoute = ChatStudioIndexRouteImport.update({
-  id: '/studio/',
-  path: '/studio/',
-  getParentRoute: () => ChatRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
@@ -66,7 +60,6 @@ export interface FileRoutesByFullPath {
   '/settings': typeof ChatSettingsRoute
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/automations/': typeof ChatAutomationsIndexRoute
-  '/studio/': typeof ChatStudioIndexRoute
 }
 export interface FileRoutesByTo {
   '/$threadId': typeof ChatThreadIdRoute
@@ -74,7 +67,6 @@ export interface FileRoutesByTo {
   '/': typeof ChatIndexRoute
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/automations': typeof ChatAutomationsIndexRoute
-  '/studio': typeof ChatStudioIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -85,7 +77,6 @@ export interface FileRoutesById {
   '/_chat/': typeof ChatIndexRoute
   '/_chat/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/_chat/automations/': typeof ChatAutomationsIndexRoute
-  '/_chat/studio/': typeof ChatStudioIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -96,7 +87,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/automations/$automationId'
     | '/automations/'
-    | '/studio/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/$threadId'
@@ -104,7 +94,6 @@ export interface FileRouteTypes {
     | '/'
     | '/automations/$automationId'
     | '/automations'
-    | '/studio'
   id:
     | '__root__'
     | '/_chat'
@@ -114,7 +103,6 @@ export interface FileRouteTypes {
     | '/_chat/'
     | '/_chat/automations/$automationId'
     | '/_chat/automations/'
-    | '/_chat/studio/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -172,13 +160,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatAutomationsAutomationIdRouteImport
       parentRoute: typeof ChatAutomationsRoute
     }
-    '/_chat/studio/': {
-      id: '/_chat/studio/'
-      path: '/studio'
-      fullPath: '/studio/'
-      preLoaderRoute: typeof ChatStudioIndexRouteImport
-      parentRoute: typeof ChatRoute
-    }
   }
 }
 
@@ -201,7 +182,6 @@ interface ChatRouteChildren {
   ChatAutomationsRoute: typeof ChatAutomationsRouteWithChildren
   ChatSettingsRoute: typeof ChatSettingsRoute
   ChatIndexRoute: typeof ChatIndexRoute
-  ChatStudioIndexRoute: typeof ChatStudioIndexRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
@@ -209,7 +189,6 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatAutomationsRoute: ChatAutomationsRouteWithChildren,
   ChatSettingsRoute: ChatSettingsRoute,
   ChatIndexRoute: ChatIndexRoute,
-  ChatStudioIndexRoute: ChatStudioIndexRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)

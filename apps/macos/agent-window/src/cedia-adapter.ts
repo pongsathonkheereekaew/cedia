@@ -758,7 +758,6 @@ export function projectCediaShellSnapshot(
 		defaultModelSelection: null,
 		scripts: [],
 		isPinned: project.pinned === true,
-		spaceId: null,
 		createdAt: project.createdAt,
 		// A project row has one timestamp: the host never updates it, so the sidebar
 		// must read `createdAt` rather than invent a second one.
@@ -1163,7 +1162,6 @@ class CediaAgentAdapter {
 			defaultModelSelection: null,
 			scripts: [],
 			isPinned: project.pinned === true,
-			spaceId: null,
 			createdAt: project.createdAt,
 			updatedAt: project.createdAt,
 			...(full ? { deletedAt: null } : {}),
@@ -1609,6 +1607,8 @@ class CediaAgentAdapter {
 				onProvisionProgress: () => () => undefined,
 			},
 			filesystem: files.filesystem,
+			// The NativeApi interface still declares this member; nothing in this window renders
+			// Studio outputs any more (§10 item 60 cut the surface), so it stays the honest refusal.
 			studio: { listThreadOutputs: unsupportedAsync("studio.listThreadOutputs") },
 			provider: {
 				// Cedia §10 item 62: skills/commands are OMP's own `get_available_commands`

@@ -50,7 +50,7 @@ export function FeatureTourStep() {
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8">
-      <div className="flex flex-row gap-1 overflow-x-auto pb-1 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0" role="tablist" aria-label="Synara capabilities">
+      <div className="flex flex-row gap-1 overflow-x-auto pb-1 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0" role="tablist" aria-label="Cedia capabilities">
         {TOUR_CARDS.map((card) => {
           const Icon = card.icon;
           const selected = card.id === selectedCard.id;
@@ -111,15 +111,6 @@ export function FeatureTourStep() {
             ))}
           </ul>
         )}
-        <a
-          href={selectedCard.docsHref}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 inline-flex items-center gap-1.5 self-start text-[length:var(--app-font-size-ui,12px)] text-muted-foreground transition-colors hover:text-foreground motion-reduce:transition-none"
-        >
-          Read the guide
-          <ExternalLinkIcon className="size-3" aria-hidden />
-        </a>
       </div>
     </div>
   );

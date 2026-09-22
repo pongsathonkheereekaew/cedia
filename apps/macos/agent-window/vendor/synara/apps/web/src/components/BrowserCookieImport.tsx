@@ -16,9 +16,9 @@ function importFailure(
 ): string {
   if (result.code === "permission_denied") {
     if (result.platform === "macos" && browser === "safari")
-      return "macOS denied access to Safari's cookie files. Allow Synara in System Settings > Privacy & Security > Full Disk Access, then quit and reopen Synara before retrying. Revisit Safari import setup in Synara Settings > General for the correct app. You can sign in directly instead.";
+      return "macOS denied access to Safari's cookie files. Allow Cedia in System Settings > Privacy & Security > Full Disk Access, then quit and reopen Cedia before retrying. Revisit Safari import setup in Cedia Settings > General for the correct app. You can sign in directly instead.";
     if (result.platform === "macos")
-      return "macOS denied access to this browser's cookie data. Review Synara's file access in Privacy & Security and any Keychain prompt, then retry.";
+      return "macOS denied access to this browser's cookie data. Review Cedia's file access in Privacy & Security and any Keychain prompt, then retry.";
     return "The operating system denied access to this browser's cookie data. Review its access permissions or sign in directly.";
   }
   if (result.code === "timed_out")
@@ -26,11 +26,11 @@ function importFailure(
   if (result.code === "source_missing")
     return "The selected profile is no longer available. Choose another profile or open the source browser first.";
   if (result.code === "reader_unavailable")
-    return "The native cookie reader is unavailable. Reinstall Synara with its optional native dependencies, or sign in directly.";
+    return "The native cookie reader is unavailable. Reinstall Cedia with its optional native dependencies, or sign in directly.";
   if (result.code === "persistence_failed")
     return "Cookies were imported, but secure storage could not save their session state for future launches. Existing sessions may have changed.";
   if (result.code === "reader_failed" && result.stage === "acquisition")
-    return "The native reader could not open or acquire the source cookie store. A permission denial was not confirmed. Check that the source profile is available and Synara has access to it.";
+    return "The native reader could not open or acquire the source cookie store. A permission denial was not confirmed. Check that the source profile is available and Cedia has access to it.";
   if (result.code === "reader_failed" && (result.stage === "parse" || result.stage === "decode"))
     return "The native reader could not decode this profile's cookie data. This is a cookie-format failure, not a confirmed permission denial.";
   if (result.code === "reader_failed" && result.stage === "decrypt")
@@ -188,8 +188,8 @@ export function BrowserCookieImport({
           </label>
           <p className="text-xs text-muted-foreground">
             {scope === "profile"
-              ? "Imports all compatible cookies from the selected profile. Every imported signed-in session becomes available across Synara browser tabs and agent workflows."
-              : "Imports this site, its subdomains, and matching parent domains. Imported sessions are shared across Synara browser tabs and agent workflows."}
+              ? "Imports all compatible cookies from the selected profile. Every imported signed-in session becomes available across Cedia browser tabs and agent workflows."
+              : "Imports this site, its subdomains, and matching parent domains. Imported sessions are shared across Cedia browser tabs and agent workflows."}
           </p>
           <div className="grid grid-cols-2 gap-3">
             <label className="min-w-0 space-y-1">
@@ -240,7 +240,7 @@ export function BrowserCookieImport({
                 onChange={(event) => setConfirmed(event.target.checked)}
               />
               <span>
-                I allow Synara and its agents to use all imported signed-in sessions from this
+                I allow Cedia and its agents to use all imported signed-in sessions from this
                 profile.
               </span>
             </label>

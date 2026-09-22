@@ -209,7 +209,7 @@ export function buildPatchCacheKey(patch: string, scope = "diff-panel"): string 
 }
 
 export const PARTIAL_DIFF_COPY_NOTICE =
-  "[Synara: partial diff. Output was truncated at the size limit; some files or changes may be missing.]";
+  "[Cedia: partial diff. Output was truncated at the size limit; some files or changes may be missing.]";
 
 // Returns copyable source text for diff surfaces without depending on virtualized DOM rows.
 // A truncation notice travels with partial clipboard content so it cannot be mistaken for a

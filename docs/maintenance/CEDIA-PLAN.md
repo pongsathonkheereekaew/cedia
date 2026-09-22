@@ -3605,6 +3605,153 @@ clean, **86 pass / 0 fail**; iOS `typecheck` clean, **166 pass / 0 fail**;
 protocol + omp-adapter + relay **80 pass / 0 fail**; root `tsc --noEmit` unchanged
 at the 10 pre-existing errors; `ci-validate` CI-OK.
 
+### Patch-stack hygiene: four inert patches retired, the replay drift repaired (2026-09-23)
+
+Closes §10 item 67. The manifest holds **15 patches** (was 19) with 19 removals,
+`prepare-desktop` is green from a clean base, the README describes every entry,
+and the helper count is measured.
+
+**Four patches retired, each verified inert in the checkout — not from the
+README.** `0019` (`chat.agentSessions.customizationEntryPoints`): five consumers
+live under `src/vs/sessions/**`; a sixth workbench singleton does read the setting,
+but its observable is consumed only inside the sessions tree and both of its
+guards require an agent-host harness this build no longer registers, so upstream's
+default is invisible in the IDE window (the plan's claim "every consumer is under
+`src/vs/sessions/**`" is literally wrong; the conclusion holds). `0027`: the tab
+label branch it edits keys off `IsSessionsWindowContext`, which is bound only for
+a window whose workspace is `agentSessionsWorkspace` — and since `0056` that
+window renders the standalone bundle, never the sessions workbench. `0028`: no
+`.jsx`/`.tsx` outside test fixtures, no production React import, no React
+dependency, and the bundle path it patched (`build/next`) never sees the only
+React consumer (the Vite-built agent window). `0033`: all five of its hunks are
+negations of `IsSessionsWindowContext`, i.e. no-ops where the key is false; its
+README description of a third removal was already stale. Three test blocks that
+pinned the retired patches by text and digest are deleted.
+
+**The recorded drift is repaired.** The patch-set test had been failing on
+`0001`/`0012`/`0019`'s hunks for
+`src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts`: the file was
+byte-identical to base in the checkout, so all three patches' hunks for it had
+been lost when the 2026-09-20 prepare wrote its stamp. The fix is the plan's own
+procedure — `git checkout -- .` + `git clean -fd -e node_modules -e .build` in
+`desktop/` (which deletes the stamp), then `bun scripts/prepare-desktop.ts`
+(prints `15 patches, 19 removals`). `bun test
+apps/macos/test/desktop-patch-set.test.ts` is **green for the first time**, which
+is the proof that the manifest now defines the tree: it replays the manifest onto
+a scratch worktree from the base and compares every touched file.
+
+**The README now covers the manifest** (208 → 271 lines), verified
+programmatically: 15/15 entries have a backticked paragraph in manifest order, no
+paragraph references a patch that is not in the manifest, and the retired ones
+survive only as dated history. New paragraphs for `0036` (a Sash `ariaLabel`
+option), `0037` (grid sash names), `0056` (the agent-window topology, bridge
+capabilities and single-agent-window default), `0057` (browser-navigation
+ownership), `0058` (zoom bridge and traffic-light geometry) and `0059`
+(`product.nameShort === 'Cedia'` → one OMP agent). The present-tense claims about
+retired `0002`/`0004`/`0010`/`0021` are gone.
+
+**The helper count is measured.** Criterion: files whose name matches
+`copilot` (case-insensitive) under `desktop/src` after the removals list is
+applied — **17 files: 13 non-test + 4 test** (11 TypeScript modules, one
+type-only `.d.ts`, one spec). None of the 13 registers a contribution, service,
+action or configuration from its own file; the one class that is instantiated
+(`AgentHostCopilotCliSettingsContribution`) is registered by an aggregator as a
+settings surface, not a gate. The README's "15" was a guess and is now the
+measurement. Plan §10 item 26 repeats the same claim and needs the same number.
+
+**Flagged, not actioned:** `0036` adds `ISashOptions.ariaLabel` and no caller
+passes it anywhere in `desktop/src` (checked every `new Sash(` site), so the
+option is currently unexercised — a candidate for a later retirement, documented
+as such rather than silently dropped.
+
+Receipt: manifest 19 → 15 patches (≤26 ✔); `prepare-desktop` green from a clean
+base (`Cedia desktop patches applied (15 patches, 19 removals)`);
+`desktop-patch-set.test.ts` 1 pass / 0 fail; `apps/macos` suite **700 pass / 2
+fail** — the patch-set failure is gone, leaving `menus-contract` (needs `rg`) and
+the theme-handoff assertion, both pre-existing; root `tsc --noEmit` unchanged at
+the 10 pre-existing errors; `ci-validate` CI-OK; `desktop/` has no commit and
+`git ls-files desktop` is empty.
+
+### Agent-window scope cut, finished: Studio, Spaces and the Synara copy are gone (2026-09-23)
+
+Completes the code half of §10 item 60. The bundle now renders only surfaces an
+OMP/host source backs, no `trysynara` string survives anywhere in it, 75 dead
+files are deleted, and `upstream.json` describes the tree that is actually
+vendored. The fresh-profile walk (item 60's close condition) is a packaged-run
+receipt and rides the next `package:mac` batch.
+
+**Studio, cut at every mount point.** The `/_chat/studio/` route (and its
+regenerated route-tree entry), the sidebar's Studio segment — the surface
+switcher's view list, the copy table row, the "New studio chat" primary action
+and the flat studio chat list — the settings row and its search entry, the
+Environment panel's "Studio outputs" section, the `studio.listThreadOutputs`
+query/invalidation chain, and the `isStudioContainer` branches through the
+composer send path. The sidebar surface switcher itself is deleted: with Studio
+gone there is one view left, so a switcher with one option was pure chrome.
+
+**Spaces, cut in full — and it was not a label.** The audit verdict first: Spaces
+was a real surface (tabs with their own metadata, drag-to-file, per-space
+chords), and every `space.*` command it dispatches landed on the adapter's
+`unsupported()`. Removed: the `SpaceSwitcher` tabs in the projects list with
+their create/edit/delete/reorder menu and drop targets, `SpaceEditorDialog` and
+`SpaceProjectPickerDialog`, the per-space jump keybindings and palette actions
+(and their shortcuts-sheet rows), the space picker in the project dialogs and the
+quick palette, the "Move to space" context submenu, and the `?space=` landing
+parameter. `spaces` and `Project.spaceId` are gone from client state and types.
+What stays is inert interface conformance, documented: the `studio` member of the
+vendored `NativeApi` (a required member of an interface the adapter must satisfy)
+and the vendored `SpaceId`/`space.*` schemas (the shell snapshot still requires
+`spaces: []`). `githubProjectProvisioning`'s `newProjectSpaceId` — a
+space-shaped parameter with no host meaning — is gone from the contract.
+
+**The Synara copy sweep.** ~170 user-visible strings across 45 files, from the
+transcript's tool-call labels (89 strings, `synara_context` etc. now read "Cedia
+is checking its context" while the tool *names* they match against are
+untouched) through the settings panels, onboarding, the composer, work-log and
+project-creation copy. The `trysynara.com` links are **removed rather than
+re-pointed**, because Cedia has no docs site: the sidebar help menu's Docs item,
+the onboarding tour's `docsHref` values and its "Read the guide" anchor, and the
+profile share card (whose only entry point died with the wave-0 Profile-stats
+cut, so the whole surface went with the dead files). Kept deliberately, and
+listed in the report: the MIT attribution and `upstream.json`'s project fields,
+and identifier-class strings (`synara:*` storage keys, `@synara/contracts`
+aliases, the `synara_*` agent-gateway tool-name prefixes, the `.synara` home
+convention, the `synara` theme-pack id) — those name the upstream project or a
+protocol value, not the running product.
+
+**Dead files: 75 deleted**, resolved by an importer closure over the bundle that
+was re-run afterwards to prove zero remain: the kanban subtree (its routes went
+in an earlier wave), the `whatsNew` changelog cluster and release-history dialog,
+the profile share card, three settings panels cut in wave 0, the AppSnap/vault
+leftovers, the Spaces and Studio helpers, and the replaced browser bootstrap
+chain (`bootstrap.ts`/`pairingBootstrap.ts`/`storageOriginMigration.ts` — Cedia's
+own `src/bootstrap.ts` installs the native API and imports the vendored `main`
+directly, so the three-file pairing chain was unreachable).
+
+**`upstream.json` rebuilt.** `vendor.included` is now exactly what is vendored —
+it was short by the six root-level files that ship with the port (`LICENSE`, two
+manifests, `components.json`, the vitest provider config, two package manifests),
+while `apps/server` and the three vendored tests were already listed correctly (so
+the plan's "wrongly excludes `apps/server`" note is out of date). A new
+`vendor.note` states how `included` and `excluded` relate (an explicit entry wins
+where a pattern also matches — which is how the three `*.test.ts` survive
+`apps/web/src/**/*.test.*`), and `vendor.adaptations` gains five entries for this
+wave.
+
+**Left for a re-vendor, not silently fixed:** ~120 vendored `*.browser.tsx`/
+`*.test.ts` files are excluded from both tsconfigs and the Vite build; four of
+them now reference deleted modules (`ChatView.browser.tsx`'s Studio/Spaces
+fixtures, and two that already imported harnesses which were never vendored).
+They cannot break any acceptance command, and reconciling them is a separate
+non-blocking pass.
+
+Receipt: agent-window root + vendor `tsc` clean, `vite build` clean (route tree
+regenerated), **86 pass / 0 fail**; `apps/macos` **700 pass / 2 fail** (the two
+pre-existing failures); host 156 pass; iOS `typecheck` clean + 166 pass;
+protocol/omp-adapter/relay 80 pass; `grep -ri trysynara apps/macos/agent-window`
+→ 0 matches; `grep -rn "/studio"` in the bundle → 0; root `tsc --noEmit` at the
+same 10 pre-existing errors; `ci-validate` CI-OK.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

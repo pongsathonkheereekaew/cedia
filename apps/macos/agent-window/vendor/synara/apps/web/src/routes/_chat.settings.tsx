@@ -34,7 +34,6 @@ import {
   ProvidersSettingsPanel,
 } from "~/components/settings/ProvidersSettingsPanel";
 import { ProviderOptionLabel } from "../components/ProviderIcon";
-import ReleaseHistoryDialog from "../components/ReleaseHistoryDialog";
 import { ProfileSettingsPanel } from "../components/settings/ProfileSettingsPanel";
 import { KeyboardShortcutsSettingsPanel } from "../components/settings/KeyboardShortcutsSettingsPanel";
 import {
@@ -227,7 +226,6 @@ function SettingsRouteView() {
       ? ["Thread sort order"]
       : []),
     ...(settings.showChatsSection !== defaults.showChatsSection ? ["Chats section"] : []),
-    ...(settings.showStudioSection !== defaults.showStudioSection ? ["Studio section"] : []),
     ...(settings.showAutomationRunThreads !== defaults.showAutomationRunThreads
       ? ["Automation runs"]
       : []),
@@ -528,14 +526,6 @@ function SettingsRouteView() {
             "Show the standalone Chats list in the sidebar footer (chats not tied to a project).",
           resetLabel: "chats section",
           ariaLabel: "Show the Chats section in the sidebar",
-        })}
-
-        {renderBooleanSettingRow({
-          settingKey: "showStudioSection",
-          title: "Studio",
-          description: "Show the Studio tab in the sidebar switcher.",
-          resetLabel: "studio section",
-          ariaLabel: "Show the Studio section in the sidebar",
         })}
 
         {renderBooleanSettingRow({

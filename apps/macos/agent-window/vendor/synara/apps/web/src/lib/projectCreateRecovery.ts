@@ -9,7 +9,6 @@ const DUPLICATE_PROJECT_CREATE_ERROR_PREFIX =
   "Orchestration command invariant failed (project.create): Project '";
 const DEFAULT_RECOVERY_MAX_ATTEMPTS = 6;
 const DEFAULT_RECOVERY_DELAY_MS = 50;
-const DEFAULT_RECOVERABLE_PROJECT_KINDS: ReadonlySet<string> = new Set(["project"]);
 
 export interface DuplicateProjectCreateRecoveryCandidate {
   readonly id: string;
@@ -27,22 +26,10 @@ interface ProjectLookupInput {
   readonly workspaceRoot?: string | null | undefined;
 }
 
-// Defaults to the original "project" kind so existing callers keep their current behavior;
-// other providers (e.g. the Studio hidden container) can opt into their own kind set.
-function isRecoverableProjectKind(
-  kind: string | undefined,
-  recoverableKinds: ReadonlySet<string> = DEFAULT_RECOVERABLE_PROJECT_KINDS,
-): boolean {
-  return recoverableKinds.has(kind ?? "project");
-}
-
-function isRecoverableActiveProject(
-  project: DuplicateProjectCreateRecoveryCandidate,
-  recoverableKinds?: ReadonlySet<string>,
-): boolean {
-  return (
-    (project.deletedAt ?? null) === null && isRecoverableProjectKind(project.kind, recoverableKinds)
-  );
+// Duplicate-create recovery only adopts ordinary projects: the managed home-chat container is
+// recovered by the container helpers in chatProjects.ts instead.
+function isRecoverableActiveProject(project: DuplicateProjectCreateRecoveryCandidate): boolean {
+  return (project.deletedAt ?? null) === null && (project.kind ?? "project") === "project";
 }
 
 function wait(ms: number): Promise<void> {
@@ -94,9 +81,9 @@ export async function waitForSnapshotMatch<TSnapshot, TMatch>(input: {
   return { match: null, snapshot: latestSnapshot };
 }
 
-// Shared machinery behind the hidden-container candidate helpers used by Studio and home-chat
-// project recovery: normalizes the cwd/workspaceRoot field naming difference between local store
-// projects and shell-snapshot rows, and finds a candidate by id via a caller-supplied predicate.
+// Shared machinery behind the container candidate helpers in chatProjects.ts: normalizes the
+// cwd/workspaceRoot field naming difference between local store projects and shell-snapshot rows,
+// and finds a candidate by id via a caller-supplied predicate.
 export interface ContainerCandidateFields {
   readonly cwd?: string | undefined;
   readonly workspaceRoot?: string | undefined;
@@ -140,14 +127,11 @@ export function extractDuplicateProjectCreateProjectId(message: string): string 
 export function findRecoverableProject<T extends DuplicateProjectCreateRecoveryCandidate>(
   input: ProjectLookupInput & {
     readonly projects: readonly T[];
-    readonly recoverableKinds?: ReadonlySet<string> | undefined;
   },
 ): T | null {
   if (input.projectId) {
     const projectById = input.projects.find(
-      (project) =>
-        isRecoverableActiveProject(project, input.recoverableKinds) &&
-        project.id === input.projectId,
+      (project) => isRecoverableActiveProject(project) && project.id === input.projectId,
     );
     if (projectById) {
       return projectById;
@@ -162,7 +146,7 @@ export function findRecoverableProject<T extends DuplicateProjectCreateRecoveryC
   return (
     input.projects.find(
       (project) =>
-        isRecoverableActiveProject(project, input.recoverableKinds) &&
+        isRecoverableActiveProject(project) &&
         workspaceRootsEqual(project.workspaceRoot, workspaceRoot),
     ) ?? null
   );
@@ -175,7 +159,6 @@ export function findRecoverableProjectForDuplicateCreate<
   readonly message: string;
   readonly projects: readonly T[];
   readonly workspaceRoot: string;
-  readonly recoverableKinds?: ReadonlySet<string> | undefined;
 }): T | null {
   if (!isDuplicateProjectCreateError(input.message)) {
     return null;
@@ -185,7 +168,6 @@ export function findRecoverableProjectForDuplicateCreate<
     projects: input.projects,
     projectId: extractDuplicateProjectCreateProjectId(input.message),
     workspaceRoot: input.workspaceRoot,
-    recoverableKinds: input.recoverableKinds,
   });
 }
 
@@ -198,7 +180,6 @@ export async function waitForRecoverableProjectInReadModel<
     readonly repairSnapshot?: (() => Promise<TSnapshot | null>) | undefined;
     readonly maxAttempts?: number | undefined;
     readonly delayMs?: number | undefined;
-    readonly recoverableKinds?: ReadonlySet<string> | undefined;
   },
 ): Promise<{
   project: TSnapshot["projects"][number] | null;
@@ -214,7 +195,6 @@ export async function waitForRecoverableProjectInReadModel<
         projects: candidateSnapshot.projects,
         projectId: input.projectId,
         workspaceRoot: input.workspaceRoot,
-        recoverableKinds: input.recoverableKinds,
       }) as TSnapshot["projects"][number] | null,
   });
 
@@ -231,7 +211,6 @@ export async function waitForRecoverableProjectForDuplicateCreate<
   readonly repairSnapshot?: (() => Promise<TSnapshot | null>) | undefined;
   readonly maxAttempts?: number | undefined;
   readonly delayMs?: number | undefined;
-  readonly recoverableKinds?: ReadonlySet<string> | undefined;
 }): Promise<{
   project: TSnapshot["projects"][number] | null;
   snapshot: TSnapshot | null;
@@ -246,7 +225,6 @@ export async function waitForRecoverableProjectForDuplicateCreate<
         message: input.message,
         projects: candidateSnapshot.projects,
         workspaceRoot: input.workspaceRoot,
-        recoverableKinds: input.recoverableKinds,
       }) as TSnapshot["projects"][number] | null,
   });
 

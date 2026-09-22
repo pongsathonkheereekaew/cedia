@@ -1,7 +1,6 @@
 // Purpose: Scores sidebar palette results for actions, themes, projects, and chat threads.
 // Keeps search local and deterministic so the palette can rank title hits above
 // message-content hits while still surfacing a useful snippet for chat matches.
-import type { ComponentType } from "react";
 
 import type { ProviderKind } from "@synara/contracts";
 import { basenameOfPath } from "../file-icons";
@@ -12,15 +11,8 @@ export interface SidebarSearchAction {
   description: string;
   keywords?: readonly string[];
   shortcutLabel?: string | null;
-  /** Dynamic actions (e.g. "Switch to <space>") execute this instead of a wired-up prop. */
+  /** Dynamic actions execute this instead of a wired-up prop. */
   run?: () => void;
-  /** Overrides the id-keyed icon map for actions whose glyph is data (a space's icon). */
-  icon?: ComponentType<{ className?: string }>;
-  /**
-   * Type-to-jump targets (one per space) only appear once the user types; listing them
-   * all in the empty palette would push threads and projects below the fold.
-   */
-  requiresQuery?: boolean;
 }
 
 export interface SidebarSearchProject {
@@ -30,7 +22,6 @@ export interface SidebarSearchProject {
   folderName: string;
   localName: string | null;
   cwd: string;
-  spaceName: string;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
 }
@@ -46,7 +37,6 @@ export interface SidebarSearchThread {
   projectId: string;
   projectName: string;
   projectRemoteName: string;
-  spaceName: string;
   provider: ProviderKind;
   createdAt: string;
   updatedAt?: string | undefined;
@@ -200,7 +190,6 @@ function scoreProject(project: SidebarSearchProject, query: string): number | nu
   const remoteName = normalizeText(project.remoteName);
   const cwd = normalizeText(project.cwd);
   const folder = normalizeText(project.folderName || basenameOfPath(project.cwd));
-  const spaceName = normalizeText(project.spaceName);
 
   if (name === query) return 150;
   if (remoteName === query) return 150;
@@ -211,9 +200,7 @@ function scoreProject(project: SidebarSearchProject, query: string): number | nu
   if (name.includes(query)) return 105;
   if (remoteName.includes(query)) return 105;
   if (folder.includes(query)) return 95;
-  if (spaceName === query) return 90;
   if (cwd.includes(query)) return 70;
-  if (spaceName.includes(query)) return 60;
   return null;
 }
 
@@ -224,7 +211,6 @@ export function matchSidebarSearchActions(
   const normalizedQuery = normalizeText(query);
 
   return actions
-    .filter((action) => !action.requiresQuery || normalizedQuery.length > 0)
     .map((action, index) => ({
       action,
       index,
@@ -297,7 +283,6 @@ export function matchSidebarSearchThreads(
       const title = normalizeText(thread.title);
       const projectName = normalizeText(thread.projectName);
       const projectRemoteName = normalizeText(thread.projectRemoteName);
-      const spaceName = normalizeText(thread.spaceName);
       const messageMatch = scoreMessage(thread.messages, normalizedQuery, queryTokens);
       let score: number | null = null;
       let matchKind: SidebarSearchThreadMatch["matchKind"] = "title";
@@ -327,9 +312,6 @@ export function matchSidebarSearchThreads(
         projectRemoteName.includes(normalizedQuery)
       ) {
         score = 65;
-        matchKind = "project";
-      } else if (spaceName.includes(normalizedQuery)) {
-        score = 55;
         matchKind = "project";
       }
 

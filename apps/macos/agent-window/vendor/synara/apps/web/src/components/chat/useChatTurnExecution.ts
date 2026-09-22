@@ -69,7 +69,7 @@ interface PreparedChatTurn {
   interactionModeForSend: ProviderInteractionMode;
   nextThreadWorkingDirectory: string | null;
   activeThread: Thread;
-  targetProjectKindForSend: "project" | "chat" | "studio";
+  targetProjectKindForSend: "project" | "chat";
   setupScriptForWorktree: ProjectScript | null;
   messageCreatedAt: string;
   turnAttachmentsPromise: ReturnType<typeof stageUploadComposerAttachments>;

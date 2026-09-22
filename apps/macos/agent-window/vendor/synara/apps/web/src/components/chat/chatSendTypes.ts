@@ -93,11 +93,8 @@ export interface ChatTurnSubmissionInput {
   hasNativeUserMessages: boolean;
   chatWorkspaceRoot: string | null;
   isHomeChatContainer: boolean;
-  isStudioContainer: boolean;
   resolvedThreadWorktreePath: string | null;
-  resolvedThreadWorkingDirectory: string | null;
   currentActiveGitBranch: string | null;
-  isContainerLandingProject: boolean;
   syncServerShellSnapshot: ReturnType<typeof useStore.getState>["syncServerShellSnapshot"];
   activeRootBranch: string | null;
   gitBranchSourceCwd: string | null;

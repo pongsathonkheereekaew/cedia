@@ -33,7 +33,6 @@ import {
 } from "../../lib/projectCreateRecovery";
 import { formatTerminalContextLabel, type TerminalContextDraft } from "../../lib/terminalContext";
 import { buildModelSelection } from "../../providerModelOptions";
-import { readActiveSpaceId } from "../../spacesUiStore";
 import { useStore } from "../../store";
 import type { Project } from "../../types";
 import { type Thread } from "../../types";
@@ -55,13 +54,10 @@ interface Input {
   activeProject: Project;
   chatWorkspaceRoot: string | null;
   isHomeChatContainer: boolean;
-  isStudioContainer: boolean;
   resolvedThreadWorktreePath: string | null;
   runtimeModeForSend: RuntimeMode;
   envModeForSend: DraftThreadEnvMode;
-  resolvedThreadWorkingDirectory: string | null;
   currentActiveGitBranch: string | null;
-  isContainerLandingProject: boolean;
   api: NonNullable<ReturnType<typeof readNativeApi>>;
   syncServerShellSnapshot: ReturnType<typeof useStore.getState>["syncServerShellSnapshot"];
   clearProjectDraftThreadId: ReturnType<
@@ -91,13 +87,10 @@ export async function prepareChatSendWorkspace({
   activeProject,
   chatWorkspaceRoot,
   isHomeChatContainer,
-  isStudioContainer,
   resolvedThreadWorktreePath,
   runtimeModeForSend,
   envModeForSend,
-  resolvedThreadWorkingDirectory,
   currentActiveGitBranch,
-  isContainerLandingProject,
   api,
   syncServerShellSnapshot,
   clearProjectDraftThreadId,
@@ -138,9 +131,6 @@ export async function prepareChatSendWorkspace({
   // Keep the optimistic label short while the server asks Codex for a better summary.
   const title = buildPromptThreadTitleFallback(titleSeed);
   const currentStoreState = useStore.getState();
-  // Keep an optimistically selected Space across the command/snapshot race. The server
-  // validates this best-effort target and degrades genuinely stale/deleted ids to Void.
-  const activeSpaceIdForSend = readActiveSpaceId();
   const firstSendDefaultModelSelection = buildModelSelection(
     selectedModelSelectionForSend.provider,
     selectedModelSelectionForSend.model ||
@@ -156,10 +146,9 @@ export async function prepareChatSendWorkspace({
     defaultModelSelection: firstSendDefaultModelSelection,
     isFirstMessage,
     isHomeChatContainer,
-    isStudioContainer,
     projects: currentStoreState.projects,
-    // Studio reference folders change the thread cwd without moving the chat out of
-    // the managed Studio project. Home-chat folder selection keeps its project routing.
+    // A home-chat folder mention routes the first send into a real project instead of keeping
+    // the thread inside the managed chat container.
     selectedWorkspaceRoot: isHomeChatContainer ? (resolvedThreadWorktreePath ?? null) : null,
     title,
     titleSeed,
@@ -181,20 +170,12 @@ export async function prepareChatSendWorkspace({
     : firstSendTarget.target;
   let nextRuntimeModeForSend = runtimeModeForSend;
   let nextThreadEnvMode = envModeForSend;
-  let nextThreadBranch = isStudioContainer ? null : activeThread.branch;
-  let nextThreadWorktreePath = isStudioContainer ? null : activeThread.worktreePath;
-  let nextThreadWorkingDirectory = isStudioContainer
-    ? resolvedThreadWorkingDirectory
-    : (activeThread.workingDirectory ?? null);
-  let nextAssociatedWorktreePath = isStudioContainer
-    ? null
-    : (activeThread.associatedWorktreePath ?? null);
-  let nextAssociatedWorktreeBranch = isStudioContainer
-    ? null
-    : (activeThread.associatedWorktreeBranch ?? null);
-  let nextAssociatedWorktreeRef = isStudioContainer
-    ? null
-    : (activeThread.associatedWorktreeRef ?? null);
+  let nextThreadBranch = activeThread.branch;
+  let nextThreadWorktreePath = activeThread.worktreePath;
+  let nextThreadWorkingDirectory = activeThread.workingDirectory ?? null;
+  let nextAssociatedWorktreePath = activeThread.associatedWorktreePath ?? null;
+  let nextAssociatedWorktreeBranch = activeThread.associatedWorktreeBranch ?? null;
+  let nextAssociatedWorktreeRef = activeThread.associatedWorktreeRef ?? null;
   const shouldResumeSettledLocalThread =
     isServerThread &&
     activeThread.settledAt != null &&
@@ -202,16 +183,10 @@ export async function prepareChatSendWorkspace({
     nextThreadWorktreePath === null;
   let currentActiveGitBranchForSend = currentActiveGitBranch;
 
-  if (isFirstMessage && isContainerLandingProject && firstSendTarget.kind !== "current") {
+  if (isFirstMessage && isHomeChatContainer && firstSendTarget.kind !== "current") {
     if (firstSendTarget.kind === "create-project") {
       const projectId = newProjectId();
       const createdAt = firstSendCreatedAt.toISOString();
-      // Managed chat rows stay global; a folder mention creates an ordinary project and
-      // should inherit the Space where the first send originated. Resolved before the
-      // `try`: a value block inside a try body makes React Compiler bail out on the whole
-      // component.
-      const createProjectSpaceFields =
-        firstSendTarget.creation.kind === "project" ? { spaceId: activeSpaceIdForSend } : {};
       try {
         await api.orchestration.dispatchCommand({
           type: "project.create",
@@ -222,7 +197,6 @@ export async function prepareChatSendWorkspace({
           workspaceRoot: firstSendTarget.creation.workspaceRoot,
           createWorkspaceRootIfMissing: firstSendTarget.creation.createWorkspaceRootIfMissing,
           defaultModelSelection: firstSendTarget.creation.defaultModelSelection,
-          ...createProjectSpaceFields,
           createdAt,
         });
         targetProjectIdForSend = projectId;
@@ -346,7 +320,10 @@ export async function prepareChatSendWorkspace({
     threadIdForSend,
     title,
     targetProjectIdForSend,
-    targetProjectKindForSend,
+    // A turn is dispatched against an ordinary project or the managed home-chat container: the
+    // host adapter never emits any other project kind, so the wider store kind narrows here for
+    // the dispatch contract.
+    targetProjectKindForSend: targetProjectKindForSend as "project" | "chat",
     targetProjectCwdForSend,
     targetProjectDefaultModelSelectionForSend,
     nextRuntimeModeForSend,

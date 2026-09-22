@@ -20,9 +20,9 @@ function OriginContent(): ReactNode {
   return (
     <>
       <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground/70">
-        <SynaraLogo className="h-4 w-auto" aria-label="Synara" />
+        <SynaraLogo className="h-4 w-auto" aria-label="Cedia" />
       </span>
-      <span className="truncate">Sent by Synara from another thread</span>
+      <span className="truncate">Sent by Cedia from another thread</span>
     </>
   );
 }

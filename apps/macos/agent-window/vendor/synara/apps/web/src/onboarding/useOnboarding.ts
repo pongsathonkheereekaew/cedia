@@ -3,7 +3,7 @@
 //          decision revisable until authoritative data lands, and persist completion to the
 //          server with an installation-scoped local fallback reconciled on later launches.
 // Layer: Web hook
-// Depends on: app settings, server settings/config queries, orchestration store, spaces rule.
+// Depends on: app settings, server settings/config queries, orchestration store, chat containers.
 
 import { useQuery } from "@tanstack/react-query";
 import { Schema } from "effect";
@@ -11,8 +11,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAppSettings } from "../appSettings";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import { isHomeChatContainerProject } from "../lib/chatProjects";
 import { serverConfigQueryOptions, serverSettingsQueryOptions } from "../lib/serverReactQuery";
-import { isOrdinarySpaceProject } from "../lib/spaces";
 import { useStore } from "../store";
 import { useWorkspacePathsStore } from "../workspacePathsStore";
 import {
@@ -75,13 +75,14 @@ export function useOnboarding(): UseOnboardingResult {
   const threadsHydrated = useStore((store) => store.threadsHydrated);
   const homeDir = useWorkspacePathsStore((store) => store.homeDir);
   const chatWorkspaceRoot = useWorkspacePathsStore((store) => store.chatWorkspaceRoot);
-  const studioWorkspaceRoot = useWorkspacePathsStore((store) => store.studioWorkspaceRoot);
-  // The Home chat and Studio containers are created automatically, so "no projects yet"
+  // The Home chat container is created automatically, so "no projects yet"
   // must count ordinary projects only or the tour would never show.
   const projectCount = useStore(
     (store) =>
-      store.projects.filter((project) =>
-        isOrdinarySpaceProject(project, { homeDir, chatWorkspaceRoot, studioWorkspaceRoot }),
+      store.projects.filter(
+        (project) =>
+          project.kind === "project" &&
+          !isHomeChatContainerProject(project, { homeDir, chatWorkspaceRoot }),
       ).length,
   );
   const isOpen = useOnboardingDialogStore((store) => store.isOpen);

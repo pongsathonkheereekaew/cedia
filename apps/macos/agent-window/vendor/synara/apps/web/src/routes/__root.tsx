@@ -154,7 +154,6 @@ import {
 import {
   getGitInvalidationThreadIdForEvent,
   getProjectFileInvalidationThreadIdForEvent,
-  getStudioOutputInvalidationThreadIdForEvent,
   resolveGitInvalidationCwdForThreadId,
   shouldInvalidateGitQueriesForEvent,
   shouldInvalidateProviderQueriesForEvent,
@@ -310,8 +309,8 @@ function RootRouteView() {
           <ProviderStatusRefreshCoordinator />
           <GlobalShortcutsDialog />
           {/* Cedia §10 item 60: Safari vault/cookie-import surface cut (no OMP/host backing) */}
-          {/* Cedia §10 item 60: trysynara.com feedback surface cut (no OMP/host backing) */}
-          {/* Cedia §10 item 60: Synara WhatsNew/release-history surface cut (no OMP/host backing) */}
+          {/* Cedia §10 item 60: the remote feedback surface is cut (no OMP/host backing) */}
+          {/* Cedia §10 item 60: Cedia WhatsNew/release-history surface cut (no OMP/host backing) */}
           <TaskCompletionNotifications />
           <QueuedComposerDrainCoordinator />
           <GlobalOnboardingDialog />
@@ -328,16 +327,16 @@ function RootRouteView() {
 function TransportCompatibilityView({ issue }: { issue: WsCompatibilityError }) {
   const title =
     issue.action === "update-client"
-      ? "This Synara client needs an update."
+      ? "This Cedia client needs an update."
       : issue.action === "update-server"
-        ? "The Synara server needs an update."
-        : "Synara needs to reconnect with a matching build.";
+        ? "The Cedia server needs an update."
+        : "Cedia needs to reconnect with a matching build.";
   const guidance =
     issue.action === "update-client"
       ? "Update or reload this client, then reconnect."
       : issue.action === "update-server"
         ? "Update or restart the server, then reload this client."
-        : "Reload the app. If this repeats, restart Synara so the client and server use matching builds.";
+        : "Reload the app. If this repeats, restart Cedia so the client and server use matching builds.";
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
@@ -1137,7 +1136,6 @@ function EventRouter() {
     let needsBroadGitInvalidation = false;
     let pendingGitInvalidationThreadIds = new Set<ThreadId>();
     let pendingProjectFileInvalidationThreadIds = new Set<ThreadId>();
-    let pendingStudioOutputInvalidationThreadIds = new Set<ThreadId>();
     let pendingDomainEvents: OrchestrationEvent[] = [];
     const immediatelyFlushedAssistantMessageIds = new Set<string>();
     let providerDiscoveryInvalidationFingerprint: string | null = null;
@@ -1461,7 +1459,6 @@ function EventRouter() {
       // Desktop can briefly hydrate from an empty startup stream before the
       // projection reader is fully ready. Let the later non-empty shell query win.
       return (
-        (currentState.spaces.length === 0 && snapshot.spaces.length > 0) ||
         (currentState.projects.length === 0 && snapshot.projects.length > 0) ||
         ((currentState.threadIds?.length ?? 0) === 0 && snapshot.threads.length > 0)
       );
@@ -1668,15 +1665,6 @@ function EventRouter() {
           void queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
         }
       }
-      if (pendingStudioOutputInvalidationThreadIds.size > 0) {
-        // File-change activities cover non-Git Studio chats; finalized checkpoints cover Git.
-        for (const threadId of pendingStudioOutputInvalidationThreadIds) {
-          void queryClient.invalidateQueries({
-            queryKey: serverQueryKeys.studioThreadOutputs(threadId),
-          });
-        }
-        pendingStudioOutputInvalidationThreadIds = new Set();
-      }
       if (needsBroadGitInvalidation) {
         needsBroadGitInvalidation = false;
         pendingGitInvalidationThreadIds = new Set();
@@ -1710,10 +1698,6 @@ function EventRouter() {
       const projectFileThreadId = getProjectFileInvalidationThreadIdForEvent(event);
       if (projectFileThreadId) {
         pendingProjectFileInvalidationThreadIds.add(projectFileThreadId);
-      }
-      const studioOutputThreadId = getStudioOutputInvalidationThreadIdForEvent(event);
-      if (studioOutputThreadId) {
-        pendingStudioOutputInvalidationThreadIds.add(studioOutputThreadId);
       }
       if (shouldInvalidateGitQueriesForEvent(event)) {
         const threadId = getGitInvalidationThreadIdForEvent(event);
@@ -1875,7 +1859,6 @@ function EventRouter() {
           // projection rather than the live stream.
           needsProviderInvalidation = true;
           pendingGitInvalidationThreadIds.add(threadId);
-          pendingStudioOutputInvalidationThreadIds.add(threadId);
           domainEventFlushThrottler.maybeExecute();
         }
       } catch (error) {
@@ -2185,7 +2168,6 @@ function EventRouter() {
         setServerWorkspacePaths({
           homeDir: payload.homeDir,
           chatWorkspaceRoot: payload.chatWorkspaceRoot,
-          studioWorkspaceRoot: payload.studioWorkspaceRoot,
         });
         await ensureScopedSubscriptions();
         if (disposed) {
@@ -2399,7 +2381,6 @@ function EventRouter() {
       needsProviderInvalidation = false;
       needsBroadGitInvalidation = false;
       pendingGitInvalidationThreadIds = new Set();
-      pendingStudioOutputInvalidationThreadIds = new Set();
       threadProjectionReconcileInFlight.clear();
       threadProjectionTerminalFencePending.clear();
       threadProjectionTerminalFenceSequenceById.clear();

@@ -1,6 +1,6 @@
 import type { ResolvedKeybindingsConfig } from "@synara/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -21,7 +21,6 @@ import {
 import { isElectron } from "../env";
 import { useTheme } from "../hooks/useTheme";
 import { useHandleNewChat } from "../hooks/useHandleNewChat";
-import { useHandleNewStudioChat } from "../hooks/useHandleNewStudioChat";
 import { useTemporaryThreadLifecycle } from "../hooks/useTemporaryThreadLifecycle";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useRecentViewSwitcher } from "../hooks/useRecentViewSwitcher";
@@ -35,16 +34,12 @@ import {
 import { resolveInheritedThreadContext } from "../lib/threadBootstrap";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
-import { startFreshChatForActiveSurface } from "../lib/startContainerChat";
-import { isOrdinarySpaceProject } from "../lib/spaces";
 import { isKeyboardShortcutsHelpShortcut, resolveShortcutCommand } from "../keybindings";
 import { useStore } from "../store";
 import { createProjectLastActivityAtSelector } from "../storeSelectors";
-import { useSpacesUiStore } from "../spacesUiStore";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { onServerMaintenanceUpdated } from "../wsNativeApi";
-import { useWorkspacePathsStore } from "../workspacePathsStore";
 import { useProviderStatusesForLocalConfig } from "~/hooks/useProviderStatusesForLocalConfig";
 import { useRefreshProviderStatusesNow } from "~/hooks/useProviderStatusRefresh";
 import { resolveProviderSendAvailabilityWithRefresh } from "~/lib/providerAvailability";
@@ -216,9 +211,6 @@ function isRecentViewSwitcherCommitKey(event: KeyboardEvent): boolean {
 
 function ChatRouteGlobalShortcuts() {
   const navigate = useNavigate();
-  const isStudioRoute = useLocation({
-    select: (location) => location.pathname.startsWith("/studio"),
-  });
   const { toggleSidebar } = useSidebar();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
@@ -244,17 +236,12 @@ function ChatRouteGlobalShortcuts() {
     projects,
   });
   const { handleNewChat } = useHandleNewChat();
-  const { handleNewStudioChat } = useHandleNewStudioChat();
-  const homeDir = useWorkspacePathsStore((state) => state.homeDir);
-  const chatWorkspaceRoot = useWorkspacePathsStore((state) => state.chatWorkspaceRoot);
-  const studioWorkspaceRoot = useWorkspacePathsStore((state) => state.studioWorkspaceRoot);
   const latestProjectId = useLatestProjectStore((state) => state.latestProjectId);
   const setLatestProjectId = useLatestProjectStore((state) => state.setLatestProjectId);
   const clearLatestProjectId = useLatestProjectStore((state) => state.clearLatestProjectId);
   const threadsHydrated = useStore((state) => state.threadsHydrated);
   const selectProjectLastActivityAt = useMemo(() => createProjectLastActivityAtSelector(), []);
   const projectLastActivityAt = useStore(selectProjectLastActivityAt);
-  const activeSpaceId = useSpacesUiStore((state) => state.activeSpaceId);
   useTemporaryThreadLifecycle(activeContextThreadId);
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
@@ -274,55 +261,20 @@ function ChatRouteGlobalShortcuts() {
     presentationMode: activeThreadTerminalState?.presentationMode ?? "drawer",
     terminalOpen,
   });
-  // Shortcuts that target "a project" must stay inside the Space you are looking at, or
-  // mod+alt+arrow would switch Space and the next new-thread shortcut would drop you back
-  // out of it.
-  const activeSpaceProjects = useMemo(
-    () =>
-      projects.filter(
-        (project) =>
-          isOrdinarySpaceProject(project, { homeDir, chatWorkspaceRoot, studioWorkspaceRoot }) &&
-          (project.spaceId ?? null) === activeSpaceId,
-      ),
-    [activeSpaceId, chatWorkspaceRoot, homeDir, projects, studioWorkspaceRoot],
-  );
-  const currentProjectId = resolveCurrentProjectTargetId(
-    activeSpaceProjects,
-    activeProject?.id ?? null,
-  );
-  // The remembered project is global, so it is unusable the moment you switch Space. Fall
-  // back to this Space's most recently touched project rather than to nothing.
+  const currentProjectId = resolveCurrentProjectTargetId(projects, activeProject?.id ?? null);
   const latestUsableProjectId = useMemo(
     () =>
       resolveLatestProjectTargetIdWithFallback(
-        activeSpaceProjects,
+        projects,
         latestProjectId,
         projectLastActivityAt,
       ),
-    [activeSpaceProjects, latestProjectId, projectLastActivityAt],
+    [latestProjectId, projectLastActivityAt, projects],
   );
   // Deliberately unscoped: the persisted id is only cleared once the project is gone from
-  // the app entirely, not merely absent from the Space you happen to be in.
+  // the app entirely, not merely absent from the list a shortcut happens to look at.
   const persistedLatestProjectStillExists = resolveLatestProjectTargetId(projects, latestProjectId);
-  const handleNewChatForActiveSurface = useCallback(
-    () =>
-      startFreshChatForActiveSurface({
-        activeProject,
-        isStudioRoute,
-        paths: { homeDir, chatWorkspaceRoot, studioWorkspaceRoot },
-        handleNewChat,
-        handleNewStudioChat,
-      }),
-    [
-      activeProject,
-      chatWorkspaceRoot,
-      handleNewChat,
-      handleNewStudioChat,
-      homeDir,
-      isStudioRoute,
-      studioWorkspaceRoot,
-    ],
-  );
+  const handleNewChatForActiveSurface = useCallback(() => handleNewChat(), [handleNewChat]);
 
   useEffect(() => {
     if (!currentProjectId) {

@@ -53,7 +53,7 @@ export async function insertAppSnapCaptureIntoDraft(
     existingAttachmentCount,
   });
   const image = images[0];
-  if (!image) throw new Error(error ?? "Synara could not attach the captured AppSnap.");
+  if (!image) throw new Error(error ?? "Cedia could not attach the captured AppSnap.");
 
   let imageAddedToDraft = false;
   let blobKey: string | null = null;

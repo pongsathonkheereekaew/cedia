@@ -53,7 +53,7 @@ export function ProfileSettingsPanel() {
       </header>
 
       {/* Cedia §10 item 60: profile stats (lifetime tokens, heatmap, insights, model
-          usage, share card) came from the Synara server's stats RPC, which this
+          usage, share card) came from the Cedia server's stats RPC, which this
           window never backs — a totals dashboard with no totals is cut outright. */}
 
       <EditProfileDialog

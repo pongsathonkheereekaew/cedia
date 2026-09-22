@@ -267,10 +267,10 @@
   }
 }
 
-/* One-shot entry for the sidebar's segment surface swap (Studio <-> Projects).
-   Keyed remounts play this on the incoming surface so the switch reads
-   as a movement instead of a hard cut. Enter-only by design: no exit or height
-   animation, so it cannot feed back into list animation or scroll behavior. */
+/* One-shot entry for the sidebar's surface swap: keyed remounts play this on the
+   incoming surface so the switch reads as a movement instead of a hard cut.
+   Enter-only by design: no exit or height animation, so it cannot feed back into
+   list animation or scroll behavior. */
 @keyframes sidebar-surface-enter {
   from {
     opacity: 0;
@@ -2919,7 +2919,7 @@ diffs-container {
   --picker-option-py: 0.3125rem;
 }
 
-/* Sidebar Synara/Studio surface switcher: tight shell inset, airy option rows.
+/* Sidebar surface switcher: tight shell inset, airy option rows.
    Composer picker tokens otherwise pin option py to ~1px and win over Tailwind. */
 .sidebar-surface-picker-menu {
   --picker-menu-body-p: 0.25rem;

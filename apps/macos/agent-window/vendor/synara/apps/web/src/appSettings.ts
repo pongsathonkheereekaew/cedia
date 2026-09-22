@@ -294,12 +294,9 @@ export const AppSettingsSchema = Schema.Struct({
   confirmTerminalTabClose: Schema.Boolean.pipe(withDefaults(() => true)),
   diffWordWrap: Schema.Boolean.pipe(withDefaults(() => false)),
   showPullRequestDiffColors: Schema.Boolean.pipe(withDefaults(() => true)),
-  // Local-only UI preferences for hiding sidebar surfaces a user doesn't want.
-  // `showChatsSection` controls the standalone "Chats" list in the sidebar footer
-  // (rootless chats not tied to a project). `showStudioSection` controls the
-  // optional Studio tab in the section switcher.
+  // Local-only UI preference for hiding the standalone "Chats" list in the sidebar footer
+  // (rootless chats not tied to a project).
   showChatsSection: Schema.Boolean.pipe(withDefaults(() => true)),
-  showStudioSection: Schema.Boolean.pipe(withDefaults(() => true)),
   // Local-only UI preferences for the primary sidebar nav block (New thread, Kanban,
   // Pull requests, Automations): drag-to-reorder order plus explicitly hidden items.
   // An item whose route is currently active stays visible regardless (mirrors

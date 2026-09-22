@@ -192,7 +192,7 @@ export function useChatAutomationCreation({
                 type: "warning",
                 title: "Thread note not added",
                 description:
-                  "The automation was created, but Synara could not add the activity note.",
+                  "The automation was created, but Cedia could not add the activity note.",
               });
             }
           })();
@@ -212,7 +212,7 @@ export function useChatAutomationCreation({
             type: "error",
             title: "Could not create automation",
             description:
-              error instanceof Error ? error.message : "Synara could not save the automation.",
+              error instanceof Error ? error.message : "Cedia could not save the automation.",
           });
           return false;
         })
@@ -286,7 +286,7 @@ export function useChatAutomationCreation({
           toastManager.add({
             type: "error",
             title: "Could not create chat",
-            description: "Synara could not promote this draft before saving the automation.",
+            description: "Cedia could not promote this draft before saving the automation.",
           });
           return null;
         }
@@ -313,7 +313,7 @@ export function useChatAutomationCreation({
           description:
             error instanceof Error
               ? error.message
-              : "Synara could not promote this draft before saving the automation.",
+              : "Cedia could not promote this draft before saving the automation.",
         });
         return null;
       }

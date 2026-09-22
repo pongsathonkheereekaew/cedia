@@ -139,7 +139,7 @@ export function AdvancedSettingsPanel(props: {
         <SettingsSection title="Session">
           <SettingsRow
             title="This browser"
-            description="Revoke this browser session and close every live Synara connection it owns. A fresh pairing link is required to reconnect."
+            description="Revoke this browser session and close every live Cedia connection it owns. A fresh pairing link is required to reconnect."
             status={`Authenticated as ${authSessionQuery.data.role ?? "client"}.`}
             control={
               <Button
@@ -239,7 +239,7 @@ export function AdvancedSettingsPanel(props: {
           description="Current application version."
           control={<code className="text-xs font-medium text-muted-foreground">{APP_VERSION}</code>}
         />
-        {/* Cedia §10 item 60: the release-history row opened the Synara changelog
+        {/* Cedia §10 item 60: the release-history row opened the Cedia changelog
             dialog, so it stays out until a Cedia changelog exists. */}
       </SettingsSection>
     </div>

@@ -41,7 +41,7 @@ export function normalizeProviderStatusForLocalConfig(input: {
       available: false,
       authStatus: "unknown",
       checkedAt: status.checkedAt,
-      message: "Provider is disabled in Synara settings.",
+      message: "Provider is disabled in Cedia settings.",
     };
   }
 

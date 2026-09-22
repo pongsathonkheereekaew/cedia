@@ -448,7 +448,7 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
 
   const renderActionItem = (action: SidebarSearchAction) => {
     const onSelect = action.run ?? actionHandler(action.id, props);
-    const Icon = action.icon ?? ACTION_ICONS[action.id];
+    const Icon = ACTION_ICONS[action.id];
     return (
       <CommandItem
         key={action.id}
@@ -701,13 +701,7 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
                       const matchContext =
                         snippet ??
                         (matchKind === "project"
-                          ? [
-                              ...new Set([
-                                thread.projectName,
-                                thread.projectRemoteName,
-                                thread.spaceName,
-                              ]),
-                            ]
+                          ? [...new Set([thread.projectName, thread.projectRemoteName])]
                               .filter((name) =>
                                 name
                                   .trim()
@@ -808,13 +802,8 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
                         <span className={PALETTE_TEXT_CLASS}>
                           {project.name || "Untitled project"}
                         </span>
-                        {/* Opening a project from here can switch Space, so the destination
-                            is worth naming; the path is what identifies the project. */}
-                        <span className={PALETTE_META_CLASS}>
-                          {project.spaceName
-                            ? `${project.spaceName} · ${project.cwd}`
-                            : project.cwd}
-                        </span>
+                        {/* The path identifies the project the row opens. */}
+                        <span className={PALETTE_META_CLASS}>{project.cwd}</span>
                       </CommandItem>
                     ))}
                   </CommandGroup>

@@ -74,12 +74,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
       "Show the standalone Chats list in the sidebar footer chats not tied to a project. sidebar section",
   },
   {
-    id: "general:studio-section",
-    section: "general",
-    title: "Studio",
-    keywords: "Show the Studio tab in the sidebar switcher. sidebar section content outbox",
-  },
-  {
     id: "general:automation-run-threads",
     section: "general",
     title: "Automation runs",
@@ -155,7 +149,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "appearance:system-ui-font",
     section: "appearance",
     title: "Use system UI font",
-    keywords: "Use the operating system interface font throughout Synara.",
+    keywords: "Use the operating system interface font throughout Cedia.",
   },
   {
     id: "appearance:ui-density",
@@ -280,7 +274,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     section: "shortcuts",
     title: "Keybindings",
     keywords:
-      "Every keyboard shortcut available in Synara, grouped by context. keybindings hotkeys key combo cmd ctrl reference",
+      "Every keyboard shortcut available in Cedia, grouped by context. keybindings hotkeys key combo cmd ctrl reference",
     target: null,
   },
   // ── Archived ──────────────────────────────────────────────────────────────────
@@ -325,7 +319,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "providers:provider-updates",
     section: "providers",
     title: "Provider updates",
-    keywords: "Update installed provider tools that Synara can safely update. upgrade cli",
+    keywords: "Update installed provider tools that Cedia can safely update. upgrade cli",
   },
   {
     id: "providers:installed-clis",

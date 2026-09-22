@@ -16,7 +16,7 @@ export async function attachAppSnapCapture(
   const persistenceResult = await insertAppSnapCaptureIntoDraft(threadId, capture);
 
   const unverifiedDescription =
-    "The capture is attached, but Synara could not verify its draft metadata. If it is missing after a reload, Synara will attach it again.";
+    "The capture is attached, but Cedia could not verify its draft metadata. If it is missing after a reload, Cedia will attach it again.";
   const successDescription = capture.sourceAppName
     ? `Captured ${capture.sourceAppName} and added it to the composer.`
     : "The window was added to the composer.";

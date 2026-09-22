@@ -126,8 +126,8 @@ export interface BranchToolbarProps {
   variant?: BranchSelectorVariant;
   // Keeps the Local/Worktree control visible while hiding Git-only branch UI for non-repo cwd.
   showBranchSelector?: boolean;
-  // Studio-like containers bind the toolbar to one concrete local folder and
-  // must not persist project/worktree metadata from branch selector actions.
+  // Binds the toolbar to one concrete local folder: branch selector actions then never persist
+  // project/worktree metadata for it.
   fixedLocalWorkspaceCwd?: string | null;
 }
 

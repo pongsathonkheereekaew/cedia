@@ -9,7 +9,7 @@ import { cn } from "~/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 export const DEFAULT_DIFF_TRUNCATION_MESSAGE =
-  "Synara stopped reading at the diff size limit. Some files or changes may be missing.";
+  "Cedia stopped reading at the diff size limit. Some files or changes may be missing.";
 
 export function DiffTruncationWarning({
   className,

@@ -5,7 +5,6 @@
 import {
   MessageId,
   type OrchestrationReadModel,
-  type OrchestrationSpaceShell,
   type OrchestrationSessionStatus,
   type OrchestrationShellSnapshot,
   type OrchestrationThreadActivity,
@@ -26,7 +25,6 @@ import type {
   ChatAttachment,
   ChatMessage,
   Project,
-  Space,
   SidebarThreadSummary,
   Thread,
   ThreadSession,
@@ -35,7 +33,6 @@ import type {
 } from "./types";
 
 type ReadModelProject = OrchestrationReadModel["projects"][number];
-type ReadModelSpace = OrchestrationReadModel["spaces"][number];
 type ReadModelThread = OrchestrationReadModel["threads"][number];
 type ReadModelMessage = ReadModelThread["messages"][number];
 type ShellSnapshotThread = OrchestrationShellSnapshot["threads"][number];
@@ -48,7 +45,6 @@ export type ProjectNormalizationInput = Pick<
   | "defaultModelSelection"
   | "scripts"
   | "isPinned"
-  | "spaceId"
   | "createdAt"
   | "updatedAt"
 >;
@@ -411,7 +407,6 @@ export function normalizeProject(
     previous.defaultModelSelection === defaultModelSelection &&
     previous.expanded === expanded &&
     (previous.isPinned ?? false) === (incoming.isPinned ?? false) &&
-    (previous.spaceId ?? null) === (incoming.spaceId ?? null) &&
     previous.createdAt === incoming.createdAt &&
     previous.updatedAt === incoming.updatedAt &&
     previous.scripts === scripts
@@ -430,47 +425,10 @@ export function normalizeProject(
     defaultModelSelection,
     expanded,
     isPinned: incoming.isPinned ?? false,
-    spaceId: incoming.spaceId ?? null,
     createdAt: incoming.createdAt,
     updatedAt: incoming.updatedAt,
     scripts,
   };
-}
-
-export function normalizeSpace(
-  incoming: ReadModelSpace | OrchestrationSpaceShell,
-  previous: Space | undefined,
-): Space {
-  if (
-    previous &&
-    previous.id === incoming.id &&
-    previous.name === incoming.name &&
-    previous.icon === incoming.icon &&
-    previous.sortOrder === incoming.sortOrder &&
-    previous.createdAt === incoming.createdAt &&
-    previous.updatedAt === incoming.updatedAt
-  ) {
-    return previous;
-  }
-  return {
-    id: incoming.id,
-    name: incoming.name,
-    icon: incoming.icon,
-    sortOrder: incoming.sortOrder,
-    createdAt: incoming.createdAt,
-    updatedAt: incoming.updatedAt,
-  };
-}
-
-export function mapSpaces(
-  incoming: ReadonlyArray<ReadModelSpace | OrchestrationSpaceShell>,
-  previous: Space[],
-): Space[] {
-  const previousById = new Map(previous.map((space) => [space.id, space] as const));
-  const next = incoming
-    .map((space) => normalizeSpace(space, previousById.get(space.id)))
-    .toSorted((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
-  return arraysShallowEqual(previous, next) ? previous : next;
 }
 
 function normalizeChatAttachments(

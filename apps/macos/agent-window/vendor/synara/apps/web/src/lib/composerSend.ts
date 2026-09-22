@@ -130,7 +130,7 @@ export async function prepareComposerImageAttachmentsFromFiles(input: {
       error =
         cause instanceof ComposerImagePreparationError
           ? cause.message
-          : `Synara could not prepare '${file.name || "image"}'.`;
+          : `Cedia could not prepare '${file.name || "image"}'.`;
     }
   }
 

@@ -8,7 +8,6 @@ import {
   type OrchestrationReadModel,
   type OrchestrationShellSnapshot,
   type OrchestrationShellStreamEvent,
-  type SpaceId,
   type ThreadId,
 } from "@synara/contracts";
 import { Debouncer } from "@tanstack/react-pacer";
@@ -17,7 +16,6 @@ import { create } from "zustand";
 
 import { resolveCreateBranchFlowCompletedMerge } from "./storeNormalization";
 import {
-  applySpaceOrder,
   applyShellEvent,
   applyThreadUpdate,
   clearThreadDetailSyncFailureInClientState,
@@ -40,7 +38,6 @@ type ReadModelThread = OrchestrationReadModel["threads"][number];
 export type { AppState } from "./storeState";
 export { EMPTY_THREAD_IDS } from "./storeState";
 export {
-  applySpaceOrder,
   applyShellEvent,
   clearThreadDetailSyncFailureInClientState,
   evictThreadDetailFromClientState,
@@ -277,7 +274,6 @@ interface AppStore extends AppState {
   setAllProjectsExpanded: (expanded: boolean) => void;
   collapseProjectsExcept: (activeProjectId: Project["id"] | null) => void;
   reorderProjects: (draggedProjectId: Project["id"], targetProjectId: Project["id"]) => void;
-  reorderSpacesLocally: (orderedSpaceIds: ReadonlyArray<SpaceId>) => void;
   renameProjectLocally: (projectId: Project["id"], name: string | null) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
   setThreadWorkspace: (threadId: ThreadId, patch: ThreadWorkspacePatch) => void;
@@ -330,8 +326,6 @@ export const useStore = create<AppStore>((set) => ({
     set((state) => collapseProjectsExcept(state, activeProjectId)),
   reorderProjects: (draggedProjectId, targetProjectId) =>
     set((state) => reorderProjects(state, draggedProjectId, targetProjectId)),
-  reorderSpacesLocally: (orderedSpaceIds) =>
-    set((state) => applySpaceOrder(state, orderedSpaceIds)),
   renameProjectLocally: (projectId, name) => {
     set((state) => renameProjectLocally(state, projectId, name));
     persistAppStateNow();

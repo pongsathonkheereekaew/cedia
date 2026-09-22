@@ -60,13 +60,10 @@ export function makeDomainEvent<TType extends OrchestrationEvent["type"]>(
   const aggregateId =
     "threadId" in payload
       ? payload.threadId
-      : "spaceId" in payload
-        ? payload.spaceId
-        : "projectId" in payload
-          ? payload.projectId
-          : ProjectId.makeUnsafe("project-1");
-  const aggregateKind =
-    "threadId" in payload ? "thread" : "spaceId" in payload ? "space" : "project";
+      : "projectId" in payload
+        ? payload.projectId
+        : ProjectId.makeUnsafe("project-1");
+  const aggregateKind = "threadId" in payload ? "thread" : "project";
   return {
     type,
     payload,
@@ -117,7 +114,6 @@ export function makeState(thread: Thread): AppState {
     ...shell
   } = thread;
   return {
-    spaces: [],
     projects: [makeProject()],
     sidebarThreadSummaryById: {},
     threadsHydrated: true,
@@ -162,7 +158,6 @@ export function makeProject(
       model: "gpt-5-codex",
     },
     expanded: true,
-    spaceId: null,
     scripts: [],
     ...overrides,
   };
@@ -219,7 +214,6 @@ export function makeReadModel(
         updatedAt: "2026-02-27T00:00:00.000Z",
         deletedAt: null,
         scripts: [],
-        spaceId: null,
       },
     ],
     threads: [thread],
@@ -243,7 +237,6 @@ export function makeShellSnapshot(thread: OrchestrationShellSnapshot["threads"][
         createdAt: "2026-02-27T00:00:00.000Z",
         updatedAt: "2026-02-27T00:00:00.000Z",
         scripts: [],
-        spaceId: null,
       },
     ],
     threads: [thread],
@@ -266,7 +259,6 @@ export function makeReadModelProject(
     updatedAt: "2026-02-27T00:00:00.000Z",
     deletedAt: null,
     scripts: [],
-    spaceId: null,
     ...overrides,
   };
 }

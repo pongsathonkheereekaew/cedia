@@ -4,7 +4,6 @@
 // Layer: Chat / empty-state entrypoint
 
 import {
-  Fragment,
   memo,
   useCallback,
   useDeferredValue,
@@ -15,18 +14,15 @@ import {
   type ComponentProps,
   type ReactElement,
 } from "react";
-import { type ProjectDirectoryEntry, type ProjectId, type SpaceId } from "@synara/contracts";
+import { type ProjectDirectoryEntry, type ProjectId } from "@synara/contracts";
 import { useAppSettings } from "../../appSettings";
 import { readNativeApi } from "../../nativeApi";
 import { useStore } from "../../store";
 import { createSidebarDisplayThreadsSelector } from "../../storeSelectors";
 import { PlusIcon, XIcon } from "~/lib/icons";
 import { getLocalFoldersGroupLabel } from "~/lib/localFoldersGroupLabel";
-import { groupItemsBySpace, spaceDisplayName } from "~/lib/spaceGrouping";
-import { useVoidSpace } from "~/voidSpaceStore";
 import { cn } from "~/lib/utils";
 import { FolderClosed } from "../FolderClosed";
-import { SpaceIcon } from "../SpaceIcon";
 import { PickerPanelShell } from "./PickerPanelShell";
 import { PickerTriggerButton } from "./PickerTriggerButton";
 import {
@@ -50,7 +46,6 @@ import {
   ComboboxTrigger,
 } from "../ui/combobox";
 import { useWorkspacePathsStore } from "../../workspacePathsStore";
-import { useSpacesUiStore } from "../../spacesUiStore";
 
 interface ProjectPickerProps {
   align?: "start" | "center" | "end";
@@ -72,7 +67,9 @@ interface ProjectPickerProps {
    * project name in the new-chat heading). The element receives the combobox trigger props.
    */
   renderTrigger?: ReactElement<Record<string, unknown>>;
-  /** Copy overrides for folder-tagging contexts (e.g. Studio) where picking never creates a project. */
+  /**
+   * Copy override for folder-tagging contexts where picking never creates a project.
+   */
   emptyTriggerLabel?: string;
   addActionLabel?: string;
   resetActionLabel?: string;
@@ -81,8 +78,6 @@ interface ProjectPickerProps {
 
 interface ActiveFolderOption {
   projectId: ProjectId | null;
-  spaceId: SpaceId | null;
-  spaceName: string;
   cwd: string;
   primaryLabel: string;
   secondaryLabel: string | null;
@@ -169,7 +164,6 @@ export const ProjectPicker = memo(function ProjectPicker({
   const resetActionLabel = resetActionLabelProp ?? "Don't work in a project";
   const searchPlaceholder = searchPlaceholderProp ?? "Search projects";
   const projects = useStore((state) => state.projects);
-  const spaces = useStore((state) => state.spaces);
   const { settings } = useAppSettings();
   const hideAutomationRunThreads = !settings.showAutomationRunThreads;
   const sidebarThreads = useStore(
@@ -178,8 +172,6 @@ export const ProjectPicker = memo(function ProjectPicker({
       [hideAutomationRunThreads],
     ),
   );
-  const activeSpaceId = useSpacesUiStore((state) => state.activeSpaceId);
-  const voidSpace = useVoidSpace();
   const homeDir = useWorkspacePathsStore((state) => state.homeDir);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -195,8 +187,6 @@ export const ProjectPicker = memo(function ProjectPicker({
   const activeFolderOptions = useMemo(() => {
     const seen = new Set<string>();
     const nextOptions: ActiveFolderOption[] = [];
-    const projectById = new Map(projects.map((project) => [project.id, project] as const));
-    const getSpaceName = (spaceId: SpaceId | null) => spaceDisplayName(spaceId, spaces, voidSpace);
 
     for (const project of projects.filter((project) => project.kind === "project")) {
       const folderName = basenameOfPath(project.cwd) ?? project.folderName ?? project.name;
@@ -207,11 +197,8 @@ export const ProjectPicker = memo(function ProjectPicker({
       const primaryLabel = project.localName?.trim() || folderName;
       const secondaryLabel =
         project.localName?.trim() && project.localName.trim() !== folderName ? folderName : null;
-      const spaceId = project.spaceId ?? null;
       nextOptions.push({
         projectId: project.id,
-        spaceId,
-        spaceName: getSpaceName(spaceId),
         cwd: project.cwd,
         primaryLabel,
         secondaryLabel,
@@ -231,11 +218,8 @@ export const ProjectPicker = memo(function ProjectPicker({
           continue;
         }
         seen.add(workspaceRoot);
-        const spaceId = projectById.get(thread.projectId)?.spaceId ?? null;
         nextOptions.push({
           projectId: null,
-          spaceId,
-          spaceName: getSpaceName(spaceId),
           cwd: workspaceRoot,
           primaryLabel: folderName,
           secondaryLabel: null,
@@ -253,8 +237,6 @@ export const ProjectPicker = memo(function ProjectPicker({
     ) {
       nextOptions.unshift({
         projectId: null,
-        spaceId: activeSpaceId,
-        spaceName: getSpaceName(activeSpaceId),
         cwd: selectedWorkspaceRoot,
         primaryLabel: selectedFolderName,
         secondaryLabel: null,
@@ -262,15 +244,7 @@ export const ProjectPicker = memo(function ProjectPicker({
     }
 
     return nextOptions;
-  }, [
-    activeSpaceId,
-    isProjectSelectionMode,
-    projects,
-    selectedWorkspaceRoot,
-    sidebarThreads,
-    spaces,
-    voidSpace,
-  ]);
+  }, [isProjectSelectionMode, projects, selectedWorkspaceRoot, sidebarThreads]);
   const activeFolderPathSet = useMemo(
     () => new Set(activeFolderOptions.map((entry) => entry.cwd)),
     [activeFolderOptions],
@@ -291,31 +265,16 @@ export const ProjectPicker = memo(function ProjectPicker({
   );
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const matchingActiveFolderOptions = useMemo(() => {
+  const filteredActiveFolderOptions = useMemo(() => {
     if (normalizedQuery.length === 0) return activeFolderOptions;
     return activeFolderOptions.filter((entry) =>
-      [entry.primaryLabel, entry.secondaryLabel, entry.spaceName, entry.cwd]
+      [entry.primaryLabel, entry.secondaryLabel, entry.cwd]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery),
     );
   }, [activeFolderOptions, normalizedQuery]);
-  const filteredActiveFolderGroups = useMemo(
-    () =>
-      groupItemsBySpace({
-        items: matchingActiveFolderOptions,
-        spaces,
-        activeSpaceId,
-        spaceIdOf: (option) => option.spaceId,
-        voidSpace,
-      }),
-    [activeSpaceId, matchingActiveFolderOptions, spaces, voidSpace],
-  );
-  const filteredActiveFolderOptions = useMemo(
-    () => filteredActiveFolderGroups.flatMap((group) => group.items),
-    [filteredActiveFolderGroups],
-  );
   const filteredLocalFolderOptions = useMemo(() => {
     if (normalizedQuery.length === 0) return localFolderOptions;
     return localFolderOptions.filter(({ entry }) =>
@@ -701,30 +660,16 @@ export const ProjectPicker = memo(function ProjectPicker({
                 : "No matches"}
           </ComboboxEmpty>
           <ComboboxList className="max-h-64">
-            {filteredActiveFolderGroups.map((group, groupIndex) => {
-              const precedingOptionCount = filteredActiveFolderGroups
-                .slice(0, groupIndex)
-                .reduce((count, candidate) => count + candidate.items.length, 0);
-              return (
-                <Fragment key={group.key}>
-                  {groupIndex > 0 ? <ComboboxSeparator /> : null}
-                  <ComboboxGroup>
-                    <ComboboxGroupLabel
-                      className={cn(
-                        PICKER_PANEL_GROUP_LABEL_CLASS_NAME,
-                        "flex items-center gap-1.5",
-                      )}
-                    >
-                      <SpaceIcon icon={group.icon} className="size-3 shrink-0" />
-                      <span className="min-w-0 truncate">{group.label}</span>
-                    </ComboboxGroupLabel>
-                    {group.items.map((folder, index) =>
-                      renderActiveFolderOption(folder, precedingOptionCount + index),
-                    )}
-                  </ComboboxGroup>
-                </Fragment>
-              );
-            })}
+            {filteredActiveFolderOptions.length > 0 ? (
+              <ComboboxGroup>
+                <ComboboxGroupLabel className={PICKER_PANEL_GROUP_LABEL_CLASS_NAME}>
+                  Projects
+                </ComboboxGroupLabel>
+                {filteredActiveFolderOptions.map((folder, index) =>
+                  renderActiveFolderOption(folder, index),
+                )}
+              </ComboboxGroup>
+            ) : null}
             {filteredActiveFolderOptions.length > 0 && filteredLocalFolderOptions.length > 0 ? (
               <ComboboxSeparator />
             ) : null}

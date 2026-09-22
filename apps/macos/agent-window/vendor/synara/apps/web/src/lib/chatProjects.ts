@@ -316,8 +316,8 @@ export function isHomeChatContainerProject(
     return false;
   }
   // Before any server path resolves (first launch, cleared storage), trust the kind alone so
-  // chat-surface projects aren't mis-partitioned during boot — mirrors isStudioContainerProject.
-  // Once paths are known, the root checks below decide, so drifted rows stay excluded.
+  // chat-surface projects aren't mis-partitioned during boot. Once paths are known, the root
+  // checks below decide, so drifted rows stay excluded.
   if (!paths.homeDir && !paths.chatWorkspaceRoot?.trim()) {
     return project.kind === "chat";
   }

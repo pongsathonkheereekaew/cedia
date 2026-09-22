@@ -89,7 +89,7 @@ export function listRunningChatsFromDesktopStore(
 
 export function runningChatsQuitCopy(
   chats: ReadonlyArray<RunningChatQuitSummary>,
-  appName = "Synara",
+  appName = "Cedia",
 ): RunningChatsQuitCopy {
   return {
     title: chats.length === 1 ? "A chat is still running" : "Chats are still running",
@@ -101,7 +101,7 @@ export function runningChatsQuitCopy(
 }
 
 /** The ordinary user turn dispatched on each remembered chat at the next launch. */
-export function quitResumeContinuationPrompt(appName = "Synara"): string {
+export function quitResumeContinuationPrompt(appName = "Cedia"): string {
   return `${appName} was closed while this chat was still running. Continue where you left off.`;
 }
 

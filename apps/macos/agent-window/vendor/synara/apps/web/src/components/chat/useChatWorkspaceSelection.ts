@@ -68,7 +68,6 @@ interface ChatWorkspaceSelectionInput {
   isServerThread: boolean;
   isLocalDraftThread: boolean;
   isHomeChatContainer: boolean;
-  isStudioContainer: boolean;
   hasNativeUserMessages: boolean;
   composerEditorRef: RefObject<ComposerPromptEditorHandle | null>;
   scheduleComposerFocus: () => void;
@@ -83,7 +82,6 @@ export function useChatWorkspaceSelection({
   isServerThread,
   isLocalDraftThread,
   isHomeChatContainer,
-  isStudioContainer,
   hasNativeUserMessages,
   composerEditorRef,
   scheduleComposerFocus,
@@ -165,19 +163,6 @@ export function useChatWorkspaceSelection({
     // Picker-menu resets still restore focus because the editor is no longer active in that path.
     const restoreComposerFocus = !composerEditorRef.current?.isFocused();
     if (isLocalDraftThread) {
-      if (isStudioContainer) {
-        setDraftThreadContext(threadId, {
-          envMode: "local",
-          branch: null,
-          worktreePath: null,
-          workingDirectory: null,
-          lastKnownPr: null,
-        });
-        if (restoreComposerFocus) {
-          scheduleComposerFocus();
-        }
-        return;
-      }
       if (!isHomeChatContainer) {
         return (async () => {
           if (!homeDir) {
@@ -221,7 +206,6 @@ export function useChatWorkspaceSelection({
       setStoreThreadWorkspace(activeThread.id, {
         envMode: "local",
         worktreePath: null,
-        ...(isStudioContainer ? { workingDirectory: null } : {}),
       });
       const api = readNativeApi();
       if (api && !hasNativeUserMessages && !activeThread.session) {
@@ -231,7 +215,6 @@ export function useChatWorkspaceSelection({
           threadId: activeThread.id,
           envMode: "local",
           worktreePath: null,
-          ...(isStudioContainer ? { workingDirectory: null } : {}),
         });
       }
     }
@@ -246,7 +229,6 @@ export function useChatWorkspaceSelection({
     homeDir,
     isHomeChatContainer,
     isLocalDraftThread,
-    isStudioContainer,
     moveEmptyDraftToLocalProject,
     scheduleComposerFocus,
     setDraftThreadContext,
@@ -257,39 +239,6 @@ export function useChatWorkspaceSelection({
 
   const handleSelectWorkspaceRoot = useCallback(
     (workspaceRoot: string) => {
-      if (isStudioContainer) {
-        if (isLocalDraftThread) {
-          setDraftThreadContext(threadId, {
-            envMode: "local",
-            branch: null,
-            worktreePath: null,
-            workingDirectory: workspaceRoot,
-          });
-        } else if (activeThread) {
-          setStoreThreadWorkspace(activeThread.id, {
-            envMode: "local",
-            branch: null,
-            worktreePath: null,
-            workingDirectory: workspaceRoot,
-          });
-          if (!hasNativeUserMessages && !activeThread.session) {
-            const api = readNativeApi();
-            if (api) {
-              void api.orchestration.dispatchCommand({
-                type: "thread.meta.update",
-                commandId: newCommandId(),
-                threadId: activeThread.id,
-                envMode: "local",
-                branch: null,
-                worktreePath: null,
-                workingDirectory: workspaceRoot,
-              });
-            }
-          }
-        }
-        scheduleComposerFocus();
-        return;
-      }
       if (isLocalDraftThread) {
         setDraftThreadContext(threadId, {
           envMode: "worktree",
@@ -309,9 +258,7 @@ export function useChatWorkspaceSelection({
     },
     [
       activeThread,
-      hasNativeUserMessages,
       isLocalDraftThread,
-      isStudioContainer,
       scheduleComposerFocus,
       setDraftThreadContext,
       setStoreThreadWorkspace,

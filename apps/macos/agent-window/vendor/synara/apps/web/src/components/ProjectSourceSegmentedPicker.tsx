@@ -25,8 +25,8 @@ const PROJECT_SOURCES: ReadonlyArray<{
 ];
 
 /**
- * The compact raised-thumb picker previously used for the Synara/Studio switch,
- * adapted to choose how a project is added.
+ * Compact raised-thumb picker choosing how a project is added: an existing
+ * local folder or a GitHub repository.
  */
 export function ProjectSourceSegmentedPicker(props: {
   readonly value: ProjectSource;
@@ -68,7 +68,7 @@ export function ProjectSourceSegmentedPicker(props: {
               aria-checked={active}
               disabled={props.disabled || sourceUnavailable}
               title={
-                sourceUnavailable ? "Update the Synara server to add GitHub projects." : undefined
+                sourceUnavailable ? "Update the Cedia server to add GitHub projects." : undefined
               }
               className={cn(
                 "relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors duration-200 disabled:opacity-50",

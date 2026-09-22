@@ -2,7 +2,7 @@
 // Purpose: Shared cold-start machinery for chat index routes — guards against briefly-empty
 //          bootstrap snapshots, then defers to a caller-supplied resolver to pick the thread
 //          route to restore, falling back to creating a fresh draft. Used by the home-chat index
-//          route and the Studio index route so both get identical empty-snapshot recovery.
+//          route.
 // Layer: Routing
 // Depends on: sidebar UI persistence plus caller-supplied restore/fresh-chat policy.
 
@@ -41,9 +41,8 @@ export function RestoreOrCreateChatRoute({
   resolveRestoreRoute,
   createFreshChat,
 }: {
-  // Surface-specific policy for picking the thread route to restore (e.g. the last-visited route
-  // for home chats, the latest Studio thread or draft for Studio). The remembered-route recovery
-  // below still keys off the total thread count, which is shared across surfaces.
+  // Surface-specific policy for picking the thread route to restore (the last-visited route for
+  // home chats). The remembered-route recovery below still keys off the total thread count.
   readonly resolveRestoreRoute: RestoreRouteResolver;
   readonly createFreshChat: () => Promise<StartContainerChatResult>;
 }) {
