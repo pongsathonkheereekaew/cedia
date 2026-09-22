@@ -6,10 +6,8 @@
 import { PROVIDER_DISPLAY_NAMES, type ProviderKind } from "@synara/contracts";
 import { PROVIDER_DESCRIPTORS } from "@synara/shared/providerMetadata";
 import { sameAppSnapShortcut } from "@synara/shared/appSnapShortcut";
-import { SafariAccessSetupButton } from "../components/SafariAccessOnboarding";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-
 import {
   type AppSettings,
   type FollowUpBehavior,
@@ -30,14 +28,8 @@ import {
 import { APP_VERSION } from "../branding";
 import { AdvancedSettingsPanel } from "~/components/settings/AdvancedSettingsPanel";
 import { AppIconPicker } from "~/components/settings/AppIconPicker";
-import {
-  ArchivedSettingsPanel,
-  WorktreesSettingsPanel,
-} from "~/components/settings/ConversationStorageSettingsPanels";
-import {
-  AppSnapSettingsPanel,
-  NotificationsSettingsPanel,
-} from "~/components/settings/DesktopSettingsPanels";
+import { ArchivedSettingsPanel } from "~/components/settings/ConversationStorageSettingsPanels";
+import { NotificationsSettingsPanel } from "~/components/settings/DesktopSettingsPanels";
 import { ModelsSettingsPanel } from "~/components/settings/ModelsSettingsPanel";
 import {
   isProviderInstallSettingsDirty,
@@ -45,10 +37,8 @@ import {
 } from "~/components/settings/ProvidersSettingsPanel";
 import { ProviderOptionLabel } from "../components/ProviderIcon";
 import ReleaseHistoryDialog from "../components/ReleaseHistoryDialog";
-import { KeyboardShortcutsSettingsPanel } from "../components/settings/KeyboardShortcutsSettingsPanel";
 import { ProfileSettingsPanel } from "../components/settings/ProfileSettingsPanel";
-import { ProviderUsageSettingsPanel } from "../components/settings/ProviderUsageSettingsPanel";
-import { ExternalMcpSettingsPanel } from "../components/settings/ExternalMcpSettingsPanel";
+import { KeyboardShortcutsSettingsPanel } from "../components/settings/KeyboardShortcutsSettingsPanel";
 import {
   SettingResetButton,
   SettingsSegmentedControl,
@@ -59,7 +49,6 @@ import {
   SettingsSection,
   SettingsSectionShell,
 } from "../components/settings/SettingsPanelPrimitives";
-import { SkillsSettingsPanel } from "../components/settings/SkillsSettingsPanel";
 import { ThemeModePicker } from "../components/settings/ThemeModePicker";
 import { ThemePackEditor } from "../components/ThemePackEditor";
 import {
@@ -111,7 +100,6 @@ import {
 import { SETTINGS_PAGE_BACKGROUND_CLASS_NAME } from "../settingsPanelStyles";
 
 // ── Settings taxonomy ──────────────────────────────────────────────────────
-
 const UI_DENSITY_OPTIONS = [
   {
     value: "compact",
@@ -203,80 +191,15 @@ function SettingsRouteView() {
   const activeSectionItem = SETTINGS_NAV_ITEMS.find((item) => item.id === activeSection)!;
 
   const {
-    followHostTheme,
-    isDefaultActiveTheme,
-    resetAllThemes,
-    resolvedTheme,
-    setFollowHostTheme,
-    theme,
-    setTheme,
     systemUiFont,
     setSystemUiFont,
   } = useTheme();
   const { settings, defaults, updateSettings, updateSettingsAndWait, resetSettings } =
     useAppSettings();
   const desktopTopBarTrafficLightGutterClassName = useDesktopTopBarTrafficLightGutterClassName();
-  const [releaseHistoryOpen, setReleaseHistoryOpen] = useState(false);
   const [resetEpoch, setResetEpoch] = useState(0);
   const platform = getNavigatorPlatform();
   const shouldShowFontSmoothing = isMacPlatform(platform);
-  const supportsCustomTitleBarSetting =
-    isElectron && (isWindowsPlatform(platform) || isLinuxPlatform(platform));
-  const customTitleBarState = useDesktopCustomTitleBarState();
-  const customTitleBarRestartRequired =
-    customTitleBarState.supported && settings.useCustomTitleBar !== customTitleBarState.active;
-  const customTitleBarPreferenceDirty =
-    supportsCustomTitleBarSetting &&
-    (settings.useCustomTitleBar !== defaults.useCustomTitleBar ||
-      (customTitleBarState.supported &&
-        customTitleBarState.preference !== defaults.useCustomTitleBar));
-
-  function showCustomTitleBarRestartToast(): void {
-    toastManager.add({
-      type: "warning",
-      title: "Restart to apply title bar",
-      description: "The window frame updates the next time Synara launches.",
-      actionProps: {
-        "aria-label": "Restart Synara",
-        children: "Restart",
-        onClick: () => {
-          void window.desktopBridge?.customTitleBar?.relaunch();
-        },
-      },
-    });
-  }
-
-  async function persistCustomTitleBarPreference(
-    enabled: boolean,
-  ): Promise<{ readonly restartRequired: boolean } | null> {
-    try {
-      const bridge = window.desktopBridge?.customTitleBar;
-      if (!bridge) throw new Error("Desktop title bar bridge is unavailable.");
-      const state = await bridge.setPreference(enabled);
-      if (!state.supported || state.preference !== enabled) {
-        throw new Error("Desktop title bar preference was not persisted.");
-      }
-      return state;
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: "Could not update title bar",
-        description: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
-  async function applyCustomTitleBarPreference(enabled: boolean): Promise<void> {
-    const previous = settings.useCustomTitleBar;
-    updateSettings({ useCustomTitleBar: enabled });
-    const state = await persistCustomTitleBarPreference(enabled);
-    if (state === null) {
-      updateSettings({ useCustomTitleBar: previous });
-      return;
-    }
-    if (state.restartRequired) showCustomTitleBarRestartToast();
-  }
 
   const visibleTerminalFontFamilySuggestions = useMemo(() => {
     const query = settings.terminalFontFamily.trim().toLowerCase();
@@ -304,14 +227,12 @@ function SettingsRouteView() {
         .getElementById(settingsTarget)
         ?.scrollIntoView({ block: "start", behavior: "smooth" });
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeSection, settingsTarget]);
-
+  });
   const changedSettingLabels = [
-    ...(theme !== "system" ? ["Theme"] : []),
-    ...(!isDefaultActiveTheme ? [`${resolvedTheme === "dark" ? "Dark" : "Light"} theme pack`] : []),
     ...(settings.defaultProvider !== defaults.defaultProvider ? ["Default provider"] : []),
-    ...(settings.defaultThreadEnvMode !== defaults.defaultThreadEnvMode ? ["New thread mode"] : []),
+    ...(settings.defaultThreadEnvMode !== defaults.defaultThreadEnvMode
+      ? ["New thread mode"]
+      : []),
     ...(settings.sidebarProjectSortOrder !== defaults.sidebarProjectSortOrder
       ? ["Project sort order"]
       : []),
@@ -325,8 +246,6 @@ function SettingsRouteView() {
       : []),
     ...(settings.uiDensity !== defaults.uiDensity ? ["UI density"] : []),
     ...(settings.chatWidth !== defaults.chatWidth ? ["Chat width"] : []),
-    ...(settings.desktopAppIcon !== defaults.desktopAppIcon ? ["App icon"] : []),
-    ...(customTitleBarPreferenceDirty ? ["Custom title bar"] : []),
     ...(settings.chatFontSizePx !== defaults.chatFontSizePx ? ["Base font size"] : []),
     ...(settings.terminalFontSizePx !== defaults.terminalFontSizePx ? ["Terminal font size"] : []),
     ...(settings.terminalFontFamily !== defaults.terminalFontFamily ? ["Terminal font"] : []),
@@ -399,14 +318,6 @@ function SettingsRouteView() {
     );
     if (!confirmed) return;
 
-    if (customTitleBarPreferenceDirty) {
-      const state = await persistCustomTitleBarPreference(defaults.useCustomTitleBar);
-      if (state === null) return;
-      if (state.restartRequired) showCustomTitleBarRestartToast();
-    }
-
-    setTheme("system");
-    resetAllThemes();
     await resetSettings();
     setResetEpoch((current) => current + 1);
   }
@@ -453,7 +364,6 @@ function SettingsRouteView() {
 
   const renderGeneralPanel = () => (
     <div className="space-y-6">
-      <SafariAccessSetupButton />
       <SettingsSection title="Core defaults">
         <SettingsRow
           title="Default provider"
@@ -739,121 +649,23 @@ function SettingsRouteView() {
 
   const renderAppearancePanel = () => (
     <div className="space-y-6">
-      <SettingsSectionShell
-        title="Theme"
-        action={
-          theme !== "system" ? (
-            <SettingResetButton label="theme" onClick={() => setTheme("system")} />
-          ) : null
-        }
-      >
-        {/* The mode picker is the one settings control that sits directly on the page
-            instead of inside a card — the mockups are the whole UI, so boxing them in
-            a card reads as chrome around chrome. The anchor keeps search deep-links
-            (`?target=setting-theme`) working without the SettingsRow. */}
-        <div id={settingRowAnchorId("Theme")} className="scroll-mt-24 pb-1.5">
-          <ThemeModePicker value={theme} onValueChange={setTheme} ariaLabel="Theme preference" />
-        </div>
-
-        <SettingsRow
-          title="Follow IDE theme"
-          description="Match the IDE's theme and colors. Editing a theme pack below switches this off so your own look sticks."
-          control={
-            <Switch
-              checked={followHostTheme}
-              onCheckedChange={(checked) => setFollowHostTheme(Boolean(checked))}
-              aria-label="Follow IDE theme"
-            />
-          }
-        />
-
-        <div className="space-y-3">
-          {(resolvedTheme === "dark"
-            ? (["dark", "light"] as const)
-            : (["light", "dark"] as const)
-          ).map((variant) => (
-            <ThemePackEditor
-              key={variant}
-              variant={variant}
-              isActive={resolvedTheme === variant}
-              mode={theme}
-            />
-          ))}
+      <SettingsSectionShell title="Theme">
+        {/* Cedia §10 item 54 (one theme authority): mode picker, follow switch and pack
+            editors are cut. This window paints with the IDE's workbench.colorTheme;
+            changing it happens in the IDE. The anchor keeps search deep-links
+            (`?target=setting-theme`) working without a SettingsRow. */}
+        <div id={settingRowAnchorId("Theme")} className="scroll-mt-24">
+          <SettingsRow
+            title="Theme"
+            description="Cedia follows the IDE theme. Change it in the IDE window (Preferences: Color Theme); both windows repaint together."
+            status="Following the IDE"
+          />
         </div>
       </SettingsSectionShell>
 
-      {isElectron ? (
-        <SettingsSection title="App">
-          <SettingsRow
-            title="App icon"
-            description="Choose the icon Synara uses in the dock or taskbar."
-            resetAction={
-              settings.desktopAppIcon !== defaults.desktopAppIcon ? (
-                <SettingResetButton
-                  label="app icon"
-                  onClick={() => updateSettings({ desktopAppIcon: defaults.desktopAppIcon })}
-                />
-              ) : null
-            }
-            control={
-              <AppIconPicker
-                platform={platform}
-                value={settings.desktopAppIcon}
-                onValueChange={async (desktopAppIcon) => {
-                  if (desktopAppIcon !== settings.desktopAppIcon) {
-                    updateSettings({ desktopAppIcon });
-                  }
-                  await window.desktopBridge?.setAppIcon(desktopAppIcon);
-                }}
-              />
-            }
-          />
-          {supportsCustomTitleBarSetting ? (
-            <SettingsRow
-              title="Use custom title bar"
-              description={
-                customTitleBarRestartRequired
-                  ? "Restart Synara to apply. Some Linux window managers work better with the system title bar."
-                  : "Replace the system title bar with Synara's frameless chrome and window controls. Restart required to apply."
-              }
-              status={customTitleBarRestartRequired ? "Restart required" : undefined}
-              resetAction={
-                settings.useCustomTitleBar !== defaults.useCustomTitleBar ? (
-                  <SettingResetButton
-                    label="custom title bar"
-                    onClick={() => {
-                      void applyCustomTitleBarPreference(defaults.useCustomTitleBar);
-                    }}
-                  />
-                ) : null
-              }
-              control={
-                <div className="flex items-center gap-2">
-                  {customTitleBarRestartRequired ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={() => {
-                        void window.desktopBridge?.customTitleBar?.relaunch();
-                      }}
-                    >
-                      Restart
-                    </Button>
-                  ) : null}
-                  <Switch
-                    checked={settings.useCustomTitleBar}
-                    onCheckedChange={(checked) => {
-                      void applyCustomTitleBarPreference(Boolean(checked));
-                    }}
-                    aria-label="Use custom title bar"
-                  />
-                </div>
-              }
-            />
-          ) : null}
-        </SettingsSection>
-      ) : null}
+      {/* Cedia §10 item 54: the App section rendered desktop-app controls whose bridge
+          methods Cedia never backs (setAppIcon/customTitleBar relaunch) — controls with
+          nothing behind them are cut outright instead of rendered dead. */}
 
       <SettingsSection title="Typography and spacing">
         <SettingsRow
@@ -1251,10 +1063,6 @@ function SettingsRouteView() {
         return <KeyboardShortcutsSettingsPanel />;
       case "profile":
         return <ProfileSettingsPanel />;
-      case "skills":
-        return <SkillsSettingsPanel />;
-      case "usage":
-        return <ProviderUsageSettingsPanel />;
       default:
         return null;
     }
@@ -1332,13 +1140,6 @@ function SettingsRouteView() {
                   defaults={defaults}
                   updateSettings={updateSettings}
                 />
-                <AppSnapSettingsPanel
-                  active={activeSection === "appsnap"}
-                  settings={settings}
-                  defaults={defaults}
-                  updateSettings={updateSettings}
-                />
-                <WorktreesSettingsPanel active={activeSection === "worktrees"} />
                 <ArchivedSettingsPanel active={activeSection === "archived"} />
                 <ModelsSettingsPanel
                   active={activeSection === "models"}
@@ -1355,24 +1156,14 @@ function SettingsRouteView() {
                   updateSettingsAndWait={updateSettingsAndWait}
                   resetEpoch={resetEpoch}
                 />
-                <ExternalMcpSettingsPanel active={activeSection === "integrations"} />
                 <AdvancedSettingsPanel
                   active={activeSection === "advanced"}
-                  onOpenReleaseHistory={() => setReleaseHistoryOpen(true)}
                   resetEpoch={resetEpoch}
                 />
               </div>
             </div>
           </div>
         </div>
-        {/* Mounted at the route level (outside the scrollable panel) so the
-          dialog portal can overlay the entire settings view without being
-          clipped by the content wrapper's overflow. */}
-        <ReleaseHistoryDialog
-          open={releaseHistoryOpen}
-          onOpenChange={setReleaseHistoryOpen}
-          defaultExpandedVersion={APP_VERSION}
-        />
       </RouteInsetSurface>
     </div>
   );

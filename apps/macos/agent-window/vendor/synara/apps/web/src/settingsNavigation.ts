@@ -4,25 +4,26 @@
 // Exports: section ids, nav items, and search normalization helper
 
 export const SETTINGS_SECTION_IDS = [
+  // Cedia §10 item 60 keeps only backed sections: the general panel, notification
+  // and behavior rows, the read-only keybindings sheet (editing lands with
+  // §10 item 57), models, providers, system tools, and archived threads, plus the
+  // local profile editors (name/handle/avatar persist in localStorage, no stats
+  // RPC). Every other section id is gone, so old `?section=` deep links normalize
+  // to general.
   "general",
   "profile",
   "appearance",
   "notifications",
   "behavior",
-  "appsnap",
   "shortcuts",
-  "worktrees",
   "archived",
   "models",
   "providers",
-  "skills",
-  "usage",
-  "integrations",
   "advanced",
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
-export type SettingsNavGroupId = "personal" | "integrations" | "coding" | "system" | "archived";
+export type SettingsNavGroupId = "personal" | "coding" | "system" | "archived";
 
 /**
  * Deep-link scroll targets inside settings panels. Each id is shared by its DOM owner and callers
@@ -49,11 +50,10 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "personal", label: "Personal" },
-  { id: "integrations", label: "Integrations" },
   { id: "coding", label: "Coding" },
   { id: "system", label: "System" },
   { id: "archived", label: "Archived" },
-] as const;
+];
 
 export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   {
@@ -68,9 +68,9 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     id: "profile",
     group: "personal",
     label: "Profile",
-    description: "Your local activity, streaks, and a shareable stats card.",
+    description: "Your local display name, handle, and avatar.",
     icon: "user",
-    eyebrow: "Your stats",
+    eyebrow: "Your identity",
   },
   {
     id: "appearance",
@@ -105,30 +105,6 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     eyebrow: "Key bindings",
   },
   {
-    id: "usage",
-    group: "personal",
-    label: "Usage & limits",
-    description: "See remaining quota and credits for every signed-in provider.",
-    icon: "gauge",
-    eyebrow: "Provider limits",
-  },
-  {
-    id: "appsnap",
-    group: "integrations",
-    label: "AppSnap",
-    description: "Capture another app's frontmost window directly into a task.",
-    icon: "screen-capture",
-    eyebrow: "Screen capture",
-  },
-  {
-    id: "integrations",
-    group: "integrations",
-    label: "MCP connections",
-    description: "Give Codex, Claude, and other local agents scoped access to Synara tasks.",
-    icon: "plugin-1",
-    eyebrow: "External agents",
-  },
-  {
     id: "providers",
     group: "coding",
     label: "Agent providers",
@@ -143,22 +119,6 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     description: "Choose the model used for Git writing and add custom model slugs.",
     icon: "brain",
     eyebrow: "Model configuration",
-  },
-  {
-    id: "skills",
-    group: "coding",
-    label: "Agent skills",
-    description: "Review reusable workflows discovered across all configured providers.",
-    icon: "building-blocks",
-    eyebrow: "Reusable workflows",
-  },
-  {
-    id: "worktrees",
-    group: "coding",
-    label: "Managed worktrees",
-    description: "Review and clean up isolated workspaces created by Synara.",
-    icon: "branch-simple",
-    eyebrow: "Workspace management",
   },
   {
     id: "advanced",
@@ -176,7 +136,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     icon: "archive",
     eyebrow: "Thread management",
   },
-] as const;
+];
 
 /**
  * Stable DOM id for a settings row, derived from its (string) title. Shared by the row that

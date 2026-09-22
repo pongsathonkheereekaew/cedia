@@ -1,10 +1,13 @@
 // FILE: sidebarNavOrdering.ts
-// Purpose: Keeps the primary sidebar nav (New thread, Kanban, Pull requests, Automations)
-//          order and visibility stable across the sidebar and persisted settings.
+// Purpose: Keeps the primary sidebar nav (New thread, Automations) order and visibility
+//          stable across the sidebar and persisted settings.
 // Layer: Web settings utility
 // Exports: nav item ids, default order, and normalization helpers.
+// Cedia scope cut (§10 item 60): Kanban and Pull requests had no OMP/host source, so their
+// nav ids leave the type — persisted orders normalize them away. Automations stays visible
+// as an honest-unavailable row until a host automation backend exists (§4).
 
-export const SIDEBAR_NAV_ITEM_IDS = ["newThread", "kanban", "pullRequests", "automations"] as const;
+export const SIDEBAR_NAV_ITEM_IDS = ["newThread", "automations"] as const;
 
 export type SidebarNavItemId = (typeof SIDEBAR_NAV_ITEM_IDS)[number];
 

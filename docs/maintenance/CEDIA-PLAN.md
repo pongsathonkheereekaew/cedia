@@ -8,6 +8,10 @@ changes, this file changes; there is no second owner of truth anywhere in the tr
 - Revision: 2026-09-20 (CEDIA rewrite: owned product, Cursor retired as authority; file renamed CARET-PLAN.md -> CEDIA-PLAN.md).
 - Revision: 2026-09-20 (CEDIA rename landed: identifiers, patches, product.json identity, rebuilt runtimes; §6.1 stamp).
 - Revision: 2026-09-20 (checkout moved to `/Users/pond/cedia`; packaged `Cedia.app` verified).
+- Revision: 2026-09-22 (**two-window spec locked** from the owner's decisions: §3.A IDE contract +
+  §3.B agent contract; one theme authority, one chrome policy, status bar in both windows, host
+  PTY/git as single implementations, five-way convergence; §10 items 54-67 carry the execution;
+  §2 and §6 corrected to the post-`0056` topology).
 - Repository: `/Users/pond/cedia` on branch `main`. Layout is one repo; `apps/*` and
   `packages/*` are module boundaries, not remotes.
 - Language rule: **every document in this repository is written in English.** No `.th.md`
@@ -55,23 +59,31 @@ CEDIA's token layer (§3.3).
 
 ```
 CEDIA.app  (Code-OSS fork, CEDIA brand, pinned ea1912fd…)
-├─ Agents window   ← the base's native Agents window (sessions workbench flavour)
-│      sidebar (New Chat / Search / Automations / Customize / Projects / Repositories)
-│      composer · right-hand Apps panel (Changes / Browser / Terminal / File)
+├─ Agents window   ← the base's window identity (profile/restore/close lifecycle);
+│      renderer = the standalone Cedia agent bundle (`vs/cedia/agent/index.html`, patch 0056)
+│      sidebar (New thread · Search · Projects) · composer · slim status bar
+│      right dock (Changes / Browser / Terminal / Files / Git / Device)
 ├─ IDE window      ← the normal workbench (Explorer / editor / LSP / debug / terminal)
-└─ one CEDIA host  ← lifecycle · journal · artifacts · relay · devices
+│      dock `cediaComposerDock` = the same bundle in compact form (`agent-ui/ide.html`)
+└─ one CEDIA host  ← lifecycle · journal · artifacts · relay · devices · git · PTY terminals
         │
    OMP — the only harness, owner of execution + transcript
 ```
 
 Rules:
 
-1. The Agents surface is a **native window of the base**, not a webview we draw. It opens with
-   `--agents` / `workbench.action.openAgentsWindow`; its menus, layout and title bar come from
-   `desktop/src/vs/sessions/**`.
-2. The Agents window's sessions, composer and transcript are fed by **Cedia's provider** through
-   the proposed `chatSessionsProvider` API (allowlisted in `patches/desktop/0003`), reading from
-   the host and OMP.
+1. The Agents surface is a **native window of the base** — window identity, profile, restore
+   state and close/quit lifecycle are Code-OSS's — and since patch `0056` that window renders
+   the **standalone Cedia agent bundle** (`vs/cedia/agent/index.html`) instead of
+   `sessions.html`; the main-process bridge is `registerCediaAgentWindowBridge`
+   (`patches/desktop/0056`, `apps/macos/src/agent-window-main.ts`). Window chrome policy
+   (menus, zoom, traffic lights, status bar) is owned by one main-process module for both
+   windows (§3.A/§3.B; §10 item 55).
+2. Both windows render **one agent surface**: the same bundle (`index.html` standalone,
+   `ide.html` in the IDE dock). Its adapter (`apps/macos/agent-window/src/cedia-adapter.ts`)
+   reads sessions/composer/transcript from the host `/v1` API, and OMP answers the host. The
+   extension's native `chatSessionsProvider` surface has no renderer left since `0056` and
+   retires with §10 item 56.
 3. **OMP is the only harness.** Registering or using `copilot` / `claude` / `codex` harnesses is
    forbidden, as is wiring GitHub Copilot auth, sign-in or BYOK. The base's
    `src/vs/platform/agentHost/**` is Copilot-bound and serves only as a shape reference.
@@ -80,11 +92,90 @@ Rules:
    projection of the same session, never a second owner.
 6. OMP owns execution and transcript. The UI never creates a second agent loop.
 
-## 3. Workspace surface contract (measurements kept as data; Cursor retired as authority)
+## 3. Workspace surface contract (two windows: §3.A and §3.B are the contract)
 
-> Retired as authority 2026-09-20: CEDIA is an owned product and copies no other product's
-> spec. The measured values below are kept as engineering data for the window CEDIA ships,
-> and rows are replaced by CEDIA contract decisions (§5, §10) as they land.
+> **Locked 2026-09-22.** CEDIA owns its spec. **§3.A (IDE window)** and **§3.B (agent
+> window)** below are the contract; every other block in §3 (the retired Cursor capture,
+> §3.1–§3.3 measurements, §3.4–§3.5) is **input data** — values and history CEDIA keeps,
+> never an authority to re-measure against. Synara is the agent window's *composition*
+> reference only (§3.4); the palette is CEDIA's in both windows. The owner's decisions
+> locked in this pass — do not re-derive them:
+>
+> 1. IDE authority = a CEDIA-owned spec (Cursor measurements demoted to input data).
+> 2. Agent scope = render everything OMP/host backs with real data (§3.B scope rule).
+> 3. Theme = one authority: `workbench.colorTheme`; the agent window has no theme settings
+>    of its own and follows the IDE.
+> 4. Window chrome = one main-process policy module for both windows.
+> 5. Status bar = present in **both** windows.
+> 6. Terminal = agent terminals are one host-PTY registry rendered by the bundle in both
+>    windows; the workbench integrated terminal stays the user's private dev shell (§5).
+> 7. Git = the host git service is the single implementation behind every Cedia git
+>    surface; the stock SCM view stays as an upstream feature (§5).
+> 8. Converge to one line each: model picker, project creation, terminal, git, keybindings.
+> 9. The IDE dock is the compact form of the agent bundle — one surface spec, responsive
+>    rules only (§3.A dock row).
+
+### 3.A IDE window contract
+
+| Region | Element | Contract (v1) | Backed by |
+|---|---|---|---|
+| Window | identity | normal Code-OSS workbench; invariant: chrome darker than editor (`#141414` < `#181818` dark, `#F3F3F3` < `#FCFCFC` light) | `apps/macos/src/cedia-theme.ts` + `cedia-theme.test.ts` (§11 gate 1) |
+| Window | menu set | full workbench menus | Code-OSS |
+| Window | status bar | present; carries `cedia.showAgents` plus host/model/session status entries | extension status bar |
+| Window | chrome policy | zoom, traffic lights, title bar and menu policy come from one main-process module shared with the agent window | §10 item 55 |
+| Layout | workbench parts | Explorer / editor / panel / debug as Code-OSS; both splitters carry accessible names | patches `0036`/`0037` |
+| Dock | `cediaComposerDock` | **compact form of §3.B's surface**: same bundle (`agent-ui/ide.html`), routes, components and tokens; responsive rules only (thread sidebar hidden via `isIdeEmbeddedRuntime`, header compact <700px, tour insets collapse). No second chat UI; the webview task shell must be gone (§10 items 10, 63) | `agent-ide-webview.ts` + `ide-bootstrap.ts` |
+| Dock/inline | selection actions, inline edit, focus/prefill handoffs | reach the host through the guarded `sendCommand` path; a refusal is shown as a warning, never silent | §10 item 63 |
+| Models | selection state of record | one state: `GET /v1/models` → session `set_model` (+ `set_thinking_level`); the control drawn anywhere is the bundle's picker | §10 item 56 (retires the workbench LM-picker path) |
+| Projects | creation flow | one flow: host `POST /v1/projects` (+ `/v1/workspace-suggestion`); IDE entry points register through it when a Cedia surface needs the project | §10 item 59 |
+| Terminal | integrated terminal | the user's private dev shell: upstream workbench behaviour, xterm.js, not an agent surface | §5 (terminal-roles row) |
+| Git | SCM view | stock upstream feature, kept; not a Cedia surface | §5 |
+| Keybindings | system | one system: `Cedia/User/keybindings.json`, owned by the workbench; Cedia bindings are `when`-scoped per `backlog/command-map.md` | §10 item 57 |
+| Theme | authority | `workbench.colorTheme` → `cedia-theme.ts` palette; follows the OS like the reference | §11 gate 1 |
+
+### 3.B Agent window contract
+
+Renderer: the standalone bundle (`vs/cedia/agent/index.html`) in the base's sessions-window
+identity (patch `0056`); composition = Synara (MIT, vendored, **presentation only** — data
+always flows through the adapter): layout, elements, geometry, surface typography and motion
+come from the port (§3.4 owner decision, 2026-09-19). **Palette = Cedia's own**: every colour,
+including type colour, comes from the same token authority as §3.A and follows the IDE theme
+(decision 3; execution = §10 item 54). Cedia-authored chrome in this window (status bar,
+handoff controls) uses CEDIA's type and motion scales (§3.3–§3.4).
+
+**Scope rule (owner, 2026-09-22: "build everything OMP has and supports").** A surface renders
+**iff** OMP or the host backs it with real data. Otherwise it is absent, or a §4
+honest-unavailable row (disabled + reason) when the entry itself is product intent.
+`list → []` fakes and `unsupported()` behind a live-looking control are defects (§11 gate 4).
+
+| Region | Element | Contract (v1) | Status |
+|---|---|---|---|
+| Sidebar | Search (⌘K / ⇧⌘P), New thread, Projects + Add project | rows over host projects/sessions | backed — keep |
+| Sidebar | Automations | honest-unavailable row (disabled + reason) until a host automation backend exists; route not offered before then | §4 row |
+| Sidebar | Kanban, Pull requests, Plugins, Studio, Spaces | **cut** — no OMP/host source | §10 item 60 |
+| Header | IDE, Environment, chat actions | handoff `openIde {cwd, path, line}`; Environment rows only where backed | backed |
+| Environment panel | top-right card opened from the title-bar `Environment` control | rows only where backed (Changes · Local · branch · Repository · Open in IDE); a row with no source stays absent (§9 rule) | backed — keep |
+| Status bar | slim bottom bar (new) | bundle-drawn: host state · model · session status · branch, painted with `statusBar.*` tokens | §10 item 55 |
+| Composer | input, send/steer/queue/abort by state, voice | host commands; state machine honest | backed |
+| Composer | attachments | images reach OMP (`images[]` on `prompt`); other references become a labelled attached-context block — the payload the native path already proved (§10 item 34) | §10 item 61 |
+| Composer | mentions | `/` = real skill/slash list from `get_available_commands`; `@` = file/workspace refs → attached context | §10 items 61/62 |
+| Composer | model + effort | one picker component: host catalogue, provider tabs, stars, effort ladder → `set_model` / `set_thinking_level` | backed — keep |
+| Transcript | messages, tool cards, approvals/questions, presentations, edit + rewind (tail; any-message = §10 1b) | host journal projection + `uiRequests` | backed — keep |
+| Right dock | Changes · Browser · Terminal · Files · Git · Device · Sidechat | each pane on its host bridge; Git on the host git service incl. the currently-throwing actions (item 58); Sidechat = OMP fork; Changes shows the working-tree diff today, turn diffs pending §10 1c/35 | backed (Git = item 58; turn diffs = §10 1c/35) |
+| Settings | General, Chat behavior, Archived, Models & writing, OMP Providers, Conversation storage | only these render as live sections; Appearance = read-only "following the IDE theme" status (no packs, no mode picker) | backed; Appearance per §10 item 54 |
+| Settings | Skills, MCP connections | render only when their capability is real (§10 items 62/43); until then hidden or disabled + reason | pending |
+| Settings | AppSnap, Safari vault, Profile stats, Usage, Worktrees; keybinding *editing* until item 57 | **cut** (the keybindings section may show read-only shortcuts from the real file) | §10 items 60/57 |
+| Onboarding | welcome → tour → project → done (OMP-only card) + the gateway card (external MCP pairing, kept per §9) | as landed 2026-09-20; the gateway card's MCP capability tracks §10 item 43 | backed; gateway = pending (item 43) |
+| Local-only UI | task-completion toasts · split view · draft persistence | renderer-local state, no host dependency; the draft-lifecycle defect stays §10 1d | backed — keep |
+| Feedback / What's New | — | the feedback endpoint is cut (no third-party POST); release history = a Cedia changelog or cut | §10 item 60 |
+| Theme | appearance | no theme settings in this window; follows `workbench.colorTheme`; pack editor and packs cut | §10 item 54 |
+| Shortcuts | sheet + editing | reads and writes the real `keybindings.json` through the extension bridge; no second chord vocabulary | §10 item 57 |
+
+Acceptance for both windows: §11 gates 1–4, with geometry/colour measured from the real DOM or
+compositor (gate 2) and the scope rule above as the honesty test (gate 4).
+
+**Input data (not the contract):** the retired Cursor capture and tables that follow, §3.1–§3.3
+measurements, and §3.4–§3.5 history.
 
 ```text
 Cursor Agents (window)
@@ -198,8 +289,8 @@ and found the following corrections. Where they disagree with §3, **these win**
 
 ### 3.4 The agent window's UI reference is Synara, under MIT (decided 2026-09-19)
 
-§3 and §3.1-3.3 stay the contract for the **IDE window** (the Code-OSS workbench): Cursor 3.20.x is
-still what that window is measured against. The **agent window** is a deliberate, owner-directed
+§3.A is the contract for the **IDE window** (the Code-OSS workbench); §3.1-3.3 are its input
+data (measured from Cursor 3.20.x, kept as values, not as a target — corrected 2026-09-22). The **agent window** is a deliberate, owner-directed
 deviation: its look is the reference app Synara, whose repository
 ([`Emanuele-web04/synara`](https://github.com/Emanuele-web04/synara)) is **MIT** (Copyright (c) 2026
 T3 Tools Inc. and Emanuele Di Pietro; no NOTICE, no extra terms), so its components can be reused
@@ -464,6 +555,11 @@ CEDIA's own design; they live in the same window:
 | focus ring (high contrast) | transparent | `#F0F0F066` | focus must be visible |
 | missing capability | available | disabled + reason | honesty marker |
 | syntax token colours in the IDE | retired reference theme | Code-OSS default | licensing |
+| status bar in the agent window | no status bar in the reference agent window | slim bundle-drawn bar (host · model · session · branch) with `statusBar.*` tokens | **decided 2026-09-22:** both windows carry a status bar (§3 decision 5); symmetry with the IDE outranks the reference's omission |
+| terminal roles | one terminal concept | agent terminals = host PTY registry, rendered by the bundle in both windows; workbench integrated terminal = the user's private dev shell, upstream behaviour untouched | **decided 2026-09-22:** one agent-PTY owner (host) without replacing the workbench's terminal stack (§3 decision 6) |
+| git surfaces | reference's own integrated git UI | host git service = single implementation behind every Cedia git surface; stock SCM view stays as an upstream Code-OSS feature | **decided 2026-09-22:** one git implementation Cedia owns, without deleting an upstream feature users rely on (§3 decision 7) |
+| theme settings in the agent window | reference ships theme packs/mode picker | follows `workbench.colorTheme` read-only; changing theme happens in the IDE | **decided 2026-09-22:** one theme authority (§3 decision 3) |
+| icon language | one set across both windows (workbench codicons) | the agent bundle (and its dock embed) draws the port's own icon set; the IDE workbench keeps codicons | icons are *elements*, and §3.4 (2026-09-19) locks elements to the composition CEDIA took; unifying sets would restyle the port for no behavioural gain — recorded so the difference is a decision, not drift |
 | Agents-window panel controls | no Show Panel / Toggle Side Panel; the panel header carries `Enter Full Screen` + `Hide Apps` | keeps the inherited `Show Panel` (hidden by `0026`) and `Toggle Side Panel` | **decided 2026-09-17: keep the current panel.** Removing the toggle and adding the reference's `Hide Apps` / `Enter Full Screen` is a real change to shared layout actions; the user chose to keep what works today rather than chase these three controls. Revisit only if the panel is rebuilt (section 7's React pass). |
 | terminal rendering in the IDE | xterm.js | **xterm.js** | decided 2026-09-17: replacing the workbench renderer drags the xterm-specific addons (image, ligatures, search, serialize, the terminal API) out with it for no user-visible gain. Recorded here rather than left as open work; the engine work goes to the surface Cedia owns (the iOS WebView terminal), gated by the corpus in `apps/macos/src/terminal-conformance.ts`. |
 | the panel's tab group | a native editor tab group named `Tabs` | Cedia's own launcher strip (patch `0017`), with the native group hidden | the native `.tabs-container` (`role=tablist`) still exists in the Agents window and is `display:none`; `cedia-apps-strip` draws the same four entries (Changes / Browser / Terminal / File) plus the `+`. Decided 2026-09-17: keep Caret's strip, so the reference's `tab group Tabs` has no counterpart by design rather than by omission. |
@@ -486,11 +582,18 @@ CEDIA's accessibility floor rather than missing work. Never remove one to make a
 
 | Responsibility | SSOT | Forbidden |
 |---|---|---|
-| Agents window + menus + layout | `desktop/src/vs/sessions/**` + patches in `patches/desktop/` | drawing our own shell in a webview |
-| Agents session/composer/transcript | Cedia's provider + host + OMP | anyone else's provider/harness |
+| Agents window identity + bridge | the base's window (patch `0056`) + `apps/macos/src/agent-window-main.ts` | a second hand-drawn shell/webview beside the bundle, a second renderer |
+| agent surface in both windows (sidebar/composer/transcript/dock) | `apps/macos/agent-window/src/cedia-adapter.ts` → host `/v1` → OMP; the native `chatSessionsProvider` path retires (§10 item 56) | a second provider path or renderer per window |
 | IDE | the normal workbench | wrapping the IDE in our shell |
 | execution/transcript | OMP | a second daemon or agent loop |
 | host/lifecycle/journal/relay | `apps/host/**` | a second host |
+| theme authority | `workbench.colorTheme` → `apps/macos/src/cedia-theme.ts` (+ `cedia-theme.test.ts`), mirrored to the bundle | theme packs or a second palette in the agent window |
+| window chrome policy (zoom/traffic lights/menus/status bar) | one main-process module for both windows (§10 item 55) | per-window one-off patches |
+| keybindings | `Cedia/User/keybindings.json` | a second chord table or resolver in the bundle |
+| model selection state | host `GET /v1/models` + session `set_model` | a second picker state |
+| project creation | host `POST /v1/projects` | a second project store |
+| git (every Cedia surface) | the host git service | a second git implementation (the stock SCM view is upstream, §5) |
+| agent terminal PTY | the host PTY registry, rendered by the bundle in both windows | a second agent PTY |
 | layout/token knowledge | `apps/macos/src/cedia-theme.ts` + `cedia-theme.test.ts` | hardcoding outside tokens |
 | edits inside `desktop/` | `patches/desktop/*.patch` + digests in `manifest.json` | editing the checkout without capturing a patch |
 
@@ -531,7 +634,8 @@ Four structural consequences, each hit in practice:
 
 | Artifact | Retire when | Status |
 |---|---|---|
-| `apps/macos/src/webview.ts` + `TASK_WEBVIEW_CSS` + the tests bound to the shell | S3 | **still live** (see §10) — it is the dock in a plain IDE window (`cediaComposerDock`), not the Agents window |
+| `apps/macos/src/webview.ts` + `TASK_WEBVIEW_CSS` + the tests bound to the shell | S3 | **unreachable at runtime (measured 2026-09-22)** — the dock is `agent-ide-webview.ts` loading `agent-ui/ide.html`; `CediaTaskViewProvider` is never passed to `registerWebviewViewProvider`. Delete per §10 items 10/63 |
+| `scripts/shell-render-fixture.ts` | with `webview.ts` | **delete with `webview.ts` (corrected 2026-09-22)** — the shell it renders is no longer any window's UI; parity checks capture the live bundle window instead |
 | `caretComposer` view + its `caretAgents` activity-bar container | 2026-09-17 | **retired** — a second agent surface for one window; the dock is the only Cedia view left |
 | the `caret.agentsShell` editor + `openAgentsShellEditor()` + the `.caret-shell` document | 2026-09-17 | **retired** — the shell-in-an-editor-column route the Agents window already refused to mount |
 | `scripts/shell-render-fixture.ts` | with `webview.ts` | **kept on purpose**: the shell it renders is still the live IDE dock, and headless render is how the open AX/DOM parity check (§10 item 16) measures it |
@@ -2807,6 +2911,29 @@ Receipt: `lib/workspaceFileOpener.test.ts` 5 pass; agent-window `tsc` + vendor `
 clean, `bun test test/` 62 pass / 0 fail, `vite build` clean. Still owed: live dock
 receipts from a packaged build (file link → IDE editor, history menu switch).
 
+### Agent-window scope cut, wave 0 — unbacked settings sections (2026-09-22)
+
+First slice of §10 item 60 (owner scope rule §3.B: a surface renders iff OMP or the host
+backs it). The Settings screen kept sections whose server RPCs this window never backs —
+AppSnap, Worktrees, Skills, Usage and the external-MCP/integrations section, plus the Profile
+stats half (the search index lost 80 entries; the taxonomy lost 5 section ids and the empty
+integrations nav group). The remaining panels are untouched in place: Profile is now the
+local identity editor only (name/handle/avatar from `profile/localIdentity.ts`, stats RPCs
+untouched in the adapter), Appearance keeps one read-only "Following the IDE" row, the App
+section's `setAppIcon`/`customTitleBar` rows are gone with their dead bridge methods, and
+the release-history entry point no longer mounts the Synara changelog dialog. Sidebar
+follow-ups in the same wave: Kanban/Pull-requests nav ids and their rows, the project
+"Open in Kanban" entry and the per-project Pull-requests button are gone from the type so
+persisted orders normalize them away; Automations stays as the §4 honest-unavailable row.
+`nativeApi.ts` no longer imports the Synara WebSocket backend — a missing `window.nativeApi`
+reads undefined and `ensureNativeApi()` throws loudly instead of opening a second data path
+(the pane-level device-frame socket keeps its own factory and is untouched).
+
+Receipt: agent-window `tsc` + vendor `tsc` clean, `vite build` clean, `bun test test/`
+70 pass / 0 fail.
+
+### Dead code sweep after v0.1.0 (2026-09-20)
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.
@@ -2897,6 +3024,16 @@ Anything not listed here is either done (§9) or out of scope (§5). Each item s
    in the option group's description, and the host's current model is shown instead; (a)-(c) remain.
    Receipt:
    [`evidence/d1-draft-send-in-place-2026-09-18/`](evidence/d1-draft-send-in-place-2026-09-18/).
+5b. **Headless CLI parity with OMP (landed 2026-09-21, unit-verified).** `cedia-host`
+   now drives sessions, turns (`send`/`steer`/`follow-up`/`abort`), approvals, events,
+   review, files, projects, models and providers from the terminal with JSON output, and the
+   generic `rpc` verb forwards all 42 canonical RPC command types through the host's existing
+   command bridge (`apps/host/src/cli-client.ts`, `apps/host/test/cli-client.test.ts` 12 pass;
+   host suite 129 pass). Still owed: one live run against a running host with a real OMP turn
+   (incarnation addressing, `--wait` settlement and chunked-response dereference on the wire),
+   plus IDE palette wiring for the daily verbs. The OMP-side slash commands that are TUI-only
+   (e.g. `marketplace`, `ssh`, `stats` display) stay reachable only through `rpc` where OMP
+   exposes them as RPC; anything OMP keeps TUI-local is out of scope until it does.
 
 **Model roles (opened 2026-09-16, see §9)**
 
@@ -2916,7 +3053,10 @@ Anything not listed here is either done (§9) or out of scope (§5). Each item s
     `cediaComposerDock` view, its restricted-mode renderer and the ~8 shell-bound tests. They can
     only be deleted once an IDE-side replacement for the dock's capability exists
     (`cedia.focusDock`, `focusAgentSurface()` and the `prefill` handoffs from IDE actions). Until
-    then `rg "webview.ts|TASK_WEBVIEW_CSS"` is not 0 and S3's exit gate is open. **Closed
+    then `rg "webview.ts|TASK_WEBVIEW_CSS"` is not 0 and S3's exit gate is open. **Corrected
+    2026-09-22:** the replacement already exists — the dock is `agent-ide-webview.ts` loading
+    `agent-ui/ide.html`, and `CediaTaskViewProvider` is never passed to
+    `registerWebviewViewProvider` — so the gate is deletable now; execution is item 63. **Closed
     2026-09-17, out of this item:** the `caretComposer` view and its `caretAgents` container, the
     `caret.agentsShell` editor, the fallback panel, the duplicate `caret.openTask` command and the
     fork's `caret.openAgentsWindow`/`caret.openIde` island are gone — those were the *second*
@@ -3525,6 +3665,155 @@ those items close against OMP's advertised contract, not against a Cursor measur
     landing in the IDE window's real editor. Until then the route stays as an unadvertised
     fallback, not an offered surface (§5).
 
+**Spec execution (opened 2026-09-22, from the §3.A/§3.B lock).** Each item closes with a receipt
+from a packaged build unless stated otherwise. Items 54-64 are the work this lock adds;
+items 65-67 are same-day follow-ups from the full-repository architecture review (host,
+extension and patch-stack internals) and do not depend on the two-window contract.
+**Execution order:** 54 + 60 first (bundle/extension files only, no desktop-patch rebuild, no
+shared files) → 55 (re-cuts patches `0057`/`0058`, so it owns the §6.1 patch loop alone) → 57,
+58, 59, 63 (independent of each other; 63a needs no prerequisite — the surface is already
+unreachable) → 61 + 62 as one slice or coordinated (both edit `cedia-adapter.ts`) → 56 (only
+after its residual-consumer check) → 64 last (its receipt rides the next `package:mac` build).
+Receipts batch through packaged builds per §9 practice; coordinate on `cedia-adapter.ts` and
+`patches/desktop/` the way §6.1 requires. Items 65-67 are internal-health work: 65 (host) any
+time; 67 (patch stack) after 56 settles `0033`'s fate; 66 (extension split) only after 63's
+deletions so dead code is not carried across.
+
+54. **One theme authority end to end.** The agent window's Settings → Appearance keeps a
+    read-only "following the IDE theme" status only; `ThemePackEditor`, the pack catalog and the
+    mode picker are cut (§3.B). `AGENT_THEME_COLOR_KEYS` extends to the full `cedia-theme.ts`
+    anchor set and the bundle maps those anchors onto its `--color-*` layer, so Synara's
+    composition paints over Cedia's palette everywhere (chips, panels, settings — not just the
+    composer card). Closes when one `workbench.colorTheme` change repaints both windows
+    together, with no agent-side theme-editing UI anywhere, receipt from a packaged run.
+
+55. **One window-chrome policy.** Zoom, traffic lights, title-bar and menu policy move into a
+    single main-process module used by both `BrowserWindow`s (patches `0057`/`0058` re-cut onto
+    it), and the agent window gains the slim status bar of §3.B (host · model · session ·
+    branch, `statusBar.*` tokens). Closes when both windows share zoom behaviour and menu
+    source by construction (no per-window patch), and the agent status bar is measured on
+    screen with live values.
+
+56. **One model-selection state; retire the native chat surface.** After a residual-consumer
+    check (quick-access/palette entries that still resolve the participant), retire the
+    workbench LM-picker/provider path: `chat-sessions.ts`, the vendor cluster in
+    `chat-sessions-map.ts`, `omp-language-models.ts`, and patches `0011`/`0013`/`0014`/
+    `0040`-`0047` — together with the registration surfaces that exist only for it: the
+    `chatSessions`/`chatParticipants` contributions and `enabledApiProposals` entries in
+    `apps/macos/package.json`, and the proposal-allowlist rows in patch `0003`
+    (`chatSessionsProvider`, `chatParticipantPrivate`, `defaultChatParticipant`; its
+    Copilot-identity removals stay). This also **supersedes §10 items 45-49**, which were
+    written against the native renderer — restate them per the §10 head rule before touching
+    either side. Host `GET /v1/models` + `set_model` with the bundle picker becomes the only
+    model control (§3.A). Closes when `registerCediaChatSessions` and those patches are gone,
+    the suite is green, and a model change from either window is demonstrably one code path.
+
+57. **One keybinding system.** The bundle's keybinding section reads and writes the real
+    `Cedia/User/keybindings.json` through the extension bridge (today: path advertised, list
+    empty, write rejected — `cedia-adapter.ts:253-258, 1471, 1516`); the bundle's private chord
+    defaults sheet is deleted; `backlog/command-map.md`'s CONFLICT-GATE gains the agent-surface
+    `when` vocabulary. Closes when a binding edited in the agent window appears in the workbench
+    and vice versa, plus one conflict-gate run.
+
+58. **Host git service is the single git implementation.** Build the 16 throwing methods
+    (`native-git.ts:51-87`: stage/unstage/pull/stash/worktree/PR preparation/…) on the host git
+    service so every Cedia git surface (right-dock Git pane, review, worktree receipts,
+    Environment rows) reads one implementation; the stock SCM view stays as the §5 upstream
+    feature. Closes when the pane's disabled actions run against a real repo with a receipt, and
+    no Cedia surface shells out independently.
+
+59. **One project-creation flow.** `CreateProjectDialog` / `project.create` → host
+    `POST /v1/projects` (+ `/v1/workspace-suggestion`) is the only Cedia project flow; IDE entry
+    points register through it when a Cedia surface needs the project; dead sources
+    (`provisionFromGitHub`) stay cut. Closes when a project created in either window is visible
+    in both from the same host record.
+
+60. **Agent-window scope cut (§3.B rule).** Remove the surfaces with no OMP/host source:
+    routes/nav for Kanban, Pull requests, Plugins, Studio, Spaces; Settings sections AppSnap,
+    Safari vault/cookie import, Profile stats, Usage, Worktrees; the feedback POST to
+    `trysynara.com` and its dialog; the Synara `whatsNew` changelog/release history; Synara
+    public art (favicon / apple-touch / `synara.*`) and the ~85-file Synara copy/link sweep;
+    rebuild `upstream.json` from the actual tree (it wrongly excludes `apps/server`, which the
+    host imports, and the vendored test trio); make the `nativeApi.ts` and
+    `deviceFrameSource.ts` WebSocket fallbacks **throw** so a missing `window.nativeApi` can
+    never open a second data path. Closes when a fresh-profile run through every sidebar row and
+    settings section shows no dead state, no `trysynara` egress, and `upstream.json` matches the
+    tree.
+
+61. **Composer attachments and mentions reach OMP on the bundle path.** Today
+    `thread.turn.start` throws on attachments/mentions (`cedia-adapter.ts:1288-1289`) while the
+    native path already proved the payload (§10 item 34): images → `prompt.images[]`, other
+    references → labelled attached context; `@` refs resolve through the files bridge. Closes
+    when an image pasted in the agent composer arrives in the OMP turn (packaged-run receipt).
+
+62. **Skills/slash and compaction are real, not fakes.** `listCommands`/`listSkills` forward
+    `get_available_commands` (rows with `source: "skill"` → skills; flip
+    `supportsSkillDiscovery`), and `compactThread` forwards `compact`/`set_auto_compaction`
+    (flip `supportsThreadCompaction`); both commands are already in the pinned RPC
+    (`cedia-adapter.ts:1453-1457`). Closes when `/` in the composer completes a real skill and a
+    compaction runs from the UI, receipts included.
+
+63. **Extension consolidation (the surgery the decisions authorize).** (a) delete the
+    unreachable task shell — `webview.ts`, `messages.ts`'s dead union half,
+    `CediaTaskViewProvider`'s webview half, `cloneStateForWebview`, and the shell-bound tests —
+    after extracting the live pieces (status bar, context keys); (b) one bridge contract module:
+    channel string, envelope and kind union imported by `agent-window-main.ts`,
+    `agent-ide-webview.ts` and the bundle, with `activeSession`/`openAgents` moved into the
+    shared handler and the `.catch(() => undefined)` swallows removed; (c) fix the silent
+    guarded-send (`#state.selectedModel` is never set in production, so refusals reach zero
+    views) by feeding it from `refreshOmpState` and routing refusals to `showWarningMessage`;
+    (d) restrict `agent-window-files.ts` `projects.writeFile` to the editor-bridge guards so no
+    surface writes workspace files outside OMP turns and the guarded editor bridge. Closes when
+    `rg "webview.ts|TASK_WEBVIEW_CSS"` has no users, a test asserts the two bridge-kind sets are
+    equal, an inline-edit refusal is visible on screen, and the suites are green.
+
+64. **Terminal convergence receipt (decision 8's terminal pair).** The pair is converged by
+    topology — the dock renders the same bundle, whose Terminal pane talks to the host PTY
+    registry — but no receipt has ever exercised it: the dock's Terminal pane has never run in a
+    packaged build. Closes when a packaged run opens a terminal from the IDE dock, runs a
+    command, and the screen is served by the host's PTY registry/checkpoint route (one registry,
+    two windows), receipt attached.
+
+65. **Host hardening (architecture review 2026-09-22).** Five measured gaps in `apps/host`:
+    (a) the events table is **unbounded** while `store.ts:1-8` documents a "bounded journal" —
+    fork hydration journals full `get_messages` payloads, so the projection drifts toward a
+    second transcript on disk; add per-session retention (byte/count cap with a
+    `historyTruncated` marker like `TerminalCheckpoint`) or stop journaling hydration frames,
+    and fix the doc either way; (b) `service.ts` (~709 lines) owns ~10 concerns — split along
+    its existing seams (OMP lifecycle / command dispatch + idempotency / permission + editor
+    bridges / fork-sidechat-terminals) behind a thin `CediaHost` façade so router and tests do
+    not churn; (c) wire shapes are re-declared in four places (`relay/protocol.ts` `Json` vs
+    `protocol`, adapter-local `CediaProject/Session/Event/Command`, the extension-UI request
+    union in four partial views) — converge on `packages/protocol` so approval shapes cannot
+    drift silently; (d) the security perimeter is untested — add Origin-reject / Host-header /
+    413 tests to `http.test.ts`, a host-level `remote.ts` test (pair offer, disable stops
+    relay, identity file 0600), and a router test for `workspace-suggestion`; (e) iOS reads
+    models/providers through the per-session command envelope while agent window and CLI use
+    sessionless `/v1/models` + `/v1/providers` — converge iOS on the sessionless routes or
+    record why a phone must start a session. Closes when: the journal cap lands with the doc
+    matching, each shape has exactly one definition in `packages/protocol` with importers, the
+    five new perimeter tests are green, and iOS lists models without a started session (or the
+    deviation is recorded in §5).
+
+66. **Split `extension.ts` (4,234 lines), only after item 63's deletions.** Extract
+    host-connection/polling, the ~45 command registrations, the editor-surface
+    (marks/lenses/actions), review-surface, selection-send and status/context-key code into
+    modules; `activate()` becomes a ~100-line wiring root. Running it before 63 would carry the
+    dead webview half across. Closes when `apps/macos/src/extension.ts` is ≤800 lines of
+    wiring, the command registry is enumerable from one module, `bun run test
+    apps/macos/test` + `bun run typecheck` are green, and no behavior changes (the suite is the
+    receipt).
+
+67. **Patch-stack hygiene.** (a) Retire the three patches the README itself calls inert
+    (`0019`, `0027`, `0028`) — manifest + digest work only; (b) rewrite
+    `patches/desktop/README.md` from `0036` onward: it stops at the `0034` era, still describes
+    retired `0010` as operative, and never documents `0036`-`0047` or the topology-defining
+    `0056`-`0059`; (c) re-count the README's "15 Copilot-named helpers" claim (item 26 owes the
+    same count) so the number is measured, not repeated; (d) decide patch `0033`'s
+    sessions-window gates together with item 56's retirement — its IDE-window behavior must
+    stay. Closes when the manifest holds ≤26 entries with `prepare-desktop` green from a clean
+    base, the README describes every patch in the manifest, and the helper count is measured.
+
 ## 11. Acceptance criteria: "CEDIA owns its workspace"
 
 The project claims its workspace contract when every criterion below passes. Each is binary and
@@ -3532,11 +3821,13 @@ has a stated method, so there is no room for a judgement call.
 
 1. **Tokens** — `apps/macos/test/cedia-theme.test.ts` pins every token value with no external
    reference gate.
-2. **Surfaces** — every row of §3 exists in CEDIA's window and its geometry and colour are
-   measured from the real DOM or compositor at the stated viewport and theme. Looking at it is
-   not measurement, and a single screenshot is not a pass. Colour must be compared with the §3.1
-   method (full-screen capture, or theme-file values verified against a full-screen capture);
-   `screencapture -l` alone is invalid.
+2. **Surfaces** — every row of §3.A exists in the IDE window and every row of §3.B in the agent
+   window, and its geometry and colour are measured from the real DOM or compositor at the
+   stated viewport and theme. Looking at it is not measurement, and a single screenshot is not a
+   pass. Colour must be compared with the §3.1 method (full-screen capture, or theme-file values
+   verified against a full-screen capture); `screencapture -l` alone is invalid. The §3.B scope
+   rule is the honesty half: a row with no backing must be absent or a §4 disabled+reason entry,
+   never an empty, error or third-party state.
 3. **SSOT** — one responsibility has exactly one live path (§6) **and the retirement ledger (§6.2)
    is empty**.
 4. **Honest states** — everything not yet possible is disabled with a reason; there are no fake

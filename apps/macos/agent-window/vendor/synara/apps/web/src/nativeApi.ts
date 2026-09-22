@@ -4,11 +4,11 @@ import {
   type NativeApi,
 } from "@synara/contracts";
 
-import {
-  createWsNativeApi,
-  onWsServerCapabilitiesChange,
-  readWsServerCapabilities,
-} from "./wsNativeApi";
+// Cedia §10 item 60: the Synara WebSocket backend (./wsNativeApi) is never
+// imported here. readNativeApi() answers only from window.nativeApi, which
+// Cedia's bootstraps install before the bundle loads — a missing bridge reads
+// undefined (the __root__ gate shows "connecting") and ensureNativeApi() throws
+// loudly instead of opening a second data path.
 
 let cachedDesktopApi: NativeApi | undefined;
 
@@ -21,13 +21,21 @@ export function readNativeApi(): NativeApi | undefined {
     return cachedDesktopApi;
   }
 
-  return createWsNativeApi();
+  // Cedia §10 item 60: no WebSocket fallback. Cedia's bootstraps install
+  // window.nativeApi before importing the bundle — and __root__ gates the whole
+  // route tree on readNativeApi(), so a probe here must stay total and
+  // side-effect free: absent bridge reads undefined until the bootstrap lands,
+  // never a live Synara server object. Anything that needs the bridge uses
+  // ensureNativeApi() and throws loudly instead.
+  return undefined;
 }
 
 export function ensureNativeApi(): NativeApi {
   const api = readNativeApi();
   if (!api) {
-    throw new Error("Native API not found");
+    // Same rule, loud variant: a missing bridge is a broken install, never a
+    // reason to open Synara's WebSocket server path.
+    throw new Error("Cedia native bridge is missing: window.nativeApi was not installed.");
   }
   return api;
 }
@@ -43,7 +51,8 @@ export function readNativeApiServerCapability(capability: string): boolean {
     }
     return false;
   }
-  return readWsServerCapabilities()?.includes(capability) === true;
+  // No WebSocket backend to ask — without the bridge there are no capabilities.
+  return false;
 }
 
 export function onNativeApiServerCapabilitiesChange(
@@ -58,5 +67,8 @@ export function onNativeApiServerCapabilitiesChange(
     if (options?.replayCurrent) listener();
     return () => undefined;
   }
-  return onWsServerCapabilitiesChange(listener, options);
+  // No WebSocket backend to subscribe to — replay once so late-mounting callers
+  // still settle, then stay quiet until the bridge lands and remounts them.
+  if (options?.replayCurrent) listener();
+  return () => undefined;
 }

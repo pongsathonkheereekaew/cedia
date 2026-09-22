@@ -15,7 +15,6 @@ import {
   ExternalLinkIcon,
   FolderOpenIcon,
   GiftIcon,
-  KanbanIcon,
   KeyboardIcon,
   BellIcon,
   type LucideIcon,
@@ -40,7 +39,6 @@ import { THREAD_CONTEXT_MENU_ICONS } from "~/lib/contextMenuIcons";
 import { ensureNativeApi } from "~/nativeApi";
 import { autoAnimate } from "@formkit/auto-animate";
 import { FiGitBranch } from "react-icons/fi";
-import { IoIosGitCompare } from "react-icons/io";
 import { GoRepoForked } from "react-icons/go";
 import {
   useCallback,
@@ -155,10 +153,6 @@ import {
   resolveLatestProjectTargetIdWithFallback,
   resolveNewThreadTarget,
 } from "../lib/projectShortcutTargets";
-import {
-  pullRequestQueryKeys,
-  pullRequestReviewRequestCountQueryOptions,
-} from "../lib/pullRequestReactQuery";
 import { prefetchModelsForNewThread } from "../lib/providerModelPrefetch";
 import {
   hasReconciledServerProviderStatuses,
@@ -314,7 +308,6 @@ import {
   getPinnedThreadsForSidebar,
   getUnpinnedThreadsForSidebar,
   orderPinnedProjectsForSidebar,
-  pullRequestRepositoryConfigFingerprint,
   getNextVisibleSidebarThreadId,
   getSidebarThreadIdsToPrewarm,
   getVisibleSidebarEntriesForPreview,
@@ -326,7 +319,6 @@ import {
   recoverExistingAddProjectTarget,
   runExclusiveProjectAddition,
   runProjectProvisionWithCancellationRecovery,
-  resolvePullRequestReviewBadge,
   resolveSidebarThreadListPaging,
   DEBUG_FEATURE_FLAGS_MENU_STORAGE_KEY,
   resolveProjectEmptyState,
@@ -489,9 +481,9 @@ const DebugFeatureFlagsMenu = import.meta.env.DEV
     )
   : null;
 
+// Cedia §10 item 60: no "open-in-kanban" — the Kanban routes are cut.
 type ProjectContextMenuId =
   | "open-in-finder"
-  | "open-in-kanban"
   | "copy-path"
   | "start-dev"
   | "stop-dev"
@@ -1408,9 +1400,7 @@ export default function Sidebar() {
     select: (loc) => loc.pathname === "/settings",
   });
   const isOnStudioRoute = pathname.startsWith("/studio");
-  const isOnKanban = pathname.startsWith("/kanban");
   const isOnAutomations = pathname.startsWith("/automations");
-  const isOnPullRequests = pathname.startsWith("/pull-requests");
   // Lightweight read of automations to drive the sidebar attention badge. Shares the
   // ["automations"] query cache with the Automations route (and its live stream updates).
   const automationListQuery = useQuery({
@@ -1436,22 +1426,6 @@ export default function Sidebar() {
         }
       : null;
   }, [automationListQuery.data]);
-  const pullRequestRepositoryConfig = useMemo(
-    () => pullRequestRepositoryConfigFingerprint(projects),
-    [projects],
-  );
-  const previousPullRequestRepositoryConfigRef = useRef(pullRequestRepositoryConfig);
-  useEffect(() => {
-    if (previousPullRequestRepositoryConfigRef.current === pullRequestRepositoryConfig) return;
-    previousPullRequestRepositoryConfigRef.current = pullRequestRepositoryConfig;
-    void queryClient.invalidateQueries({ queryKey: pullRequestQueryKeys.all });
-  }, [pullRequestRepositoryConfig, queryClient]);
-  // Count-only server query keeps rich pull-request rows off the wire and out of this cache.
-  const pullRequestsReviewingQuery = useQuery({
-    ...pullRequestReviewRequestCountQueryOptions({ projectId: null }),
-    enabled: projects.some((project) => project.kind === "project"),
-  });
-  const pullRequestsReviewBadge = resolvePullRequestReviewBadge(pullRequestsReviewingQuery.data);
   // Heartbeat automations grouped by their target thread, so each thread row can show a
   // clock chip indicating an automation is attached (mirrors the Environment panel section).
   const automationsByThreadId = useMemo(
@@ -3410,7 +3384,9 @@ export default function Sidebar() {
     sidebarThreadSortOrder: appSettings.sidebarThreadSortOrder,
     routeThreadId,
     routeProjectId,
-    isOnKanban,
+    // Cedia §10 item 60: Kanban routes are cut, so the spaces controller never
+    // sees a Kanban route as the active project source.
+    isOnKanban: false,
     activeRouteProject,
     activeRouteProjectId,
     activateThreadFromSidebarIntent,
@@ -3560,10 +3536,6 @@ export default function Sidebar() {
                 : "An unknown error occurred opening the folder.",
           });
         }
-        return;
-      }
-      if (clicked === "open-in-kanban") {
-        void navigate({ to: "/kanban/$projectId", params: { projectId } });
         return;
       }
       if (clicked === "copy-path") {
@@ -3771,27 +3743,9 @@ export default function Sidebar() {
         onMouseEnter: prefetchModelsForPrimaryNewThread,
         onFocus: prefetchModelsForPrimaryNewThread,
       },
-      kanban: {
-        icon: KanbanIcon,
-        label: "Kanban",
-        active: isOnKanban,
-        badge: null,
-        onClick: () => {
-          void navigate({ to: "/kanban" });
-        },
-      },
-      pullRequests: {
-        icon: IoIosGitCompare,
-        label: "Pull requests",
-        active: isOnPullRequests,
-        badge: pullRequestsReviewBadge,
-        onClick: () => {
-          void navigate({
-            to: "/pull-requests",
-            search: { involvement: "all", state: "open" },
-          });
-        },
-      },
+      // Cedia §10 item 60 keeps Automations visible as an honest-unavailable row
+      // until a host automation backend exists (§4); kanban/pullRequests left with
+      // it and normalize away from persisted orders.
       automations: {
         icon: ClockIcon,
         label: "Automations",
@@ -3806,11 +3760,8 @@ export default function Sidebar() {
       automationAttentionBadge,
       handlePrimaryNewThread,
       isOnAutomations,
-      isOnKanban,
-      isOnPullRequests,
       navigate,
       prefetchModelsForPrimaryNewThread,
-      pullRequestsReviewBadge,
     ],
   );
   // A hidden item whose route is currently active stays visible so the current
@@ -5056,22 +5007,6 @@ export default function Sidebar() {
               <PinStatusIcon pinned={isProjectPinned} className="size-3.5" />
             </button>
             <SidebarSectionToolbar placement="overlay" revealOnHover>
-              <SidebarIconButton
-                icon={IoIosGitCompare}
-                label={`View pull requests for ${project.name}`}
-                tooltip="Pull requests"
-                tooltipSide="top"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  // Opens the in-app pull requests view scoped to this project (selecting a
-                  // row there opens the right-dock detail panel) instead of leaving for GitHub.
-                  void navigate({
-                    to: "/pull-requests",
-                    search: { involvement: "all", state: "open", projectId: project.id },
-                  });
-                }}
-              />
               <SidebarIconButton
                 icon={TerminalIcon}
                 label={`Create new terminal thread in ${project.name}`}
@@ -6593,18 +6528,6 @@ export default function Sidebar() {
               >
                 <ProjectContextMenuIcon icon={FolderOpenIcon} />
                 <span>Open in Finder</span>
-              </MenuItem>
-              <MenuItem
-                className={PROJECT_CONTEXT_MENU_ITEM_CLASS_NAME}
-                onClick={() =>
-                  void handleProjectContextMenuAction(
-                    projectContextMenuState.projectId,
-                    "open-in-kanban",
-                  )
-                }
-              >
-                <ProjectContextMenuIcon icon={KanbanIcon} />
-                <span>Open in Kanban</span>
               </MenuItem>
               <MenuItem
                 className={PROJECT_CONTEXT_MENU_ITEM_CLASS_NAME}

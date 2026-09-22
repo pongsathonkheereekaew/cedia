@@ -236,44 +236,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords:
       "Show an OS notification when a chat or managed terminal agent finishes or needs input while the app is in the background. alerts toast",
   },
-
-  // ── AppSnap ───────────────────────────────────────────────────────────────────
-  {
-    id: "appsnap:enable",
-    section: "appsnap",
-    title: "Enable AppSnap",
-    keywords:
-      "Capture the frontmost macOS app window with a configurable two-key shortcut and add it to a recent task. appshot screenshot snap window capture hotkey",
-  },
-  {
-    id: "appsnap:shortcut",
-    section: "appsnap",
-    title: "Shortcut",
-    keywords: "Press the left and right Option keys at the same time. hotkey chord alt keys",
-  },
-  {
-    id: "appsnap:destination",
-    section: "appsnap",
-    title: "Destination",
-    keywords:
-      "Snaps join the task you interacted with in the last minute, otherwise a fresh task opens. automatic target composer",
-  },
-  {
-    id: "appsnap:capture-sound",
-    section: "appsnap",
-    title: "Capture sound",
-    keywords: "Play a short shutter cue when a window is captured. sound effect audio mute",
-  },
-  {
-    id: "appsnap:permissions",
-    section: "appsnap",
-    title: "Permission status",
-    keywords:
-      "Input Monitoring and Screen Recording permissions for AppSnap in macOS System Settings. privacy security recheck grant",
-    // Renders only in the macOS desktop app, so no stable anchor on other platforms.
-    target: null,
-  },
-
   // ── Behavior ──────────────────────────────────────────────────────────────────
   {
     id: "behavior:follow-up-behavior",
@@ -336,16 +298,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
       "Every keyboard shortcut available in Synara, grouped by context. keybindings hotkeys key combo cmd ctrl reference",
     target: null,
   },
-
-  // ── Worktrees ─────────────────────────────────────────────────────────────────
-  {
-    id: "worktrees:managed-worktrees",
-    section: "worktrees",
-    title: "Managed worktrees",
-    keywords: "Review and clean up the worktrees created by Synara. git branch remove",
-    target: null,
-  },
-
   // ── Archived ──────────────────────────────────────────────────────────────────
   {
     id: "archived:archived-threads",
@@ -397,24 +349,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "Review provider versions and update tools. binary overrides path install",
   },
 
-  // ── Skills ────────────────────────────────────────────────────────────────────
-  {
-    id: "skills:skills",
-    section: "skills",
-    title: "Skills",
-    keywords: "Every skill found across providers, with toggles to control availability. agent",
-    target: null,
-  },
-
-  // ── Usage ─────────────────────────────────────────────────────────────────────
-  {
-    id: "usage:usage",
-    section: "usage",
-    title: "Usage and billing",
-    keywords: "Remaining quota and credits for each signed-in provider. limits credits",
-    target: null,
-  },
-
   // ── Advanced ──────────────────────────────────────────────────────────────────
   {
     id: "advanced:keybindings",
@@ -431,24 +365,10 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
       "Rebuild local project indexes without clearing existing chats when the local state gets out of sync.",
   },
   {
-    id: "integrations:external-mcp",
-    section: "integrations",
-    title: "External MCP integrations",
-    keywords:
-      "Pair Codex Claude and other local MCP clients with scoped project access. revoke credential task create wait read worktree approval",
-  },
-  {
     id: "advanced:version",
     section: "advanced",
     title: "Version",
     keywords: "Current application version. about",
-  },
-  {
-    id: "advanced:release-history",
-    section: "advanced",
-    title: "Release history",
-    keywords:
-      "A running log of every update, newest first. changelog what's new about release notes",
   },
 ] as const;
 
