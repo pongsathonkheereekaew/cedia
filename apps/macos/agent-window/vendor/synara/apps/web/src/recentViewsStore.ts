@@ -48,10 +48,6 @@ function normalizeRecentView(input: unknown): RecentView | null {
     return { kind: "settings", ...(section ? { section } : {}) };
   }
 
-  if (record.kind === "plugins") {
-    return { kind: "plugins" };
-  }
-
   return null;
 }
 

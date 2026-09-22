@@ -16,11 +16,14 @@
       "vendor/synara/apps/web/src",
       "vendor/synara/apps/web/public",
       "vendor/synara/packages/contracts/src",
-      "vendor/synara/packages/shared/src"
+      "vendor/synara/packages/shared/src",
+      "vendor/synara/apps/server",
+      "vendor/synara/apps/web/src/keybindings.search.test.ts",
+      "vendor/synara/apps/web/src/lib/workspaceFileOpener.test.ts",
+      "vendor/synara/apps/web/src/components/settings/OmpProviderSettingsPanel.logic.test.ts"
     ],
     "excluded": [
       "apps/desktop",
-      "apps/server",
       "apps/marketing",
       "apps/web/e2e",
       "apps/web/perf",

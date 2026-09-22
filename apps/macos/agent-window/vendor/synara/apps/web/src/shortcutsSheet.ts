@@ -169,11 +169,6 @@ const AVAILABLE_NOW_DEFINITIONS: readonly ShortcutDefinition[] = [
     description: "Open the composer reasoning and trait controls.",
   },
   {
-    command: "settings.usage",
-    label: "Open usage settings",
-    description: "Open Settings → Usage for provider quota and token totals.",
-  },
-  {
     command: "composer.focus.toggle",
     label: "Focus composer",
     description: "Focus or blur the chat prompt composer.",

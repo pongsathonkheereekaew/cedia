@@ -6,7 +6,6 @@ import {
   AddPlusIcon,
   ArchiveIcon,
   BookIcon,
-  ChatBubbleIcon,
   CircleQuestionIcon,
   ClockIcon,
   CopyIcon,
@@ -14,7 +13,6 @@ import {
   DragHandleIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
-  GiftIcon,
   KeyboardIcon,
   BellIcon,
   type LucideIcon,
@@ -219,9 +217,6 @@ import {
 } from "./SidebarThreadRowContent";
 import { RenameDialog } from "./RenameDialog";
 import { RenameThreadDialog } from "./RenameThreadDialog";
-import ReleaseHistoryDialog from "./ReleaseHistoryDialog";
-import { WHATS_NEW_ENTRIES } from "../whatsNew/entries";
-import { sortEntriesByVersionDesc } from "../whatsNew/logic";
 import {
   SidebarSearchPalette,
   type ImportProviderKind,
@@ -232,7 +227,6 @@ import { useHandleNewStudioChat } from "../hooks/useHandleNewStudioChat";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useProviderStatusesForLocalConfig } from "../hooks/useProviderStatusesForLocalConfig";
 import { useThreadHandoff } from "../hooks/useThreadHandoff";
-import { useFeedbackDialogStore } from "../feedbackDialogStore";
 import { openExternalLink } from "~/lib/linkChips";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { toastManager } from "./ui/toast";
@@ -795,35 +789,16 @@ function ProjectSortMenu({
 
 const SYNARA_DOCS_URL = "https://trysynara.com/docs";
 
-// Latest curated releases surfaced directly in the help menu. Static data, so
-// computed once at module scope rather than per render.
-const HELP_MENU_RELEASE_ENTRIES = sortEntriesByVersionDesc(WHATS_NEW_ENTRIES).slice(0, 3);
-
 // Footer help menu; swapped out for the desktop-update pill while an update is
 // available (see SidebarFooter).
 function SidebarHelpMenu({
   onOpenShortcuts,
-  onOpenFeedback,
   onCustomizeSidebar,
 }: {
   onOpenShortcuts: () => void;
-  onOpenFeedback: () => void;
   /** Null hides the entry (e.g. on surfaces without the primary nav block). */
   onCustomizeSidebar: (() => void) | null;
 }) {
-  // `openCount` keys the dialog so each open remounts the accordion — its rows
-  // capture `defaultOpen` in mount state, so a stale mount would ignore a
-  // newly selected version.
-  const [releaseHistory, setReleaseHistory] = useState<{
-    readonly open: boolean;
-    readonly version: string | null;
-    readonly openCount: number;
-  }>({ open: false, version: null, openCount: 0 });
-
-  const openReleaseHistory = (version: string | null) => {
-    setReleaseHistory((prev) => ({ open: true, version, openCount: prev.openCount + 1 }));
-  };
-
   return (
     <>
       <Menu>
@@ -834,31 +809,6 @@ function SidebarHelpMenu({
           tooltip="Help"
         />
         <ComposerPickerMenuPopup align="end" side="top" className="w-64 min-w-64">
-          <MenuGroup>
-            <div className="px-2 py-1 sm:text-xs font-medium text-muted-foreground">What’s new</div>
-            {HELP_MENU_RELEASE_ENTRIES.map((entry) => (
-              <MenuItem
-                key={entry.version}
-                className={SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME}
-                onClick={() => openReleaseHistory(entry.version)}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {entry.features[0]?.title ?? `Version ${entry.version}`}
-                </span>
-                <span className="shrink-0 text-[var(--color-text-foreground-secondary)] tabular-nums">
-                  {entry.date}
-                </span>
-              </MenuItem>
-            ))}
-            <MenuItem
-              className={SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME}
-              onClick={() => openReleaseHistory(null)}
-            >
-              <SidebarContextMenuIcon icon={GiftIcon} />
-              <span>Full changelog</span>
-            </MenuItem>
-          </MenuGroup>
-          <MenuSeparator />
           <MenuGroup>
             {onCustomizeSidebar ? (
               <MenuItem
@@ -873,10 +823,6 @@ function SidebarHelpMenu({
               <SidebarContextMenuIcon icon={KeyboardIcon} />
               <span>Keybindings</span>
             </MenuItem>
-            <MenuItem className={SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME} onClick={onOpenFeedback}>
-              <SidebarContextMenuIcon icon={ChatBubbleIcon} />
-              <span>Send feedback</span>
-            </MenuItem>
             <MenuItem
               className={SIDEBAR_CONTEXT_MENU_ITEM_CLASS_NAME}
               onClick={() => openExternalLink(SYNARA_DOCS_URL)}
@@ -887,14 +833,6 @@ function SidebarHelpMenu({
           </MenuGroup>
         </ComposerPickerMenuPopup>
       </Menu>
-      <ReleaseHistoryDialog
-        key={releaseHistory.openCount}
-        open={releaseHistory.open}
-        onOpenChange={(open) => {
-          setReleaseHistory((prev) => ({ ...prev, open }));
-        }}
-        defaultExpandedVersion={releaseHistory.version}
-      />
     </>
   );
 }
@@ -962,6 +900,7 @@ function SidebarPrimaryAction({
   onFocus,
   active: activeProp,
   disabled: disabledProp,
+  disabledReason,
   shortcutLabel,
   badge,
 }: {
@@ -975,6 +914,8 @@ function SidebarPrimaryAction({
   onFocus?: () => void;
   active?: boolean;
   disabled?: boolean;
+  /** Tooltip-style reason rendered on the label for honest-unavailable rows. */
+  disabledReason?: string;
   shortcutLabel?: string | null;
   badge?: SidebarActionBadge | null;
 }) {
@@ -1010,7 +951,9 @@ function SidebarPrimaryAction({
             {...(iconClassName ? { className: iconClassName } : {})}
           />
         </SidebarLeadingIcon>
-        <span className="truncate">{label}</span>
+        <span className="truncate" title={disabledReason}>
+          {label}
+        </span>
         {badge ? (
           <span
             className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-muted px-1 text-[10px] font-medium text-muted-foreground"
@@ -1042,6 +985,9 @@ type SidebarNavItemDescriptor = {
   readonly active: boolean;
   readonly badge: SidebarActionBadge | null;
   readonly onClick: () => void;
+  /** §4 honest-unavailable: the row renders disabled with a reason instead of navigating. */
+  readonly disabled?: boolean;
+  readonly disabledReason?: string;
   readonly onMouseEnter?: () => void;
   readonly onFocus?: () => void;
 };
@@ -1447,8 +1393,9 @@ export default function Sidebar() {
   });
   const routeProjectId = useParams({
     strict: false,
-    select: (params) =>
-      typeof params.projectId === "string" ? ProjectId.makeUnsafe(params.projectId) : null,
+    // Cedia §10 item 60: the Kanban routes (the only `:projectId` routes) are cut,
+    // so no route carries a project param — this resolves to null.
+    select: (): ProjectId | null => null,
   });
   const routeSearch = useDiffRouteSearch();
   const settingsSectionSearch = useSearch({ strict: false }) as Record<string, unknown>;
@@ -1566,12 +1513,10 @@ export default function Sidebar() {
   const addProjectShortcutLabel =
     shortcutLabelForCommand(keybindings, "sidebar.addProject") ??
     (isMacNavigatorPlatform() ? "⇧⌘O" : "Ctrl+Shift+O");
-  const usageSettingsShortcutLabel = shortcutLabelForCommand(keybindings, "settings.usage");
   const { activeProjectId: focusedProjectId } = useFocusedChatContext();
   const latestProjectId = useLatestProjectStore((state) => state.latestProjectId);
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
-  const openFeedbackDialog = useFeedbackDialogStore((state) => state.openDialog);
   const [searchPaletteMode, setSearchPaletteMode] = useState<SidebarSearchPaletteMode>("search");
   const projectAdditionLockRef = useRef(false);
   const [renameDialogThreadId, setRenameDialogThreadId] = useState<ThreadId | null>(null);
@@ -3743,14 +3688,16 @@ export default function Sidebar() {
         onMouseEnter: prefetchModelsForPrimaryNewThread,
         onFocus: prefetchModelsForPrimaryNewThread,
       },
-      // Cedia §10 item 60 keeps Automations visible as an honest-unavailable row
-      // until a host automation backend exists (§4); kanban/pullRequests left with
-      // it and normalize away from persisted orders.
+      // Cedia §10 item 60 + §3.B: Kanban/Pull-requests nav ids are gone; Automations
+      // stays as a §4 honest-unavailable row (disabled + reason) until a host
+      // automation backend exists, so the route is never offered.
       automations: {
         icon: ClockIcon,
         label: "Automations",
         active: isOnAutomations,
         badge: automationAttentionBadge,
+        disabled: true,
+        disabledReason: "No automation backend in Cedia yet — this row opens nothing.",
         onClick: () => {
           void navigate({ to: "/automations" });
         },
@@ -5241,15 +5188,6 @@ export default function Sidebar() {
         setSearchPaletteOpen((prev) => !prev || searchPaletteMode !== "import");
         return;
       }
-      if (command === "settings.usage") {
-        event.preventDefault();
-        event.stopPropagation();
-        void navigate({
-          to: "/settings",
-          search: { section: "usage" },
-        });
-        return;
-      }
       if (command === "space.previous" || command === "space.next") {
         if (!isProjectsSidebarSurface({ isOnSettings, isOnStudio })) return;
         event.preventDefault();
@@ -5555,23 +5493,10 @@ export default function Sidebar() {
         shortcutLabel: importThreadShortcutLabel,
       },
       {
-        id: "feedback",
-        label: "Feedback Synara",
-        description: "Send feedback or report an issue to the Synara team.",
-        keywords: ["feedback", "bug", "issue", "problem", "report", "support", "synara"],
-      },
-      {
         id: "settings",
         label: "Settings",
         description: "Open app settings.",
         keywords: ["preferences", "config"],
-      },
-      {
-        id: "usage-settings",
-        label: "Usage settings",
-        description: "Open provider usage and remaining credits.",
-        keywords: ["usage", "limits", "credits", "quota", "providers"],
-        shortcutLabel: usageSettingsShortcutLabel,
       },
       // Space jumps ride the palette so keyboard users can reach any space by name
       // without learning the previous/next-space chords.
@@ -5624,7 +5549,6 @@ export default function Sidebar() {
       newThreadShortcutLabel,
       openSpaceCreator,
       spaces,
-      usageSettingsShortcutLabel,
       voidSpace,
     ],
   );
@@ -6053,6 +5977,10 @@ export default function Sidebar() {
                             label={item.label}
                             active={item.active}
                             badge={item.badge}
+                            disabled={item.disabled ?? false}
+                            {...(item.disabledReason
+                              ? { disabledReason: item.disabledReason }
+                              : {})}
                             onClick={item.onClick}
                             {...(item.onMouseEnter ? { onMouseEnter: item.onMouseEnter } : {})}
                             {...(item.onFocus ? { onFocus: item.onFocus } : {})}
@@ -6448,7 +6376,6 @@ export default function Sidebar() {
                     onOpenShortcuts={() =>
                       void navigate({ to: "/settings", search: { section: "shortcuts" } })
                     }
-                    onOpenFeedback={openFeedbackDialog}
                     onCustomizeSidebar={
                       isOnStudio || isOnSettings
                         ? null
@@ -6859,13 +6786,6 @@ export default function Sidebar() {
           onOpenSettings={() => {
             void navigate({ to: "/settings" });
           }}
-          onOpenFeedback={openFeedbackDialog}
-          onOpenUsageSettings={() => {
-            void navigate({
-              to: "/settings",
-              search: { section: "usage" },
-            });
-          }}
           onOpenProject={handleOpenProjectFromSearch}
           onImportThread={handleImportThread}
           onOpenThread={(threadId) => {
@@ -6890,8 +6810,6 @@ function SidebarSearchPaletteController(props: {
   onAddProjectPath: (path: string, options?: { createIfMissing?: boolean }) => Promise<void>;
   homeDir: string | null;
   onOpenSettings: () => void;
-  onOpenFeedback: () => void;
-  onOpenUsageSettings: () => void;
   onOpenProject: (projectId: string) => void;
   onImportThread: (provider: ImportProviderKind, externalId: string) => Promise<void>;
   onOpenThread: (threadId: string) => void;
@@ -6955,8 +6873,6 @@ function SidebarSearchPaletteController(props: {
       onAddProjectPath={props.onAddProjectPath}
       homeDir={props.homeDir}
       onOpenSettings={props.onOpenSettings}
-      onOpenFeedback={props.onOpenFeedback}
-      onOpenUsageSettings={props.onOpenUsageSettings}
       onOpenProject={props.onOpenProject}
       importProviders={importProviders}
       onImportThread={props.onImportThread}

@@ -12,7 +12,6 @@ import {
   type WsCompatibilityError,
 } from "@synara/contracts";
 import { defaultTerminalTitleForCliKind } from "@synara/shared/terminalThreads";
-import { BrowserVaultDialog } from "~/components/BrowserVault";
 import { isThreadDetailEventFor } from "@synara/shared/threadDetailEvents";
 import {
   Outlet,
@@ -38,17 +37,10 @@ import { Throttler } from "@tanstack/react-pacer";
 import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
 import { DesktopWindowControls } from "../components/DesktopWindowControls";
 import { RunningChatsQuitCoordinator } from "../components/RunningChatsQuitCoordinator";
-import { AppSnapCoordinator } from "../components/AppSnapCoordinator";
-import { AppSnapWelcomeDialog } from "../components/AppSnapWelcomeDialog";
 import { useOnboarding } from "../onboarding/useOnboarding";
-import { SafariAccessOnboarding } from "../components/SafariAccessOnboarding";
 import { QueuedComposerDrainCoordinator } from "../components/QueuedComposerDrainCoordinator";
-import { FeedbackDialog } from "../components/FeedbackDialog";
 import { SETTINGS_TARGETS } from "../settingsNavigation";
 import ShortcutsDialog from "../components/ShortcutsDialog";
-import WhatsNewDialog from "../components/WhatsNewDialog";
-import { useWhatsNew } from "../whatsNew/useWhatsNew";
-import { WhatsNewPopoutCard } from "../whatsNew/WhatsNewPopoutCard";
 import { shouldRenderTerminalWorkspace } from "../components/ChatView.logic";
 import { Button, dialogActionButtonClassName } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider, toastManager } from "../components/ui/toast";
@@ -56,8 +48,6 @@ import { useGitProgressToastPreview } from "../components/useGitProgressToastPre
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { useFeatureFlags } from "../featureFlags";
 import { useFocusedChatContext } from "../focusedChatContext";
-import { useFeedbackDialogStore } from "../feedbackDialogStore";
-import type { FeedbackThreadContext } from "../feedback";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   invalidateProviderUsageQueries,
@@ -319,16 +309,13 @@ function RootRouteView() {
           <EditorDirtyRouteGuard />
           <ProviderStatusRefreshCoordinator />
           <GlobalShortcutsDialog />
-          <BrowserVaultDialog />
-          <GlobalFeedbackDialog />
-          <GlobalWhatsNewSurface />
+          {/* Cedia §10 item 60: Safari vault/cookie-import surface cut (no OMP/host backing) */}
+          {/* Cedia §10 item 60: trysynara.com feedback surface cut (no OMP/host backing) */}
+          {/* Cedia §10 item 60: Synara WhatsNew/release-history surface cut (no OMP/host backing) */}
           <TaskCompletionNotifications />
           <QueuedComposerDrainCoordinator />
-          <SafariAccessOnboarding>
-            <AppSnapWelcomeDialog />
-          </SafariAccessOnboarding>
           <GlobalOnboardingDialog />
-          <AppSnapCoordinator />
+          {/* Cedia §10 item 60: AppSnap welcome surface cut (no OMP/host backing) */}
           <DesktopProjectBootstrap />
           <Outlet />
         </AnchoredToastProvider>
@@ -771,30 +758,6 @@ function GlobalShortcutsDialog() {
   );
 }
 
-function GlobalFeedbackDialog() {
-  const { activeProject, activeThread } = useFocusedChatContext();
-  const isOpen = useFeedbackDialogStore((state) => state.isOpen);
-  const requestedContext = useFeedbackDialogStore((state) => state.context);
-  const setOpen = useFeedbackDialogStore((state) => state.setOpen);
-  const context: FeedbackThreadContext = requestedContext ?? {
-    provider: activeThread?.modelSelection.provider ?? null,
-    model: activeThread?.modelSelection.model ?? null,
-    projectKind: activeProject?.kind ?? null,
-    environmentMode: activeThread?.envMode ?? null,
-    runtimeMode: activeThread?.runtimeMode ?? null,
-    interactionMode: activeThread?.interactionMode ?? null,
-    sessionStatus: activeThread?.session?.status ?? null,
-    latestTurnState: activeThread?.latestTurn?.state ?? null,
-    messageCount: activeThread?.messages.length ?? 0,
-    activityCount: activeThread?.activities.length ?? 0,
-    hasPendingApproval: activeThread?.hasPendingApprovals === true,
-    hasPendingUserInput: activeThread?.hasPendingUserInput === true,
-    hasThreadError: Boolean(activeThread?.error),
-  };
-
-  return <FeedbackDialog open={isOpen} context={context} onOpenChange={setOpen} />;
-}
-
 // The dialog pulls in the provider sign-in terminal (xterm and addons), so it stays out
 // of the eager router graph and only loads the first time the tour actually opens.
 const OnboardingDialog = lazy(() =>
@@ -820,47 +783,6 @@ function GlobalOnboardingDialog() {
         onComplete={onboarding.complete}
       />
     </Suspense>
-  );
-}
-
-function GlobalWhatsNewSurface() {
-  // Single mount point per app session. The hook owns the "popout visible" and
-  // "dialog open" booleans and the seen-marker persistence; this component is
-  // just the plumbing that renders them together so they share one entry.
-  const {
-    currentEntry,
-    allEntries,
-    currentVersion,
-    isPopoutVisible,
-    isDialogOpen,
-    openDialog,
-    dismissPopout,
-    onDialogOpenChange,
-  } = useWhatsNew();
-
-  if (!currentEntry) {
-    // Silent-bootstrap or noop — nothing to render on either surface.
-    return null;
-  }
-
-  return (
-    <>
-      {isPopoutVisible && (
-        <WhatsNewPopoutCard
-          entry={currentEntry}
-          currentVersion={currentVersion}
-          onOpen={openDialog}
-          onDismiss={dismissPopout}
-        />
-      )}
-      <WhatsNewDialog
-        open={isDialogOpen}
-        onOpenChange={onDialogOpenChange}
-        currentEntry={currentEntry}
-        allEntries={allEntries}
-        currentVersion={currentVersion}
-      />
-    </>
   );
 }
 

@@ -70,8 +70,6 @@ function commandMenuTitle(
       return "Status";
     case "subagents":
       return "Subagents";
-    case "feedback":
-      return "Feedback Synara";
     default:
       return humanizeProviderCommandName(item.command);
   }

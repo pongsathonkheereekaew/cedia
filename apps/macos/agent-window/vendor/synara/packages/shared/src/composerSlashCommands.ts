@@ -20,7 +20,6 @@ export const BUILT_IN_COMPOSER_SLASH_COMMANDS = [
   "export",
   "goal",
   "rename",
-  "feedback",
   "automation",
 ] as const;
 

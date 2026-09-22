@@ -212,11 +212,6 @@ export const DEFAULT_SHORTCUT_FALLBACKS: ResolvedKeybindingsConfig = [
     shortcut: commandShortcut("f"),
     whenAst: whenNotTerminalFocus,
   },
-  {
-    command: "settings.usage",
-    shortcut: commandShortcut("u", { shiftKey: true }),
-    whenAst: whenNotTerminalFocus,
-  },
   // Cmd+Ctrl+P on macOS. On Windows/Linux the literal chord would require the
   // Super/Windows key, which window managers routinely swallow before it reaches
   // the app, so those platforms get Ctrl+Alt+P instead (see the sibling entry below).

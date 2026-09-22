@@ -5,7 +5,6 @@
  * keyboard navigation and shortcut labels behave like the rest of the app.
  */
 import {
-  BugReportIcon,
   CheckIcon,
   DeviceLaptopIcon,
   FolderAddIcon,
@@ -16,7 +15,6 @@ import {
   SettingsIcon,
   SidechatIcon,
   SunIcon,
-  UsageGaugeIcon,
 } from "~/lib/icons";
 import { type FilesystemBrowseResult, type ProviderKind } from "@synara/contracts";
 import { isGenericChatThreadTitle } from "@synara/shared/chatThreads";
@@ -85,11 +83,7 @@ const PALETTE_STATUS_CLASS =
   "px-4 pt-1 pb-3 text-[length:var(--app-font-size-ui,12px)] text-muted-foreground/79";
 
 // Actions that live under the "Settings" heading when the palette is idle.
-const SETTINGS_ACTION_IDS: ReadonlySet<string> = new Set([
-  "settings",
-  "usage-settings",
-  "feedback",
-]);
+const SETTINGS_ACTION_IDS: Readonly<Record<string, true>> = { settings: true };
 
 export type SidebarSearchPaletteMode = "search" | "import";
 
@@ -106,8 +100,6 @@ interface SidebarSearchPaletteProps {
   onAddProjectPath: (path: string, options?: { createIfMissing?: boolean }) => Promise<void>;
   homeDir: string | null;
   onOpenSettings: () => void;
-  onOpenFeedback: () => void;
-  onOpenUsageSettings: () => void;
   onOpenProject: (projectId: string) => void;
   onOpenThread: (threadId: string) => void;
   importProviders: readonly ImportProviderKind[];
@@ -123,7 +115,7 @@ function actionHandler(
   actionId: string,
   props: Pick<
     SidebarSearchPaletteProps,
-    "onCreateChat" | "onCreateThread" | "onOpenFeedback" | "onOpenSettings" | "onOpenUsageSettings"
+    "onCreateChat" | "onCreateThread" | "onOpenSettings"
   >,
 ): (() => void) | null {
   switch (actionId) {
@@ -133,10 +125,6 @@ function actionHandler(
       return props.onCreateThread;
     case "settings":
       return props.onOpenSettings;
-    case "feedback":
-      return props.onOpenFeedback;
-    case "usage-settings":
-      return props.onOpenUsageSettings;
     default:
       return null;
   }
@@ -149,9 +137,7 @@ const ACTION_ICONS: Record<string, IconComponent> = {
   "new-thread": NewThreadIcon,
   "add-project": FolderAddIcon,
   "import-thread": ImportThreadIcon,
-  feedback: BugReportIcon,
   settings: SettingsIcon,
-  "usage-settings": UsageGaugeIcon,
 };
 
 const BROWSE_STALE_TIME_MS = 10_000;
@@ -445,10 +431,10 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
   // "Actions" group so a query never has to guess which heading a hit sits under.
   const quickActions = query
     ? matchedActions
-    : matchedActions.filter((action) => !SETTINGS_ACTION_IDS.has(action.id));
+    : matchedActions.filter((action) => !(action.id in SETTINGS_ACTION_IDS));
   const settingsActions = query
     ? []
-    : matchedActions.filter((action) => SETTINGS_ACTION_IDS.has(action.id));
+    : matchedActions.filter((action) => action.id in SETTINGS_ACTION_IDS);
   const themeCommandItems = buildThemeCommandItems({
     query,
     resolvedTheme,

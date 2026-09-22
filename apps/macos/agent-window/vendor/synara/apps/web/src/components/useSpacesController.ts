@@ -218,11 +218,12 @@ export function useSpacesController(input: {
       }
 
       if (target.kind === "project") {
+        // Cedia §10 item 60: the Kanban routes are cut (no OMP/host source), so a
+        // Space whose target is a project lands on that Space's home instead of a
+        // board — the sidebar still focuses the Space's project and threads.
+        const spaceId = projectById.get(target.projectId)?.spaceId ?? null;
         startTransition(() => {
-          void navigate({
-            to: "/kanban/$projectId",
-            params: { projectId: target.projectId },
-          });
+          void navigate({ to: "/", search: { space: spaceKey(spaceId) } });
         });
         return;
       }

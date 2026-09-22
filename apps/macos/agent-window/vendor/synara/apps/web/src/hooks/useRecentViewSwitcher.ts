@@ -257,9 +257,6 @@ export function useRecentViewSwitcher(input: UseRecentViewSwitcherInput) {
           search: () => (view.section ? { section: view.section } : {}),
         });
         return;
-      case "plugins":
-        void navigate({ to: "/plugins" });
-        return;
     }
   };
 
