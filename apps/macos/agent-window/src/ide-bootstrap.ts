@@ -16,6 +16,7 @@ import { openNativeAgentIntent } from "./native-handoff";
 import { decodeSessionIdFromHash, openAgentsWindowFromIde } from "../vendor/synara/apps/web/src/ide-mode";
 import type { DesktopBridge, NativeApi } from "@synara/contracts";
 
+import { AGENT_THEME_COLOR_KEYS } from "../../src/agent-theme-anchors.ts";
 import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 const RESPONSE_TIMEOUT_MS = 60_000;
 
@@ -61,55 +62,12 @@ interface HostThemeSnapshot {
   colors?: Record<string, string>;
 }
 
-// These are the workbench tokens that define Cedia's shared chrome. Keep the
-// list explicit and small: the standalone Agent receives presentation values,
-// never arbitrary CSS or editor syntax rules.
-const HOST_THEME_VARIABLES = [
-  "--vscode-editor-background",
-  "--vscode-editor-foreground",
-  "--vscode-foreground",
-  "--vscode-descriptionForeground",
-  "--vscode-disabledForeground",
-  "--vscode-sideBar-background",
-  "--vscode-sideBar-foreground",
-  "--vscode-sideBar-border",
-  "--vscode-sideBarSectionHeader-background",
-  "--vscode-panel-background",
-  "--vscode-panel-border",
-  "--vscode-titleBar-activeBackground",
-  "--vscode-statusBar-background",
-  "--vscode-statusBar-foreground",
-  "--vscode-editorGroupHeader-tabsBackground",
-  "--vscode-tab-activeBackground",
-  "--vscode-tab-inactiveBackground",
-  "--vscode-tab-activeForeground",
-  "--vscode-tab-inactiveForeground",
-  "--vscode-input-background",
-  "--vscode-input-foreground",
-  "--vscode-input-border",
-  "--vscode-textCodeBlock-background",
-  "--vscode-editorWidget-background",
-  "--vscode-editorWidget-border",
-  "--vscode-menu-background",
-  "--vscode-menu-border",
-  "--vscode-dropdown-background",
-  "--vscode-focusBorder",
-  "--vscode-contrastBorder",
-  "--vscode-textLink-foreground",
-  "--vscode-textLink-activeForeground",
-  "--vscode-button-background",
-  "--vscode-button-foreground",
-  "--vscode-button-hoverBackground",
-  "--vscode-badge-background",
-  "--vscode-icon-foreground",
-  "--vscode-list-hoverBackground",
-  "--vscode-list-activeSelectionBackground",
-  "--vscode-list-activeSelectionForeground",
-  "--vscode-testing-iconPassed",
-  "--vscode-testing-iconFailed",
-  "--vscode-gitDecoration-addedResourceForeground",
-  "--vscode-gitDecoration-deletedResourceForeground",
-] as const;
+// The workbench tokens that define Cedia's shared chrome. §10 item 54 makes the
+// shared anchor list (`src/agent-theme-anchors.ts`) the single source: this is the
+// list the webview reads out of the embedded workbench's computed styles, so it
+// must be exactly what the extension is willing to publish and the bundle can
+// paint from — a copy here would drift out of that chain silently.
+const HOST_THEME_VARIABLES = AGENT_THEME_COLOR_KEYS;
 
 function object(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)

@@ -149,22 +149,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "appearance:theme",
     section: "appearance",
     title: "Theme",
-    keywords: "Choose how Synara looks across the app. dark light system color",
-  },
-  {
-    id: "appearance:app-icon",
-    section: "appearance",
-    title: "App icon",
-    keywords: "Choose the icon Synara uses in the dock or taskbar desktop application logo.",
-    target: null,
-  },
-  {
-    id: "appearance:custom-title-bar",
-    section: "appearance",
-    title: "Use custom title bar",
-    keywords:
-      "frameless window system title bar Windows Linux caption controls minimize maximize close chrome",
-    target: null,
+    keywords: "Follows the IDE theme. Change it in the IDE window with Preferences: Color Theme; both windows repaint together.",
   },
   {
     id: "appearance:system-ui-font",

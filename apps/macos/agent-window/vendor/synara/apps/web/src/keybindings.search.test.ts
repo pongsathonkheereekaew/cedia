@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  matchSidebarSearchThemes,
-  type SidebarSearchTheme,
-} from "./components/SidebarSearchPalette.logic";
 import { resolveShortcutCommand } from "./keybindings";
 
 function modK(metaKey: boolean) {
@@ -71,33 +67,4 @@ describe("Cmd+K search palette", () => {
     );
   });
 
-  it("surfaces theme rows from a theme query", () => {
-    const themes: SidebarSearchTheme[] = [
-      {
-        id: "mode:dark",
-        type: "mode",
-        label: "Switch to dark theme",
-        description: "Always use the dark theme.",
-        mode: "dark",
-        isActive: false,
-      },
-      {
-        id: "code:dark:catppuccin",
-        type: "code-theme",
-        label: "Catppuccin",
-        description: "Apply to the current dark theme slot.",
-        keywords: ["appearance", "theme", "dark", "catppuccin"],
-        codeThemeId: "catppuccin",
-        variant: "dark",
-        isActive: false,
-      },
-    ];
-    expect(matchSidebarSearchThemes(themes, "theme").map((item) => item.id)).toEqual([
-      "code:dark:catppuccin",
-      "mode:dark",
-    ]);
-    expect(matchSidebarSearchThemes(themes, "catppuccin").map((item) => item.id)).toEqual([
-      "code:dark:catppuccin",
-    ]);
-  });
 });

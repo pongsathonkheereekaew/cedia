@@ -20,7 +20,7 @@ export type RadioGroupItemProps = {
 
 /**
  * Standard radio-group keyboard behavior for custom radio-style button groups
- * (SettingsSegmentedControl, ThemeModePicker): only the selected option is in the
+ * (SettingsSegmentedControl, SettingsSelectControl): only the selected option is in the
  * tab order, and arrow keys move both selection and focus, wrapping at the ends.
  * Spread the returned props factory's result onto each `role="radio"` button.
  */

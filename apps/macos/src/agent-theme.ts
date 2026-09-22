@@ -1,3 +1,4 @@
+import { AGENT_THEME_COLOR_SET } from "./agent-theme-anchors.ts";
 import { agentUiStateDir, readAgentUiState, writeAgentUiState } from "./agent-ui-state.ts";
 
 /** The small, renderer-safe part of the active Code-OSS theme shared with the
@@ -12,26 +13,12 @@ export interface AgentThemeSnapshot {
 
 const MAX_THEME_NAME = 128;
 const MAX_COLOR_VALUE = 256;
-const MAX_COLORS = 48;
+/** The snapshot carries every anchor the bundle can paint from (78 today); the
+ * cap is a sanity bound on the sanitised payload size, not a palette budget. */
+const MAX_COLORS = 160;
 const SAFE_COLOR_VALUE = /^(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark)\([^;{}]+\)|[a-z]+)$/i;
-export const AGENT_THEME_COLOR_KEYS = [
-  "--vscode-editor-background", "--vscode-editor-foreground", "--vscode-foreground",
-  "--vscode-descriptionForeground", "--vscode-disabledForeground", "--vscode-sideBar-background",
-  "--vscode-sideBar-foreground", "--vscode-sideBar-border", "--vscode-sideBarSectionHeader-background",
-  "--vscode-panel-background", "--vscode-panel-border", "--vscode-titleBar-activeBackground",
-  "--vscode-statusBar-background", "--vscode-statusBar-foreground", "--vscode-editorGroupHeader-tabsBackground",
-  "--vscode-tab-activeBackground", "--vscode-tab-inactiveBackground", "--vscode-tab-activeForeground",
-  "--vscode-tab-inactiveForeground", "--vscode-input-background", "--vscode-input-foreground",
-  "--vscode-input-border", "--vscode-textCodeBlock-background", "--vscode-editorWidget-background",
-  "--vscode-editorWidget-border", "--vscode-menu-background", "--vscode-menu-border",
-  "--vscode-dropdown-background", "--vscode-focusBorder", "--vscode-contrastBorder",
-  "--vscode-textLink-foreground", "--vscode-textLink-activeForeground", "--vscode-button-background",
-  "--vscode-button-foreground", "--vscode-button-hoverBackground", "--vscode-badge-background",
-  "--vscode-icon-foreground", "--vscode-list-hoverBackground", "--vscode-list-activeSelectionBackground",
-  "--vscode-list-activeSelectionForeground", "--vscode-testing-iconPassed", "--vscode-testing-iconFailed",
-  "--vscode-gitDecoration-addedResourceForeground", "--vscode-gitDecoration-deletedResourceForeground",
-] as const;
-const AGENT_THEME_COLOR_SET = new Set<string>(AGENT_THEME_COLOR_KEYS);
+export { AGENT_THEME_COLOR_KEYS } from "./agent-theme-anchors.ts";
+
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -40,8 +27,10 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 /** Validate data arriving from a webview before it is persisted for another
- * renderer.  CSS variable names are deliberately limited to VS Code's public
- * theme namespace; this file is not an arbitrary style injection channel. */
+ * renderer.  CSS variable names are deliberately limited to the shared anchor
+ * list (`agent-theme-anchors.ts`); this file is not an arbitrary style
+ * injection channel. Every anchor the bundle's map consumes must be listed
+ * there or it is dropped here, before the bundle ever sees it. */
 export function normalizeAgentThemeSnapshot(value: unknown): AgentThemeSnapshot | undefined {
   const row = record(value);
   if (!row || (row.mode !== "light" && row.mode !== "dark")) return undefined;

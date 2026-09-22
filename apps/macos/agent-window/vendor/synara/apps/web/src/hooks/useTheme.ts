@@ -1,12 +1,19 @@
 // FILE: useTheme.ts
-// Purpose: Persists the Codex-style theme store and projects the active pack into DOM CSS variables.
+// Purpose: Persists the theme store and projects the IDE workbench theme into DOM CSS variables.
 // Layer: Web appearance state hook
-// Exports: useTheme for mode, resolved variant, theme-pack import/export, and active theme metadata.
+// Exports: useTheme for the resolved variant and the system-font toggle.
+//
+// Cedia §10 item 54: this window has ONE theme authority — the IDE's
+// `workbench.colorTheme`, delivered as a host snapshot. The mode picker, the
+// follow toggle and the pack editor are cut; `Cedia's host-theme-tokens.ts`
+// maps the snapshot's anchors onto the tokens the pack layer paints as its
+// fallback. Everything the window still edits here is typography.
 
 import { useEffect, useSyncExternalStore } from "react";
 import { isElectron } from "../env";
 import { isIdeEmbeddedRuntime } from "../ide-mode";
 import { isMacNavigatorPlatform } from "../lib/utils";
+import { HOST_THEME_TOKEN_SOURCES, applyHostThemeTokens as paintHostThemeTokens } from "../../../../../../src/host-theme-tokens.ts";
 import {
   DEFAULT_THEME_STATE,
   type ChromeTheme,
@@ -16,20 +23,13 @@ import {
   type ThemeState,
   type ThemeVariant,
   areThemePacksEqual,
-  isCodeThemeAvailable,
   packForIdeThemeName,
   buildThemeCssVariables,
-  canParseThemeShareString,
-  createThemeShareString,
   parseStoredThemeState,
-  resetThemeVariant as resetThemeVariantState,
   resolveThemePack,
   resolveThemeVariant,
   serializeThemeState,
   setThemeCodeThemeId,
-  setThemeFonts,
-  updateChromeTheme,
-  updateThemePackFromShareString,
 } from "../theme/theme.logic";
 
 type ThemeSnapshot = {
@@ -54,84 +54,13 @@ let hostThemePollTimer: number | undefined;
 let hostThemePollUsers = 0;
 let hostTokenOverrideNames = new Set<string>();
 
-const HOST_THEME_COLOR_LIMIT = 48;
+const HOST_THEME_COLOR_LIMIT = 160;
 const SAFE_HOST_COLOR = /^(?:#[0-9a-f]{3,8}|[a-z-]+\([^;{}]+\)|[a-z]+)$/i;
-const HOST_TOKEN_SOURCES: Readonly<Record<string, readonly string[]>> = {
-  "--app-shell-background": ["--vscode-editor-background"],
-  "--app-sidebar-surface": ["--vscode-sideBar-background"],
-  "--app-settings-surface": ["--vscode-panel-background", "--vscode-editor-background"],
-  "--app-chat-code-surface": ["--vscode-textCodeBlock-background", "--vscode-input-background"],
-  "--app-user-message-background": ["--vscode-input-background", "--vscode-textCodeBlock-background"],
-  "--color-background-surface": ["--vscode-editor-background", "--vscode-sideBar-background"],
-  "--color-background-surface-under": ["--vscode-titleBar-activeBackground", "--vscode-editor-background"],
-  "--color-background-panel": ["--vscode-panel-background", "--vscode-editorWidget-background"],
-  "--color-background-control": ["--vscode-input-background"],
-  "--color-background-control-opaque": ["--vscode-input-background"],
-  "--color-background-elevated-primary": ["--vscode-editorWidget-background", "--vscode-panel-background"],
-  "--color-background-elevated-primary-opaque": ["--vscode-editorWidget-background", "--vscode-panel-background"],
-  "--color-background-elevated-secondary": ["--vscode-sideBarSectionHeader-background", "--vscode-panel-background"],
-  "--color-background-accent": ["--vscode-button-background", "--vscode-focusBorder"],
-  "--color-background-accent-hover": ["--vscode-button-hoverBackground", "--vscode-button-background"],
-  "--color-background-button-primary": ["--vscode-button-background"],
-  "--color-background-button-primary-hover": ["--vscode-button-hoverBackground", "--vscode-button-background"],
-  "--color-background-button-secondary": ["--vscode-input-background", "--vscode-list-activeSelectionBackground"],
-  "--color-background-button-secondary-hover": ["--vscode-list-hoverBackground"],
-  "--color-text-foreground": ["--vscode-foreground", "--vscode-editor-foreground"],
-  "--color-text-foreground-secondary": ["--vscode-descriptionForeground", "--vscode-foreground"],
-  "--color-text-foreground-tertiary": ["--vscode-disabledForeground", "--vscode-descriptionForeground"],
-  "--color-text-accent": ["--vscode-textLink-foreground", "--vscode-focusBorder"],
-  "--color-text-button-primary": ["--vscode-button-foreground", "--vscode-foreground"],
-  "--color-text-button-secondary": ["--vscode-input-foreground", "--vscode-foreground"],
-  "--color-border": ["--vscode-panel-border", "--vscode-editorGroup-border"],
-  "--color-border-light": ["--vscode-widget-border", "--vscode-panel-border"],
-  "--color-border-heavy": ["--vscode-contrastBorder", "--vscode-panel-border"],
-  "--color-border-focus": ["--vscode-focusBorder"],
-  "--color-decoration-added": ["--vscode-gitDecoration-addedResourceForeground", "--vscode-testing-iconPassed"],
-  "--color-decoration-deleted": ["--vscode-gitDecoration-deletedResourceForeground", "--vscode-testing-iconFailed"],
-  "--foreground": ["--vscode-foreground", "--vscode-editor-foreground"],
-  "--background": ["--vscode-titleBar-activeBackground", "--vscode-editor-background"],
-  "--card": ["--vscode-panel-background", "--vscode-editorWidget-background"],
-  "--card-foreground": ["--vscode-foreground", "--vscode-editor-foreground"],
-  "--input": ["--vscode-input-background"],
-  "--muted": ["--vscode-sideBarSectionHeader-background", "--vscode-panel-background"],
-  "--muted-foreground": ["--vscode-descriptionForeground", "--vscode-foreground"],
-  "--popover": ["--vscode-editorWidget-background", "--vscode-panel-background"],
-  "--popover-foreground": ["--vscode-foreground", "--vscode-editor-foreground"],
-  "--primary": ["--vscode-button-background"],
-  "--primary-foreground": ["--vscode-button-foreground", "--vscode-foreground"],
-  "--ring": ["--vscode-focusBorder"],
-  "--secondary": ["--vscode-input-background"],
-  "--secondary-foreground": ["--vscode-input-foreground", "--vscode-foreground"],
-  "--sidebar": ["--vscode-sideBar-background", "--vscode-editor-background"],
-  "--sidebar-accent": ["--vscode-list-hoverBackground"],
-  "--sidebar-accent-active": ["--vscode-list-activeSelectionBackground"],
-  "--sidebar-selected": ["--vscode-list-activeSelectionBackground"],
-  "--sidebar-accent-foreground": ["--vscode-list-activeSelectionForeground", "--vscode-foreground"],
-  "--sidebar-border": ["--vscode-sideBar-border", "--vscode-panel-border"],
-  "--sidebar-foreground": ["--vscode-sideBar-foreground", "--vscode-foreground"],
-  // Aliases used by the shared Synara component tokens.
-  "--color-token-foreground": ["--vscode-foreground", "--vscode-editor-foreground"],
-  "--color-token-description-foreground": ["--vscode-descriptionForeground"],
-  "--color-token-disabled-foreground": ["--vscode-disabledForeground", "--vscode-descriptionForeground"],
-  "--color-token-border": ["--vscode-panel-border", "--vscode-editorGroup-border"],
-  "--color-token-border-light": ["--vscode-widget-border", "--vscode-panel-border"],
-  "--color-token-border-heavy": ["--vscode-contrastBorder", "--vscode-panel-border"],
-  "--color-token-focus-border": ["--vscode-focusBorder"],
-  "--color-token-main-surface-primary": ["--vscode-editor-background", "--vscode-sideBar-background"],
-  "--color-token-side-bar-background": ["--vscode-sideBar-background", "--vscode-editor-background"],
-  "--color-token-button-background": ["--vscode-button-background"],
-  "--color-token-button-foreground": ["--vscode-button-foreground", "--vscode-foreground"],
-  "--color-token-button-secondary-hover-background": ["--vscode-list-hoverBackground"],
-  "--color-token-input-background": ["--vscode-input-background"],
-  "--color-token-input-border": ["--vscode-input-border", "--vscode-panel-border"],
-  "--color-token-input-foreground": ["--vscode-input-foreground", "--vscode-foreground"],
-  "--color-token-dropdown-background": ["--vscode-dropdown-background", "--vscode-input-background"],
-  "--color-token-menu-background": ["--vscode-menu-background", "--vscode-editorWidget-background"],
-  "--color-token-list-active-selection-background": ["--vscode-list-activeSelectionBackground"],
-  "--color-token-list-active-selection-foreground": ["--vscode-list-activeSelectionForeground", "--vscode-foreground"],
-  "--color-token-list-hover-background": ["--vscode-list-hoverBackground"],
-  "--color-token-link": ["--vscode-textLink-foreground", "--vscode-focusBorder"],
-};
+// The anchor-to-token map is Cedia's (§10 item 54): it lives in the app's own
+// source so theme authority is decided outside the ported surface, and the
+// completeness rule over the pack's emitted tokens is a Cedia test.
+const HOST_TOKEN_SOURCES = HOST_THEME_TOKEN_SOURCES;
+const HOST_ANCHOR_NAMES = new Set<string>(Object.values(HOST_THEME_TOKEN_SOURCES).flat());
 
 // ─── Store wiring ─────────────────────────────────────────────────────────
 
@@ -195,11 +124,11 @@ function isDefaultVariantPack(state: ThemeState, variant: ThemeVariant): boolean
 }
 
 export function stateForHostTheme(state: ThemeState, snapshot: HostThemeSnapshot | undefined): ThemeState {
-  // The Follow-IDE toggle is the explicit link. Off means the agent theme is
-  // fully independent: the snapshot is ignored and stored packs render as-is.
-  // (Pack edits switch the toggle off, so a customization can never silently
-  // stop matching; the toggle flipping is the visible signal.)
-  if (!state.followHostTheme) return state;
+  // The IDE's workbench.colorTheme is the ONLY theme this window has (Cedia
+  // §10 item 54: one theme authority end to end). There is no unlink: the
+  // agent window has no theme editor, no mode picker and no pack catalog, so
+  // the snapshot always wins and the stored packs are only the fallback used
+  // before the first snapshot arrives (browser runs, first paint).
   if (!snapshot) return isIdeEmbeddedRuntime() ? { ...state, mode: "system" as const } : state;
   const variant = snapshot.mode;
   // The IDE names its theme (VS Code `workbench.colorTheme`); project it onto this
@@ -241,15 +170,10 @@ export function stateForHostTheme(state: ThemeState, snapshot: HostThemeSnapshot
 }
 
 function applyHostThemeTokens(root: HTMLElement, snapshot: HostThemeSnapshot | undefined): void {
-  const colors = snapshot?.colors;
-  if (!colors) return;
-  for (const [target, sources] of Object.entries(HOST_TOKEN_SOURCES)) {
-    const value = sources.map(source => colors[source]).find(candidate => typeof candidate === "string" && candidate.trim().length > 0);
-    if (value) {
-      root.style.setProperty(target, value);
-      hostTokenOverrideNames.add(target);
-    }
-  }
+  // The map and the application live in Cedia's own source (§10 item 54); the
+  // overridden names are tracked so re-projecting a pack can remove exactly
+  // what this added.
+  for (const name of paintHostThemeTokens(root.style, snapshot)) hostTokenOverrideNames.add(name);
 }
 
 function pollHostThemeSnapshot(): void {
@@ -286,8 +210,9 @@ function startHostThemePolling(): () => void {
 }
 
 function getSystemDark(): boolean {
-  // Unlinked System follows the OS, not the IDE snapshot.
-  const hostTheme = readStoredThemeState().followHostTheme ? readHostThemeSnapshot() : undefined;
+  // With the IDE as the authority, "system" resolves to the IDE snapshot when
+  // there is one and to the OS only before the first snapshot arrives.
+  const hostTheme = readHostThemeSnapshot();
   if (hostTheme) return hostTheme.mode === "dark";
   if (isIdeEmbeddedRuntime() && typeof document !== "undefined") {
     return document.body.classList.contains("vscode-dark") || document.body.classList.contains("vscode-high-contrast");
@@ -431,8 +356,8 @@ function applyThemeState(state: ThemeState, suppressTransitions = false) {
     }
     root.style.setProperty(name, value);
   }
-  const shouldFollowTokens = Boolean(hostTheme) && state.followHostTheme && variant === hostTheme?.mode;
-  if (shouldFollowTokens) applyHostThemeTokens(root, hostTheme);
+  // The host paints last, over the pack: same variant means same palette.
+  if (hostTheme && variant === hostTheme.mode) applyHostThemeTokens(root, hostTheme);
 
   syncDesktopTheme(projectedState.mode);
 
@@ -471,13 +396,6 @@ if (typeof document !== "undefined") {
 
 // ─── Public hook ──────────────────────────────────────────────────────────
 
-function setTheme(nextTheme: ThemeMode) {
-  updateStoredThemeState((state) => ({
-    ...state,
-    mode: nextTheme,
-  }));
-}
-
 function setSystemUiFont(enabled: boolean) {
   updateStoredThemeState((state) => ({
     ...state,
@@ -485,69 +403,19 @@ function setSystemUiFont(enabled: boolean) {
   }));
 }
 
-function resetThemeVariant(variant: ThemeVariant) {
-  updateStoredThemeState((state) => resetThemeVariantState(state, variant));
-}
-
-function resetAllThemes() {
-  updateStoredThemeState(() => DEFAULT_THEME_STATE);
-}
-
-function setFollowHostTheme(follow: boolean) {
-  updateStoredThemeState((state) => ({
-    ...state,
-    followHostTheme: follow,
-  }));
-}
-
-function withHostUnlink(next: ThemeState): ThemeState {
-  return next.followHostTheme ? { ...next, followHostTheme: false } : next;
-}
-
-function updateThemePack(variant: ThemeVariant, patch: Partial<ChromeTheme>) {
-  updateStoredThemeState((state) => withHostUnlink(updateChromeTheme(state, variant, patch)));
-}
-
-function updateThemeFonts(variant: ThemeVariant, patch: Partial<ThemeFonts>) {
-  updateStoredThemeState((state) => withHostUnlink(setThemeFonts(state, variant, patch)));
-}
-
-function setCodeThemeId(variant: ThemeVariant, codeThemeId: string) {
-  updateStoredThemeState((state) => withHostUnlink(setThemeCodeThemeId(state, variant, codeThemeId)));
-}
-
+/** The window's theme, as the IDE defines it.
+ *
+ * Only the resolved variant is exposed: the window renders the pack layer the
+ * host snapshot painted over, and the only appearance choice left to the user
+ * is the system-font toggle (§10 item 54 cut the mode picker, the follow toggle
+ * and the pack editor; nothing else here had a consumer).
+ */
 export function useTheme() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => ({
     state: DEFAULT_THEME_STATE,
     systemDark: false,
   }));
-  const theme = snapshot.state.mode;
-  const resolvedTheme = resolveThemeVariant(theme, snapshot.systemDark);
-  const activeTheme = resolveThemePack(snapshot.state, resolvedTheme);
-  const darkTheme = resolveThemePack(snapshot.state, "dark");
-  const lightTheme = resolveThemePack(snapshot.state, "light");
-  const defaultActiveTheme = resolveThemePack(DEFAULT_THEME_STATE, resolvedTheme);
-  const isDefaultActiveTheme = areThemePacksEqual(activeTheme, defaultActiveTheme);
-
-  const canImportThemeString = (value: string, variant: ThemeVariant = resolvedTheme) =>
-    canParseThemeShareString(value, variant);
-
-  const importThemeString = (value: string, variant: ThemeVariant = resolvedTheme) => {
-    updateStoredThemeState((state) => withHostUnlink(updateThemePackFromShareString(state, value, variant)));
-  };
-
-  const exportThemeString = (variant: ThemeVariant = resolvedTheme) =>
-    createThemeShareString(variant, resolveThemePack(snapshot.state, variant));
-
-  const resetActiveTheme = () => {
-    updateStoredThemeState((state) => resetThemeVariantState(state, resolvedTheme));
-  };
-
-  const isDefaultThemePack = (variant: ThemeVariant) =>
-    areThemePacksEqual(
-      resolveThemePack(snapshot.state, variant),
-      resolveThemePack(DEFAULT_THEME_STATE, variant),
-    );
+  const resolvedTheme = resolveThemeVariant(snapshot.state.mode, snapshot.systemDark);
 
   // Keep the DOM synced if something bypassed the immediate module-load apply.
   useEffect(() => {
@@ -555,30 +423,10 @@ export function useTheme() {
   }, [snapshot.state]);
 
   return {
-    activeTheme,
-    canImportThemeString,
-    systemUiFont: snapshot.state.systemUiFont,
-    setSystemUiFont,
-    darkTheme,
-    defaultActiveTheme,
-    exportThemeString,
-    followHostTheme: snapshot.state.followHostTheme,
-    importThemeString,
-    isDefaultActiveTheme,
-    isDefaultThemePack,
-    lightTheme,
-    resetActiveTheme,
-    resetAllThemes,
-    resetThemeVariant,
     resolvedTheme,
-    setCodeThemeId,
-    setFollowHostTheme,
-    setTheme,
-    theme,
-    themeState: snapshot.state,
-    updateThemeFonts,
-    updateThemePack,
+    setSystemUiFont,
+    systemUiFont: snapshot.state.systemUiFont,
   } as const;
 }
 
-export type { ChromeTheme, ThemeFonts, ThemeMode, ThemePack, ThemeState, ThemeVariant };
+export type { ChromeTheme, ThemeMode, ThemeState, ThemeVariant };

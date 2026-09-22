@@ -3347,6 +3347,84 @@ pre-existing and recorded above, with **zero new failures**; agent-window root +
 vendor `tsc` clean, `vite build` clean, agent-window suite **84 pass / 0 fail**; host
 suite 129 pass; `ci-validate` CI-OK.
 
+### One theme authority, end to end (2026-09-22)
+
+Closes §10 item 54. The IDE's `workbench.colorTheme` is now the agent window's
+only theme; the window has no theme-editing surface at all.
+
+**What was measured before changing anything.** Three findings:
+
+1. The host snapshot was gated behind `state.followHostTheme`, and that flag is
+   seeded `false` by `normalizeThemeState` for any profile whose stored packs are
+   not pristine. The pack editor was the only thing that ever set it back — and
+   the editor's mount was already cut — so on a migrated profile the agent window
+   would *never* have followed a `workbench.colorTheme` change. The close
+   condition failed by construction, not by styling.
+2. The bundle's anchor map covered 73 of the 181 custom properties
+   `buildThemeCssVariables` paints: chips, badges, links, scrollbars, the terminal
+   ANSI palette and the whole `--color-token-*` alias layer kept the pack's
+   colours after the snapshot arrived. That is the "not just the composer card"
+   half of the item.
+3. The anchor list existed three times — the extension's snapshot allowlist, the
+   webview's computed-style read, and the bundle's map sources — with no test
+   tying them together, and the snapshot sanitiser capped colours at 48.
+
+**What shipped.**
+
+- `src/agent-theme-anchors.ts` (new, 113 lines): the 78-anchor list, imported by
+  the extension's sanitiser (`agent-theme.ts`, re-exported so its public API is
+  unchanged), the IDE webview read (`ide-bootstrap.ts` — its 44-entry copy is
+  gone), and the bundle's map. `MAX_COLORS` 48 → 160.
+- `agent-window/src/host-theme-tokens.ts` (new, 276 lines): the map, moved out of
+  the vendored hook into Cedia's own source. **172 mapped tokens** (up from 73)
+  plus **14 documented derivations** (colour-mixes over mapped tokens, blur
+  radii, font stacks, the pack's base inputs, a scrim with no workbench
+  analogue). `applyHostThemeTokens` moved with it, so the DOM half is
+  unit-testable without a browser.
+- `hooks/useTheme.ts`: the host snapshot always projects and always paints last;
+  the follow gate, its setter and `withHostUnlink` are deleted; `useTheme()`
+  returns only `resolvedTheme`, `systemUiFont`, `setSystemUiFont` (the other
+  fields had no consumer after the cut).
+- `theme/theme.logic.ts`: 246 lines removed — the pack-editing and share-string
+  API (`updateChromeTheme`, `setThemeFonts`, `resetThemeVariant`,
+  `createThemeShareString` and its parser cluster) whose only consumers were the
+  surfaces cut here.
+- Editing UI deleted: `ThemePackEditor.tsx` + its browser test,
+  `ThemeModePicker.tsx`, `AppIconPicker.tsx` + its browser test, the palette's
+  theme commands and their logic (`buildThemeCommandItems`, `CodeThemeBadge`,
+  `matchSidebarSearchThemes`, `scoreTheme`), the two dead settings search entries
+  (App icon, custom title bar), the App section's stale search keywords, and
+  seven dead imports in `_chat.settings.tsx`.
+
+**The completeness rule, machine-checked.** `test/host-theme-authority.test.ts`
+(new) computes the variables `buildThemeCssVariables` emits for both variants and
+requires each to be mapped or documented (this is what caught the 108 gaps), then
+requires the shared anchor list to equal *exactly* the union of the map's sources
+and the anchors Cedia's surfaces read directly in CSS — no narrower (a dropped
+anchor leaves the standalone window painting the pack's colour) and no wider (the
+retired task shell's `tab.*`/`editorGroupHeader` tokens were dead weight and are
+gone). It also proves an all-anchor snapshot survives the sanitiser, that a
+snapshot repaints `--app-settings-surface`, `--color-token-badge-background`,
+`--color-decoration-added` and `--vscode-terminal-ansiRed`, that priority order
+picks the first anchor with a value, and that the theme-editing symbols are gone.
+
+Deviations, all deliberate and visible in the same test: `--codex-base-*` stays
+unmapped (it is the input the derived layer is computed from at build time, so
+overriding it alone would desynchronise the palette), compositions over mapped
+tokens inherit the host palette by construction rather than by copy, and
+`setThemeCodeThemeId` stays in the hook because the authority path uses it to map
+the IDE theme name onto the pack's syntax theme.
+
+Receipt: `apps/macos` suite **677 pass / 3 fail** — the patch-set drift,
+`menus-contract` (needs `rg`) and the theme-handoff assertion, all pre-existing
+with **zero new failures** (`agent-follow-host-theme.test.ts`, which pinned the
+removed link, is replaced by the authority test); agent-window root + vendor
+`tsc` clean, `vite build` clean, agent-window suite **84 pass / 0 fail**; host
+suite 129 pass; `ci-validate` CI-OK; `upstream.json` records the vendor cuts.
+**Owed: the packaged run** — one `workbench.colorTheme` change repainting both
+windows, on screen, from a `package:mac` build (rides the next packaged run with
+the other eight).
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.

@@ -5,16 +5,12 @@
  * keyboard navigation and shortcut labels behave like the rest of the app.
  */
 import {
-  CheckIcon,
-  DeviceLaptopIcon,
   FolderAddIcon,
   FolderOpenFrontIcon,
   ImportThreadIcon,
-  MoonIcon,
   NewThreadIcon,
   SettingsIcon,
   SidechatIcon,
-  SunIcon,
 } from "~/lib/icons";
 import { type FilesystemBrowseResult, type ProviderKind } from "@synara/contracts";
 import { isGenericChatThreadTitle } from "@synara/shared/chatThreads";
@@ -43,15 +39,12 @@ import {
 import {
   type SidebarSearchAction,
   type SidebarSearchProject,
-  type SidebarSearchTheme,
   type SidebarSearchThread,
   matchSidebarSearchActions,
   matchSidebarSearchProjects,
-  matchSidebarSearchThemes,
   matchSidebarSearchThreads,
 } from "./SidebarSearchPalette.logic";
 import { useTheme } from "../hooks/useTheme";
-import { getAvailableCodeThemes, getCodeThemeSeed } from "../theme/theme.logic";
 import {
   Command,
   CommandDialog,
@@ -153,14 +146,6 @@ function expandHomeInPath(value: string, homeDir: string | null): string {
   return value;
 }
 
-type ThemeCommandItem = {
-  description: string;
-  id: string;
-  isActive: boolean;
-  label: string;
-  mode: "system" | "light" | "dark";
-};
-
 function queryTokens(query: string): string[] {
   return query
     .trim()
@@ -172,106 +157,6 @@ function queryTokens(query: string): string[] {
 function hasTokenEqual(query: string, token: string): boolean {
   return queryTokens(query).includes(token);
 }
-
-function createThemeCommandItem(
-  mode: ThemeCommandItem["mode"],
-  activeMode: ThemeCommandItem["mode"],
-): ThemeCommandItem {
-  if (mode === "system") {
-    return {
-      id: "theme-command:system",
-      label: "Switch to system theme",
-      description: "Match your OS appearance setting.",
-      mode,
-      isActive: activeMode === mode,
-    };
-  }
-
-  return {
-    id: `theme-command:${mode}`,
-    label: `Switch to ${mode} theme`,
-    description: mode === "light" ? "Always use the light theme." : "Always use the dark theme.",
-    mode,
-    isActive: activeMode === mode,
-  };
-}
-
-// Treat any token of length >= 2 that is a prefix of `keyword` as a match,
-// so typing `th` / `the` already starts surfacing theme actions.
-function hasTokenPrefixOf(query: string, keyword: string): boolean {
-  return queryTokens(query).some((token) => token.length >= 2 && keyword.startsWith(token));
-}
-
-// Keep the palette quiet by default, then expose focused appearance actions
-// once the user is clearly asking about theme modes.
-function buildThemeCommandItems(input: {
-  query: string;
-  resolvedTheme: "light" | "dark";
-  theme: "system" | "light" | "dark";
-}): ThemeCommandItem[] {
-  const normalizedQuery = input.query.trim().toLowerCase();
-  if (!normalizedQuery) {
-    return [];
-  }
-
-  if (
-    hasTokenEqual(normalizedQuery, "system") ||
-    hasTokenEqual(normalizedQuery, "auto") ||
-    hasTokenEqual(normalizedQuery, "automatic") ||
-    hasTokenEqual(normalizedQuery, "os")
-  ) {
-    return [createThemeCommandItem("system", input.theme)];
-  }
-
-  if (hasTokenEqual(normalizedQuery, "light")) {
-    return [
-      createThemeCommandItem("light", input.theme),
-      createThemeCommandItem("system", input.theme),
-    ];
-  }
-
-  if (hasTokenEqual(normalizedQuery, "dark")) {
-    return [
-      createThemeCommandItem("dark", input.theme),
-      createThemeCommandItem("system", input.theme),
-    ];
-  }
-
-  if (
-    hasTokenPrefixOf(normalizedQuery, "theme") ||
-    hasTokenPrefixOf(normalizedQuery, "appearance")
-  ) {
-    const nextMode = input.resolvedTheme === "dark" ? "light" : "dark";
-    return [
-      createThemeCommandItem(nextMode, input.theme),
-      createThemeCommandItem("system", input.theme),
-    ];
-  }
-
-  return [];
-}
-
-function CodeThemeBadge(props: { accent: string; background: string; foreground: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border font-medium text-[10px] leading-none tracking-[-0.01em]"
-      style={{
-        backgroundColor: props.background,
-        borderColor: `${props.foreground}26`,
-        color: props.accent,
-      }}
-    >
-      Aa
-    </span>
-  );
-}
-
-const THEME_MODE_ICONS: Record<"system" | "light" | "dark", IconComponent> = {
-  system: DeviceLaptopIcon,
-  light: SunIcon,
-  dark: MoonIcon,
-};
 
 function threadMatchLabel(input: {
   matchKind: "message" | "project" | "title";
@@ -339,7 +224,7 @@ function HighlightedText(props: { text: string; query: string; className?: strin
 }
 
 export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
-  const { activeTheme, resolvedTheme, setCodeThemeId, setTheme, theme } = useTheme();
+  const { resolvedTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
   const [importProviderState, setImportProvider] = useState<ImportProviderKind>(
@@ -435,37 +320,10 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
   const settingsActions = query
     ? []
     : matchedActions.filter((action) => action.id in SETTINGS_ACTION_IDS);
-  const themeCommandItems = buildThemeCommandItems({
-    query,
-    resolvedTheme,
-    theme,
-  });
-  const currentCodeThemeItems: SidebarSearchTheme[] = getAvailableCodeThemes(resolvedTheme).map(
-    (option) => ({
-      id: `theme-code:${resolvedTheme}:${option.id}`,
-      type: "code-theme",
-      label: option.label,
-      description: `Apply to the current ${resolvedTheme} theme slot.`,
-      keywords: ["appearance", "theme", resolvedTheme, option.id],
-      codeThemeId: option.id,
-      variant: resolvedTheme,
-      isActive: activeTheme.codeThemeId === option.id,
-    }),
-  );
-  const matchedCurrentThemes =
-    isBrowsing || query.trim().length === 0
-      ? []
-      : matchSidebarSearchThemes(currentCodeThemeItems, query);
-  const showThemeSection =
-    !isBrowsing &&
-    query.trim().length > 0 &&
-    (themeCommandItems.length > 0 || matchedCurrentThemes.length > 0);
   const matchedProjects = isBrowsing ? [] : matchSidebarSearchProjects(props.projects, query);
   const matchedThreads = isBrowsing ? [] : matchSidebarSearchThreads(props.threads, query);
   const hasSearchResults =
     matchedActions.length > 0 ||
-    themeCommandItems.length > 0 ||
-    matchedCurrentThemes.length > 0 ||
     matchedProjects.length > 0 ||
     matchedThreads.length > 0;
   const importFieldLabel = importProvider === "codex" ? "Thread ID" : "Session ID";
@@ -962,96 +820,6 @@ export function SidebarSearchPalette(props: SidebarSearchPaletteProps) {
                   </CommandGroup>
                 ) : null}
 
-                {showThemeSection ? (
-                  <>
-                    {themeCommandItems.length > 0 ? (
-                      <CommandGroup>
-                        <CommandGroupLabel className={PALETTE_GROUP_LABEL_CLASS}>
-                          <span>Configure</span>
-                        </CommandGroupLabel>
-                        {themeCommandItems.map((themeCommandItem) => {
-                          const ThemeIcon = THEME_MODE_ICONS[themeCommandItem.mode];
-                          return (
-                            <CommandItem
-                              key={themeCommandItem.id}
-                              value={themeCommandItem.id}
-                              className={PALETTE_ITEM_CLASS}
-                              onMouseDown={(event) => {
-                                event.preventDefault();
-                              }}
-                              onClick={() => {
-                                if (themeCommandItem.isActive) return;
-                                props.onOpenChange(false);
-                                setTheme(themeCommandItem.mode);
-                              }}
-                            >
-                              <ThemeIcon className={PALETTE_ICON_CLASS} />
-                              <span className={PALETTE_TEXT_CLASS}>{themeCommandItem.label}</span>
-                              <span
-                                className="flex size-3.5 shrink-0 items-center justify-center"
-                                aria-hidden={!themeCommandItem.isActive}
-                              >
-                                {themeCommandItem.isActive ? (
-                                  <CheckIcon className={PALETTE_ICON_CLASS} />
-                                ) : null}
-                              </span>
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    ) : null}
-                    {matchedCurrentThemes.length > 0 ? (
-                      <CommandGroup>
-                        <CommandGroupLabel className={PALETTE_GROUP_LABEL_CLASS}>
-                          <span>{resolvedTheme === "dark" ? "Dark themes" : "Light themes"}</span>
-                        </CommandGroupLabel>
-                        {matchedCurrentThemes.map((themeItem) => {
-                          const seed =
-                            themeItem.codeThemeId && themeItem.variant
-                              ? getCodeThemeSeed(themeItem.codeThemeId, themeItem.variant)
-                              : null;
-                          return (
-                            <CommandItem
-                              key={themeItem.id}
-                              value={themeItem.id}
-                              className={PALETTE_ITEM_CLASS}
-                              onMouseDown={(event) => {
-                                event.preventDefault();
-                              }}
-                              onClick={() => {
-                                if (!themeItem.codeThemeId || !themeItem.variant) return;
-                                props.onOpenChange(false);
-                                setCodeThemeId(themeItem.variant, themeItem.codeThemeId);
-                              }}
-                            >
-                              {seed ? (
-                                <CodeThemeBadge
-                                  accent={seed.accent}
-                                  background={seed.surface}
-                                  foreground={seed.ink}
-                                />
-                              ) : null}
-                              <span className={PALETTE_TEXT_CLASS}>{themeItem.label}</span>
-                              <span className={PALETTE_META_CLASS}>
-                                {resolvedTheme === "dark"
-                                  ? "Dark color theme"
-                                  : "Light color theme"}
-                              </span>
-                              <span
-                                className="flex size-3.5 shrink-0 items-center justify-center"
-                                aria-hidden={!themeItem.isActive}
-                              >
-                                {themeItem.isActive ? (
-                                  <CheckIcon className={PALETTE_ICON_CLASS} />
-                                ) : null}
-                              </span>
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    ) : null}
-                  </>
-                ) : null}
               </CommandList>
               {/* Status copy and banners live outside the listbox: assistive
                   tech treats listbox children as options, so anything that is
