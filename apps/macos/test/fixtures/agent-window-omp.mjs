@@ -19,6 +19,16 @@ const persist = () => {
   writeFileSync(sessionFile, JSON.stringify(messages));
 };
 persist();
+/**
+ * OMP's rewind points, as `get_branch_messages` reports them: the session's user messages that
+ * carry text, each with the entry id its position in the transcript gives it.
+ */
+const branchPoints = () => messages.flatMap((message, index) => {
+  const text = Array.isArray(message.content)
+    ? message.content.filter(part => part.type === "text").map(part => part.text ?? "").join("")
+    : typeof message.content === "string" ? message.content : "";
+  return message.role === "user" && text ? [{ entryId: `entry-${index}`, text }] : [];
+});
 let active;
 let thinkingLevel = "medium";
 const response = (command, data) => emit({ type: "response", command: command.type, id: command.id, success: true, data });
@@ -31,6 +41,22 @@ readline.createInterface({ input: process.stdin }).on("line", line => {
     case "get_available_models": return response(command, { models: [model] });
     case "get_login_providers": return response(command, { providers: [{ id: "fixture", name: "Fixture", authenticated: true }] });
     case "get_messages": return response(command, { messages });
+    case "get_branch_messages": return response(command, { messages: branchPoints() });
+    // OMP's rewind. `branch(entryId)` cuts the conversation at the selected user message - the
+    // entry and everything after it leave the active path, which is what its own `/rewind`
+    // selector does - and hands that message's text back for editor pre-fill. The fixture keeps
+    // one flat array, so branching is the slice before the selected message.
+    case "branch": {
+      const index = messages.findIndex((message, position) => `entry-${position}` === command.entryId);
+      const selected = index < 0 ? undefined : messages[index];
+      const point = branchPoints().find(entry => entry.entryId === command.entryId);
+      if (!selected || selected.role !== "user" || !point) {
+        return emit({ type: "response", command: command.type, id: command.id, success: false, error: "Invalid entry ID for branching" });
+      }
+      messages = messages.slice(0, index);
+      persist();
+      return response(command, { text: point.text, cancelled: false });
+    }
     case "get_commands": return response(command, { commands: [] });
     case "get_model_roles": return response(command, { roles: [], cycleOrder: [] });
     case "set_model":

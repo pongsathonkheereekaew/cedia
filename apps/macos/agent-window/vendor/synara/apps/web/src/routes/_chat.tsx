@@ -592,8 +592,14 @@ function ChatRouteLayout() {
   // the card, so SidebarInstanceProvider re-supplies the same resize config/side it
   // would have gotten inside <Sidebar> (otherwise dragging to resize stops working).
   // `data-sidebar-side` on the provider selects the seam geometry.
+  // Cedia §10 item 55: this column must be exactly the viewport tall. The shell used to
+  // carry `h-svh` AND the status bar was appended after it inside the same column, so the
+  // column measured `100svh + statusBarHeight` inside a `min-h-svh` wrapper: the bar was
+  // pushed ~24px below the fold (measured in the packaged window, and only visible as
+  // passing when the wrapper happened to be scrolled). The column owns the viewport height
+  // and the shell flexes inside it, so the bar keeps its own row at the foot.
   const mainContentShell = (
-    <div className="relative flex h-svh min-h-0 min-w-0 flex-1">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
       {isIdeEmbedded ? null : (
         <SidebarInstanceProvider side="left" resizable={THREAD_SIDEBAR_RESIZABLE}>
           <SidebarRail placement="content-seam" />
@@ -643,7 +649,7 @@ function ChatRouteLayout() {
       <ThreadRetentionMaintenanceToast />
       <ChatRouteGlobalShortcuts />
       {sidebarElement}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex h-svh min-h-0 min-w-0 flex-1 flex-col">
         {mainContentShell}
         {isIdeEmbedded ? null : <CediaStatusBar />}
       </div>

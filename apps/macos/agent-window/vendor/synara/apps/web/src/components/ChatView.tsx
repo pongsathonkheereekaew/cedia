@@ -3588,55 +3588,10 @@ export default function ChatView({
     setIsDragOverComposer,
   });
 
-  const onRevertToTurnCount = useCallback(
-    async (turnCount: number) => {
-      const api = readNativeApi();
-      if (!api || !activeThread || isRevertingCheckpoint) return;
-
-      if (hasLiveTurn || isSendBusy || isConnecting) {
-        setThreadError(activeThread.id, "Interrupt the current turn before reverting checkpoints.");
-        return;
-      }
-      const confirmed = await api.dialogs.confirm(
-        [
-          `Revert this thread to checkpoint ${turnCount}?`,
-          "This will discard newer messages and turn diffs in this thread.",
-          "This action cannot be undone.",
-        ].join("\n"),
-      );
-      if (!confirmed) {
-        return;
-      }
-
-      setIsRevertingCheckpoint(true);
-      setThreadError(activeThread.id, null);
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "thread.checkpoint.revert",
-          commandId: newCommandId(),
-          threadId: activeThread.id,
-          turnCount,
-          scope: "thread",
-          createdAt: new Date().toISOString(),
-        });
-      } catch (err) {
-        setThreadError(
-          activeThread.id,
-          err instanceof Error ? err.message : "Failed to revert thread state.",
-        );
-      }
-      setIsRevertingCheckpoint(false);
-    },
-    [
-      setIsRevertingCheckpoint,
-      activeThread,
-      hasLiveTurn,
-      isConnecting,
-      isRevertingCheckpoint,
-      isSendBusy,
-      setThreadError,
-    ],
-  );
+  // Cedia addition (see upstream.json adaptations): the turn-count rewind path is gone with the
+  // turn-diff signal it was driven by - the window rewinds on OMP's own branch, addressed by the
+  // message the user names (`onRevertUserMessage` below). `thread.checkpoint.revert` stays
+  // dispatched only by the "Files changed" undo, with `scope: "files"`.
 
   const onUndoTurnFiles = useCallback(
     async (turnCounts: readonly number[]) => {
@@ -4587,14 +4542,67 @@ export default function ChatView({
     </>
   ) : null;
   const onRevertUserMessage = useCallback(
-    (messageId: MessageId) => {
-      const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);
-      if (typeof targetTurnCount !== "number") {
+    async (messageId: MessageId) => {
+      const api = readNativeApi();
+      if (!api || !activeThread || isRevertingCheckpoint) return;
+
+      if (hasLiveTurn || isSendBusy || isConnecting) {
+        setThreadError(activeThread.id, "Interrupt the current turn before rewinding to an earlier message.");
         return;
       }
-      void onRevertToTurnCount(targetTurnCount);
+      const confirmed = await api.dialogs.confirm(
+        [
+          "Rewind this task to this message?",
+          "The messages after it leave this task and its text goes back into the composer.",
+          "This action cannot be undone.",
+        ].join("\n"),
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      // Cedia addition (see upstream.json adaptations): the window rewinds on OMP's own branch, so
+      // the command carries the message the user named. `numTurns` is this renderer's own statement
+      // of what the rewind discards; the adapter addresses the rewind point by message id.
+      const targetIndex = timelineEntries.findIndex(
+        (entry) => entry.kind === "message" && entry.message.id === messageId,
+      );
+      const numTurns =
+        targetIndex < 0
+          ? 0
+          : timelineEntries
+              .slice(targetIndex + 1)
+              .filter((entry) => entry.kind === "message" && entry.message.role === "user").length;
+
+      setIsRevertingCheckpoint(true);
+      setThreadError(activeThread.id, null);
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.conversation.rollback",
+          commandId: newCommandId(),
+          threadId: activeThread.id,
+          messageId,
+          numTurns,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        setThreadError(
+          activeThread.id,
+          err instanceof Error ? err.message : "Failed to rewind this task.",
+        );
+      }
+      setIsRevertingCheckpoint(false);
     },
-    [onRevertToTurnCount, revertTurnCountByUserMessageId],
+    [
+      activeThread,
+      hasLiveTurn,
+      isConnecting,
+      isRevertingCheckpoint,
+      isSendBusy,
+      setIsRevertingCheckpoint,
+      setThreadError,
+      timelineEntries,
+    ],
   );
   const onRunProjectScriptFromHeader = useCallback(
     (script: ProjectScript) => {

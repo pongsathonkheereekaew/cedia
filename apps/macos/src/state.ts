@@ -721,10 +721,23 @@ export function applyFrame(state: TaskState, frameValue: Json, sequence?: number
 	if (type === "response" && frame.command === "get_messages" && frame.success === true && isRecord(frame.data) && Array.isArray(frame.data.messages)) {
 		// A fork's inherited history comes from OMP's session manager, not from
 		// renderer-provided imported messages. Reuse the normal message reducer.
+		//
+		// Each historical message needs its own start/end pair. A bare `message_end`
+		// per message looks equivalent and is not: `messageLifecycleId` reuses the
+		// previous id for a role once a stream is open (`messageStreams[incarnation:role]`),
+		// so every user row after the first overwrote the first, and a rebuild of a
+		// four-message transcript kept only the last turn. That silently truncated the
+		// history a rewind is supposed to preserve - measured 2026-09-23 with
+		// `applyFrame(createInitialTaskState(), {command: "get_messages", messages: [4]})`
+		// returning two entries.
 		for (const [index, message] of frame.data.messages.entries()) {
 			if (!isRecord(message) || typeof message.role !== "string") continue;
-			const identity = `${key || "snapshot"}:history:${index}`;
-			next = applyFrame(next, { type: "message_end", eventId: identity, id: typeof message.id === "string" ? message.id : identity, message: message as Json }, undefined, context);
+			const identity = typeof message.id === "string" ? message.id : `${key || "snapshot"}:history:${index}`;
+			// Distinct `eventId`s per frame, shared `id`: `applyFrame` treats a repeated
+			// eventId as already-applied, so a bare `{...start, type: "message_end"}` is
+			// skipped and every row stays `streaming`.
+			next = applyFrame(next, { type: "message_start", eventId: `${identity}:start`, id: identity, message: message as Json }, undefined, context);
+			next = applyFrame(next, { type: "message_end", eventId: `${identity}:end`, id: identity, message: message as Json }, undefined, context);
 		}
 		return next;
 	}

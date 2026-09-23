@@ -1548,7 +1548,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           const userMessageText = displayedUserMessage.visibleText;
           const userMessageExpanded = expandedUserMessagesById[row.message.id] ?? false;
           const showUserText = userMessageText.trim().length > 0 || terminalContexts.length > 0;
-          const canRevertAgentWork = typeof row.revertTurnCount === "number";
+          // Cedia addition (see upstream.json adaptations): the window rewinds on OMP's own branch
+          // (`thread.conversation.rollback`), which is addressed by the message the user names, so a
+          // user row the adapter gave a turn id is rewindable even though Cedia's read model carries
+          // no checkpoint turn-diff summaries. Upstream's own turn-diff gate stays for a server that
+          // does feed checkpoints.
+          const canRevertAgentWork =
+            typeof row.revertTurnCount === "number" || row.message.turnId != null;
           const isEditingThisMessage = editingUserMessageId === row.message.id;
           const isSubmittingThisEdit = submittingEditedUserMessageId === row.message.id;
           const showEditUserMessage =

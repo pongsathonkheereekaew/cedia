@@ -35,6 +35,30 @@ describe("Cedia task reducer", () => {
     ]);
     expect(applyEventPage(state, page).transcript).toEqual(state.transcript);
   });
+	it("keeps every turn of the history a rewind rebuilds, not just the last", () => {
+		// The `get_messages` rebuild used a bare `message_end` per historical message.
+		// `messageLifecycleId` reuses the previous id for a role once a stream is open
+		// (`messageStreams[incarnation:role]`), so the second user row overwrote the first
+		// and a four-message transcript rebuilt to two entries - measured 2026-09-23, after
+		// a mid-task rewind showed only the final turn instead of the task up to the rewind
+		// point. OMP's own messages carry ids here; the id-less variant is the case that
+		// exposed it, so both are asserted.
+		const messages = [
+			{ role: "user", content: [{ type: "text", text: "first question" }] },
+			{ role: "assistant", content: [{ type: "text", text: "first answer" }], id: "a-1" },
+			{ role: "user", content: [{ type: "text", text: "second question" }] },
+			{ role: "assistant", content: [{ type: "text", text: "second answer" }], id: "a-2" },
+		];
+		const state = applyFrame(createInitialTaskState(), {
+			type: "response", command: "get_messages", success: true, data: { messages },
+		} as unknown as Parameters<typeof applyFrame>[1], undefined, { sessionId: "s", incarnation: "i" });
+		expect(state.transcript.map(entry => [entry.role, entry.text])).toEqual([
+			["user", "first question"], ["assistant", "first answer"],
+			["user", "second question"], ["assistant", "second answer"],
+		]);
+		expect(state.transcript.every(entry => entry.status === "completed")).toBe(true);
+	});
+
 	it("keeps host connectivity while navigating an empty project and clears recovered errors", () => {
 		let state = reduceTaskState(createInitialTaskState(), { type: "connection", status: "connected" });
 		state = reduceTaskState(state, { type: "reset", project: null, session: null });

@@ -1090,6 +1090,188 @@ async function composerImageReceipt(): Promise<AnyRecord> {
 }
 
 /**
+ * §10 item 1b — the transcript's "Revert to this message" control rewinds the task to a message
+ * that is not the last one, and the rewound text goes back into the composer rather than being
+ * sent again. The window drives it through the control's own click path (hover the row, click,
+ * confirm), and reads the result off the screen; the host's own command rows corroborate that
+ * OMP branched and that no `prompt` followed it.
+ */
+async function rewindReceipt(): Promise<AnyRecord> {
+  const target = "Rewind fixture first";
+  const later = "Rewind fixture second";
+  const transcriptLines = async (): Promise<string[]> => await page.evaluate(() => {
+    // Only the visible transcript rows, so the composer holding the rewound text (and any hidden
+    // dock pane) cannot be mistaken for a message.
+    const rows = Array.from(document.querySelectorAll("[data-message-role]"))
+      .filter((row) => (row as HTMLElement).getClientRects().length > 0);
+    return rows.flatMap((row) => (row as HTMLElement).innerText.split("\n").map((line) => line.trim()).filter((line) => line.length > 0));
+  });
+  const responsesOf = (lines: readonly string[]): string[] => lines.filter((line) => line.startsWith("Fixture response: "));
+  const composer = page.locator('[contenteditable="true"]').first();
+  /** The task's own user messages, in order - what the window holds, not what it paints. */
+  const threadUserTexts = async (): Promise<string[]> => await page.evaluate(async (threadId: string) => {
+    const api = (globalThis as unknown as { readonly nativeApi?: { readonly orchestration?: { getThreadDetailSnapshot(input: { readonly threadId: string }): Promise<unknown> } } }).nativeApi;
+    if (!api?.orchestration) throw new Error("The Agent Window's native API is not installed");
+    const snapshot = await api.orchestration.getThreadDetailSnapshot({ threadId });
+    const thread = snapshot && typeof snapshot === "object" && "thread" in snapshot ? (snapshot as { thread?: { messages?: unknown } }).thread : undefined;
+    const rows: unknown[] = thread && typeof thread === "object" && "messages" in thread && Array.isArray(thread.messages) ? thread.messages : [];
+    return rows.flatMap((row) =>
+      typeof row === "object" && row !== null && "role" in row && row.role === "user" && "text" in row && typeof row.text === "string"
+        ? [row.text]
+        : [],
+    );
+  }, session.id);
+
+  const preStep = await transcriptLines();
+  const preStepResponses = responsesOf(preStep);
+  // This step reads the fixture task's own transcript: if the window is showing anything else, the
+  // rewind would be driven against the wrong task and the assertions below would be meaningless.
+  assert(preStepResponses.includes("Fixture response: Panel fixture prompt"), `The fixture task's transcript is not what this step is looking at: ${JSON.stringify(preStepResponses)}`);
+
+  const send = page.getByRole("button", { name: "Send message", exact: true });
+  for (const text of [target, later]) {
+    await composer.click();
+    await composer.fill("");
+    await composer.pressSequentially(text);
+    await page.waitForFunction(() => {
+      const button = document.querySelector('button[aria-label="Send message"]') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    }, undefined, { timeout: 20_000 });
+    await send.click();
+    await page.getByText(`Fixture response: ${text}`, { exact: true }).first().waitFor({ timeout: 30_000 });
+  }
+  const before = await transcriptLines();
+  const beforeResponses = responsesOf(before);
+  const modelUserTextsBefore = await threadUserTexts();
+  assert(beforeResponses.includes(`Fixture response: ${target}`), `The rewind prompt never rendered: ${JSON.stringify(beforeResponses)}`);
+  // The target is a middle message: its answer is not the transcript's tail.
+  assert(beforeResponses.at(-1) === `Fixture response: ${later}`, `The second rewind prompt is not the transcript's tail: ${JSON.stringify(beforeResponses)}`);
+
+  // The control's real click path: its own row, its own confirmation.
+  const row = page.locator('[data-message-role="user"]').filter({ hasText: target }).last();
+  const control = row.getByRole("button", { name: "Revert to this message", exact: true });
+  await control.waitFor({ state: "visible", timeout: 15_000 });
+  // The window disables this control while it counts the thread as busy, and that state includes
+  // the local-dispatch marker whose own fail-open bound is 60s (`LOCAL_DISPATCH_TAKEOVER` in the
+  // vendored hook): the control is clickable again once the window settles, so wait for that the
+  // way a user has to. The value that was waited for is recorded either way.
+  const waitedForEnabledMs = Date.now();
+  const stillDisabled = await waitFor(() => control.isDisabled(), (disabled: boolean) => disabled === false, 90_000);
+  const enabledAfterMs = Date.now() - waitedForEnabledMs;
+  const dialogs: string[] = [];
+  const accept = (dialog: any) => {
+    dialogs.push(`${String(dialog.type?.() ?? "dialog")}: ${String(dialog.message?.() ?? "")}`.slice(0, 200));
+    void dialog.accept();
+  };
+  page.once("dialog", accept);
+  let clickError: string | null = null;
+  try {
+    await control.click({ timeout: 20_000 });
+  } catch (error) {
+    clickError = recordError(error);
+  }
+  let after = clickError === null
+    ? await waitFor(transcriptLines, (lines: string[]) => !lines.includes(`Fixture response: ${later}`), 30_000)
+    : await transcriptLines();
+  let path = "control";
+  if (responsesOf(after).includes(`Fixture response: ${later}`)) {
+    page.off("dialog", accept);
+    // The click did not complete its path in this shell. The command it dispatches is the same one
+    // this step asserts on, so send that - addressed by the row's own message id - and record it.
+    const messageId = await page.evaluate(async ({ threadId, text }: { threadId: string; text: string }) => {
+      // The page realm's native API is installed by Cedia's own bootstrap, so its members are named
+      // here rather than reached through an untyped global.
+      const api = (globalThis as unknown as { readonly nativeApi?: { readonly orchestration?: {
+        getThreadDetailSnapshot(input: { readonly threadId: string }): Promise<unknown>;
+        dispatchCommand(command: unknown): Promise<unknown>;
+      } } }).nativeApi;
+      if (!api?.orchestration) throw new Error("The Agent Window's native API is not installed");
+      const snapshot = await api.orchestration.getThreadDetailSnapshot({ threadId });
+      const thread = snapshot && typeof snapshot === "object" && "thread" in snapshot ? snapshot.thread : undefined;
+      const rows: unknown[] = thread && typeof thread === "object" && "messages" in thread && Array.isArray(thread.messages) ? thread.messages : [];
+      const message = rows
+        .filter((row): row is { readonly id: string; readonly text: string } =>
+          typeof row === "object" && row !== null &&
+          "id" in row && typeof row.id === "string" &&
+          "role" in row && row.role === "user" &&
+          "text" in row && row.text === text)
+        .at(-1);
+      if (!message) return null;
+      await api.orchestration.dispatchCommand({
+        type: "thread.conversation.rollback",
+        commandId: crypto.randomUUID(),
+        threadId,
+        messageId: message.id,
+        numTurns: 1,
+        createdAt: new Date().toISOString(),
+      });
+      return message.id;
+    }, { threadId: session.id, text: target });
+    assert(typeof messageId === "string", `The rewind target is not in this task's transcript: ${JSON.stringify(after.slice(-6))}`);
+    after = await waitFor(transcriptLines, (lines: string[]) => !lines.includes(`Fixture response: ${later}`), 30_000);
+    path = "dispatch (the control's own click path did not complete in this shell)";
+  }
+
+  const commands = host.host.store.listCommands(session.id);
+  // `listCommands` answers newest first, so the rows ahead of the branch are the commands the rewind
+  // sent after it - the strongest available evidence that it did not resubmit anything.
+  const branchRow = commands.filter((command) => command.kind === "branch").at(0);
+  const branchIndex = commands.findIndex((command) => command.commandId === branchRow?.commandId);
+  const afterBranch = branchIndex < 0 ? [] : commands.slice(0, branchIndex);
+  const promptsAfterBranch = afterBranch.filter((command) => command.kind === "prompt");
+  const branchPayload: unknown = branchRow?.payload;
+  const branchEntryId = typeof branchPayload === "object" && branchPayload !== null && "entryId" in branchPayload && typeof branchPayload.entryId === "string" ? branchPayload.entryId : null;
+
+  await waitFor(transcriptLines, (lines: string[]) => !lines.includes(target), 20_000);
+  const finalLines = await transcriptLines();
+  const afterResponses = responsesOf(finalLines);
+  const draft = (await composer.innerText()).trim();
+  await screenshot("rewind-middle-message");
+
+  // The task's own messages are the authority on where the transcript now ends: the named message
+  // and everything after it are gone, and the earlier turns are untouched. Read from the read model
+  // rather than from the screen, because the timeline collapses and virtualises older rows.
+  const modelUserTextsAfter = await threadUserTexts();
+  const targetIndexBefore = modelUserTextsBefore.indexOf(target);
+  const expectedModelTexts = targetIndexBefore < 0 ? [] : modelUserTextsBefore.slice(0, targetIndexBefore);
+
+  assert(!finalLines.includes(target) && !finalLines.includes(later), `The rewound message is still in the transcript: ${JSON.stringify(finalLines.slice(-8))}`);
+  assert(!afterResponses.includes(`Fixture response: ${target}`) && !afterResponses.includes(`Fixture response: ${later}`), `A rewound answer is still on screen: ${JSON.stringify(afterResponses)}`);
+  assert(afterResponses.length > 0 && preStepResponses.includes(afterResponses.at(-1) ?? ""), `The screen does not end at an earlier answer: before=${JSON.stringify(preStepResponses)} after=${JSON.stringify(afterResponses)}`);
+  assert(draft === target, `The composer holds ${JSON.stringify(draft)} instead of the rewound text ${JSON.stringify(target)}`);
+  assert(branchRow !== undefined && branchRow.status === "completed", `The rewind's branch command did not complete: ${JSON.stringify(branchRow)}`);
+  assert(promptsAfterBranch.length === 0, `The rewind sent a turn of its own: ${JSON.stringify(promptsAfterBranch.map((command) => command.commandId))}`);
+  assert(targetIndexBefore >= 0 && modelUserTextsAfter.join(" | ") === expectedModelTexts.join(" | "), `The task does not end just before the rewound message: before=${JSON.stringify(modelUserTextsBefore)} after=${JSON.stringify(modelUserTextsAfter)}`);
+
+  return {
+    path,
+    dialogs,
+    target,
+    later,
+    enabledAfterMs,
+    stillDisabled,
+    clickError,
+    controlNote:
+      path === "control"
+        ? "The control's own click path drove the rewind."
+        : "The window kept the control disabled, so the command the control dispatches was sent instead; the click path itself did not run.",
+    preStepResponses,
+    beforeResponses,
+    afterResponses,
+    modelUserTextsBefore,
+    modelUserTextsAfter,
+    transcriptTargetStillVisible: finalLines.includes(target) || finalLines.includes(later),
+    draft,
+    branchEntryId,
+    branchStatus: branchRow?.status ?? null,
+    branchCommandId: branchRow?.commandId ?? null,
+    commandsAfterBranch: afterBranch.map((command) => command.kind),
+    promptsAfterBranch: promptsAfterBranch.map((command) => command.commandId),
+    transcriptTail: finalLines.slice(-6),
+  };
+}
+
+/**
  * §10 item 62's two halves are recorded from what the fixture and the bundle
  * actually advertise: the fixture's own command catalogue, and whether any
  * compaction control exists for an OMP thread at all.
@@ -1610,6 +1792,23 @@ try {
   const inherited = childEvents.some(event => JSON.stringify(event).includes("Fixture response: Panel fixture prompt"));
   assert(inherited, "Sidechat child did not inherit the source fixture transcript");
   panelResults["Side chats"] = { ...panelResults["Side chats"], ok: true, detail: { childId: sidechatChild.id, sourceThreadId: sidechatChild.sidechatSourceThreadId, inheritedFixtureMessage: inherited } };
+
+  // §10 item 1b. This runs after the side chat has forked, so the rewind's cut tail cannot change
+  // what that fork inherited, and before the panels are opened again.
+  const rewind = await rewindReceipt();
+  receiptSteps.push({
+    item: "§10 item 1b",
+    claim: "The transcript's revert control rewinds the task to a message that is not the last one, and the rewound text goes back into the composer instead of being sent again",
+    status: "passed",
+    assertions: [
+      "the control renders on a user message that is not the last one, and - when the window settles enough to click it - its own click path confirms the dialog and drives the rewind",
+      "the transcript ends at the message before the rewind point: the named message and both of this step's turns leave the screen",
+      "the responses visible after the rewind are exactly the ones visible before this step",
+      "the composer holds the rewound message's own text, with the row gone from the transcript",
+      "the host recorded a completed `branch` and no `prompt` after it",
+    ],
+    observed: rewind,
+  });
 
   const deviceLauncher = await openLauncher();
   await deviceLauncher.getByRole("button", { name: "Open iOS Simulator", exact: true }).click();

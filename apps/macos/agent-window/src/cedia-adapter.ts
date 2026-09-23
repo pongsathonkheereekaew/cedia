@@ -20,6 +20,7 @@ import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as C
 import type { Command, EventPage, Json, Project, Session, SessionEvent } from "../../../../packages/protocol/src/index.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
+import { requestComposerFocus } from "../vendor/synara/apps/web/src/composerFocusRequestStore";
 import { stagedComposerImageFile } from "../vendor/synara/apps/web/src/lib/cediaStagedAttachments";
 import { readComposerImageBlob } from "../vendor/synara/apps/web/src/lib/composerImageBlobStore";
 import { createNativeTerminalApi } from "./native-terminal";
@@ -1298,6 +1299,36 @@ class CediaAgentAdapter {
 	}
 
 	/**
+	 * Resolve one of this task's own user messages to the rewind point OMP offers for it.
+	 *
+	 * `get_branch_messages` lists the session's user messages in order, and this transcript's user
+	 * rows are indexed into that list. The two only describe the same conversation while they hold
+	 * the same messages: OMP omits user messages whose extracted text is empty, a steer or
+	 * follow-up adds a user row without adding a turn, and Cedia's journal is append-only while
+	 * OMP's session is a tree. Counting is what makes a tail rewind exact, so it stays the rule
+	 * while the lists agree; when they do not, the message's own text corroborates the point and a
+	 * disagreement refuses. Branching at a message the user did not name would silently rewrite
+	 * their task, which is worse than refusing.
+	 */
+	async rewindPoint(session: Session, messageId: string): Promise<{ entryId: string; text: string }> {
+		const { state } = await this.events(session);
+		const userRows = state.transcript.filter(entry => entry.kind === "message" && entry.role === "user");
+		const index = userRows.findIndex(entry => entry.id === messageId);
+		const row = index < 0 ? undefined : userRows[index];
+		if (!row) throw new Error("Cedia could not find that message in this task's transcript");
+		const entries = await this.userMessageEntries(session);
+		const ordinal = entries[index];
+		if (ordinal && entries.length === userRows.length) return ordinal;
+		// Both sides of the comparison are the text of the message this task sent, so the stored
+		// and the visible string differing (the composer rewrites what it sends) does not matter.
+		const wanted = row.text.trim();
+		const matches = wanted.length > 0 ? entries.filter(entry => entry.text === wanted) : [];
+		const match = matches.length === 1 ? matches[0] : undefined;
+		if (!match) throw new Error(`Cedia will not rewind: OMP lists ${entries.length} rewind points for this task while its transcript has ${userRows.length} user messages, and that message's text does not single one out. Reopen the task before rewinding.`);
+		return match;
+	}
+
+	/**
 	 * Edit an earlier message and replay the turn from there, on OMP's own rewind.
 	 *
 	 * OMP rewinds by branching (`session.branch(entryId)`): the conversation is cut at that user
@@ -1312,16 +1343,8 @@ class CediaAgentAdapter {
 		if (!threadId || !messageId || !text) throw new Error("Editing a message needs a task, the message and its text");
 		let session = await this.session(threadId);
 		if (session.status === "running") throw new Error("Interrupt the current turn before editing an earlier message.");
-		const { state } = await this.events(session);
-		// Both lists are the session's user messages in order, so the Nth entry is the Nth message.
-		// Counting is safer than matching text: the composer rewrites what it sends, so the stored
-		// text and the visible text are not the same string.
-		const userMessageIds = state.transcript.filter(entry => entry.kind === "message" && entry.role === "user").map(entry => entry.id);
-		const index = userMessageIds.indexOf(messageId);
-		if (index < 0) throw new Error("Cedia could not find that message in this task's transcript");
-		const entryId = (await this.userMessageEntries(session))[index]?.entryId;
-		if (!entryId) throw new Error("OMP no longer offers that message as a rewind point");
-		const branch = await this.sendCommand(session, id(), "branch", { entryId });
+		const point = await this.rewindPoint(session, messageId);
+		const branch = await this.sendCommand(session, id(), "branch", { entryId: point.entryId });
 		if (branch.status === "failed" || branch.status === "outcome_unknown" || branch.status === "not_dispatched") throw new Error(branch.error ?? "OMP did not rewind this task");
 		if (record(record(branch.result)?.data)?.cancelled === true) throw new Error("OMP cancelled the rewind");
 		// The branch may point the session at another file, so re-read it before speaking again.
@@ -1330,6 +1353,37 @@ class CediaAgentAdapter {
 		const selection = modelSelectionFromCommand(row.modelSelection);
 		if (selection) await this.setModelIfRequested(session, selection);
 		await this.sendCommand(session, string(row.commandId) ?? id(), "prompt", { message: text });
+	}
+
+	/**
+	 * Rewind the task to one of its own user messages, without sending anything again.
+	 *
+	 * This is `applyEditAndResend`'s branch step on its own: the same OMP rewind, but the text
+	 * `branch` hands back goes into the composer instead of a new turn, so the user can change it
+	 * or leave it. The command carries `numTurns` - the client's own statement of how many turns it
+	 * discards - while the rewind point is addressed by message id, because an ordinal cannot
+	 * survive the list skews `rewindPoint` guards against.
+	 */
+	async rewindToMessage(row: Record<string, unknown>): Promise<void> {
+		const threadId = string(row.threadId);
+		const messageId = string(row.messageId);
+		if (!threadId || !messageId) throw new Error("Rewinding needs the task and the message to rewind to");
+		let session = await this.session(threadId);
+		if (session.status === "running") throw new Error("Interrupt the current turn before rewinding to an earlier message.");
+		const point = await this.rewindPoint(session, messageId);
+		const branch = await this.sendCommand(session, id(), "branch", { entryId: point.entryId });
+		if (branch.status === "failed" || branch.status === "outcome_unknown" || branch.status === "not_dispatched") throw new Error(branch.error ?? "OMP did not rewind this task");
+		if (record(record(branch.result)?.data)?.cancelled === true) throw new Error("OMP cancelled the rewind");
+		// The branch may point the session at another file, so re-read it before speaking again.
+		session = await this.session(threadId);
+		await this.resyncTranscript(session);
+		// OMP returns the rewound message for editor pre-fill, and its own TUI puts it in the
+		// draft - never in a new turn. `get_branch_messages` reported that same message's text, so
+		// it backs the write when a host's `branch` answer omits it.
+		const thread = ThreadId.makeUnsafe(threadId);
+		const rewound = string(record(record(branch.result)?.data)?.text) ?? point.text;
+		useComposerDraftStore.getState().setPrompt(thread, rewound);
+		requestComposerFocus(thread);
 	}
 
 	async ensureStarted(session: Session): Promise<Session> {
@@ -1475,6 +1529,8 @@ class CediaAgentAdapter {
 			await this.request("POST", `/v1/sessions/${encodeURIComponent(threadId)}/stop`);
 		} else if (type === "thread.message.edit-and-resend") {
 			await this.applyEditAndResend(row);
+		} else if (type === "thread.conversation.rollback") {
+			await this.rewindToMessage(row);
 		} else if (type === "thread.approval.respond") {
 			await this.respondUi(row, row.decision === "accept" || row.decision === "acceptForSession");
 		} else if (type === "thread.user-input.respond") {

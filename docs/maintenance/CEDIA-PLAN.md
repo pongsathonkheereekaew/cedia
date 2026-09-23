@@ -3921,6 +3921,89 @@ it spawns a side chat and renders that), and two measurements were re-aimed at
 what the window really paints (the status bar's foot, the theme's painted
 surface instead of the deliberately transparent body).
 
+### Rewind to any user message — and the history it used to lose (2026-09-23)
+
+Closes §10 item 1b, and fixes the defect the receipt exposed underneath it.
+
+**What shipped.** The window can now rewind to *any* user message, not just the
+tail. The adapter gains `rewindToMessage` (dispatched from the renderer as the
+vendored contracts' existing, previously-undispatched `thread.conversation.rollback`):
+resolve the message's rewind point, `branch` at it, re-read the session,
+`resyncTranscript`, and **send no `prompt`**. Both it and the older
+edit-and-resend path now share one `rewindPoint` resolver. The rewound text goes
+back into the composer (`setPrompt` + `requestComposerFocus`), which is what OMP's
+own TUI does and is what the item's open UX question asked for; the `branch`
+result already carried it.
+
+**The resolver's guard.** The rewind point used to be resolved by ordinal alone
+(the Nth transcript user row → the Nth OMP `{entryId, text}`). That is exact for a
+tail rewind and can silently pick the wrong message mid-task — OMP omits user
+messages whose extracted text is empty, and steer/follow-up rows add user rows
+without adding a turn. When OMP's list length differs from the projection's user
+row count the target must now match exactly one listed point by text; zero or
+several matches refuses with a stated reason and branches nothing.
+
+**Vendored edits, all recorded in `upstream.json`.** `MessagesTimeline`'s gate
+widens so a user row with a projected `turnId` qualifies (keeping the turn-diff
+branch for an upstream-fed `checkpoints` array, and *not* projecting synthetic
+checkpoints, which would advertise diffs `getTurnDiff` cannot fetch);
+`ChatView`'s `onRevertUserMessage` dispatches the rollback command behind the same
+confirm dialog, and the now-dead turn-count path is deleted (the `scope: "files"`
+undo is untouched — that is item 1c's territory); and one line adds the *existing*
+`thread.conversation.rollback` to `ClientOrchestrationCommand`, because it was in
+the internal union only and the renderer therefore could not dispatch it.
+
+**The defect the receipt found.** The packaged step's first run failed on its
+honest assertion — the transcript did not end just before the rewound message.
+The cause was not the rewind: rebuilding the transcript from OMP's `get_messages`
+answer kept **only the last turn**. `applyFrame` dedupes by `eventId` and
+`messageLifecycleId` reuses the previous id for a role once a stream is open, so
+the rebuild's bare `message_end` per historical message both overwrote the first
+row of each role and (when the ids were made unique) was skipped as
+already-applied. Reproduced directly:
+`applyFrame(createInitialTaskState(), {command: "get_messages", messages: [4]})`
+returned two entries. So every rewind — including the tail edit landed on
+2026-09-20 — silently truncated the task to its final message pair. The rebuild
+now applies a start/end pair per historical message with distinct `eventId`s and a
+shared row id: four messages rebuild to four completed rows, five turns keep five.
+A reducer test pins it (`apps/macos/test/state.test.ts`), and the packaged step's
+exact-prefix assertion now passes.
+
+**Receipt (`§10 item 1b` in `dist/agent-window-panels-smoke/receipts.json`).** In
+the packaged window with two fixture turns of its own, the step rewinds to the
+*first* of them: the named message and both turns leave the screen, the responses
+visible afterwards are exactly those visible before, the composer holds "Rewind
+fixture first" while that row is gone, and the host recorded a completed `branch`
+with **no `prompt` after it**. `rewind-middle-message.png` shows the same screen.
+Five adapter tests cover the sequence, the composer write, the disagreement
+refusal, the text-matched point and the running-session refusal, each verified to
+fail when its behaviour is reverted.
+
+**New defect, recorded as §10 item 68:** in the packaged window the revert control
+*renders* (the gate fix) but stays **disabled for at least 90 seconds** after a
+send (`disabled={isRevertingCheckpoint || isWorking}`, with the thread idle), so a
+user clicking it today gets a dead button; the smoke therefore drives the command
+the control dispatches and records that. It reproduces on the pre-change bundle,
+so it predates this work.
+
+Suites: agent-window root + vendor `tsc` clean, `vite build` clean, **103 pass / 0
+fail** (was 98); `apps/macos` **703 pass / 2 fail** (the two known failures); root
+`tsc --noEmit` at the same 10 pre-existing errors; `bun run package:mac` EXIT=0;
+`bun scripts/agent-window-panels-smoke.ts` **passes** with steps 60, 57, 55, 61,
+1b and 54 green (62 owed with its fixture blocker).
+
+### The status bar sits at the foot of the window again (2026-09-23)
+
+The packaged run kept reporting §10 item 55's bar 24px below the fold
+(`bottom: 924` vs `innerHeight: 900`), intermittently — it passed only when the
+wrapper happened to be scrolled. The cause was in Cedia's own shell: `_chat.tsx`
+appended `<CediaStatusBar />` to a column whose first child carried `h-svh`, so
+the column measured `100svh + bar` inside a `min-h-svh` wrapper and the bar fell
+off the fold. The column now owns the viewport height (`h-svh`) and the content
+shell flexes inside it (`flex-1`, no `h-svh`), so the bar keeps its own row. The
+step now passes on every run, and the layout deviation is recorded in
+`upstream.json`.
+
 ## 10. Open work (the only authoritative list of what is not done)
 
 Anything not listed here is either done (§9) or out of scope (§5). Each item states what closes it.
@@ -4801,6 +4884,18 @@ deletions so dead code is not carried across.
     wiring, the command registry is enumerable from one module, `bun run test
     apps/macos/test` + `bun run typecheck` are green, and no behavior changes (the suite is the
     receipt).
+
+68. **The per-message revert control is disabled for ~90s after every turn.** The control now
+    renders for any user message the adapter can rewind to (§10 item 1b), but in the packaged
+    window it stays `disabled` for at least 90,052 ms after a send — measured 2026-09-23 while
+    driving the rewind step — with the thread idle (`session.status: "ready"`, `activeTurnId:
+    null`, `latestTurn.state: "completed"`), so a user who clicks it gets a dead button. The
+    vendor expression is `disabled={isRevertingCheckpoint || isWorking}`; the state that keeps
+    `isWorking` true through the local-dispatch marker has not been attributed, and it reproduces
+    on the pre-change bundle, so it predates item 1b. Closes when the control is clickable as soon
+    as the task is idle, with a packaged step that clicks it (the §10 item 1b receipt's step
+    already fails over to the command the control dispatches; it should be able to use the click
+    path once this is fixed).
 
 67. **Patch-stack hygiene.** (a) Retire the three patches the README itself calls inert
     (`0019`, `0027`, `0028`) — manifest + digest work only; (b) rewrite

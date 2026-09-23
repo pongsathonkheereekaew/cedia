@@ -1616,6 +1616,11 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
+  // Cedia addition (see upstream.json adaptations): the Agents window rewinds a conversation on
+  // OMP's own branch, so its client dispatches this command - already defined here as an internal
+  // one - and Cedia's adapter is its decider. The rewind control needs a command that carries the
+  // message the user named, and this is the one whose shape does.
+  ThreadConversationRollbackCommand,
   ThreadMessageEditAndResendCommand,
   ThreadActivityAppendCommand,
   ThreadSessionStopCommand,

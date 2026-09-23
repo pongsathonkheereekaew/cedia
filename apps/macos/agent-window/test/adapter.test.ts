@@ -3,6 +3,7 @@ import { Schema } from "../vendor/synara/packages/contracts/node_modules/effect/
 import { OrchestrationShellSnapshot, OrchestrationThreadDetailSnapshot, ThreadId } from "@synara/contracts";
 import { resolveLatestTailUserMessageEditTarget } from "@synara/shared/conversationEdit";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
+import { useComposerFocusRequestStore } from "../vendor/synara/apps/web/src/composerFocusRequestStore";
 
 import {
 	createCediaNativeApi,
@@ -56,11 +57,16 @@ const frames = [
 	},
 ];
 
-function fakeBridge(eventFrames = frames) {
+function fakeBridge(
+	eventFrames = frames,
+	// A caller can hand the fixture another answer for a command, or another session row, without
+	// restating the routes the rest of the suite depends on.
+	options: { commands?: Record<string, unknown>; session?: Record<string, unknown> } = {},
+) {
 	const calls: Request[] = [];
 	// One mutable row, so the fixture behaves like the host: a PATCH changes what the
 	// next read returns. Archive/unarchive tests are meaningless otherwise.
-	let row = { ...session };
+	let row: Record<string, unknown> = { ...session, ...(options.session ?? {}) };
 	const bridge = {
 		invoke: async (_channel: string, request: Request) => {
 			calls.push(request);
@@ -98,6 +104,8 @@ function fakeBridge(eventFrames = frames) {
 			}
 			if (request.path.endsWith("/commands") && request.method === "POST") {
 				const kind = (request.body as { command: string }).command;
+				const answer = options.commands?.[kind];
+				if (answer !== undefined) return answer;
 				if (kind === "get_branch_messages") return { status: "completed", result: { data: { messages: [{ entryId: "entry-1", text: "hello" }] } } };
 				if (kind === "get_available_commands") return { status: "completed", result: { data: { commands: [
 					{ name: "review", description: "Review a change", source: "builtin" },
@@ -118,6 +126,17 @@ function fakeBridge(eventFrames = frames) {
 		},
 	};
 	return { bridge, calls };
+}
+
+/** The commands a dispatch sent, in order, with the payload each carried. */
+function sentCommands(calls: readonly Request[]): Array<{ command: string; payload?: Record<string, unknown> }> {
+	return calls
+		.filter(call => call.path.endsWith("/commands"))
+		.map(call => {
+			// The fixture records the very body it was handed on the command route.
+			const body = call.body as { command: string; payload?: Record<string, unknown> };
+			return { command: body.command, payload: body.payload };
+		});
 }
 
 describe("Cedia Agent Window native adapter", () => {
@@ -620,6 +639,119 @@ describe("Cedia Agent Window native adapter", () => {
 		expect(sent.map(call => call.command)).toEqual(["get_branch_messages", "branch", "get_messages", "prompt"]);
 		expect(sent[1]?.payload).toEqual({ entryId: "entry-1" });
 		expect(sent[3]?.payload).toEqual({ message: "hello, again" });
+	});
+
+	// A task with three turns: a rewind target can then be a message that is not the last one.
+	const rewindFrames = [
+		{ sessionId: session.id, incarnation: session.incarnation, sequence: 1, timestamp: "2026-09-19T00:03:00.000Z", frame: { type: "message_start", message: { id: "user-1", role: "user", content: "hello" } } },
+		{ sessionId: session.id, incarnation: session.incarnation, sequence: 2, timestamp: "2026-09-19T00:03:01.000Z", frame: { type: "message_start", message: { id: "assistant-1", role: "assistant", content: "hi" } } },
+		{ sessionId: session.id, incarnation: session.incarnation, sequence: 3, timestamp: "2026-09-19T00:03:02.000Z", frame: { type: "message_start", message: { id: "user-2", role: "user", content: "second question" } } },
+		{ sessionId: session.id, incarnation: session.incarnation, sequence: 4, timestamp: "2026-09-19T00:03:03.000Z", frame: { type: "message_start", message: { id: "assistant-2", role: "assistant", content: "answer two" } } },
+		{ sessionId: session.id, incarnation: session.incarnation, sequence: 5, timestamp: "2026-09-19T00:03:04.000Z", frame: { type: "message_start", message: { id: "user-3", role: "user", content: "third question" } } },
+		{ sessionId: session.id, incarnation: session.incarnation, sequence: 6, timestamp: "2026-09-19T00:03:05.000Z", frame: { type: "message_start", message: { id: "assistant-3", role: "assistant", content: "answer three" } } },
+	];
+	/** The three rewind points OMP offers for `rewindFrames`, and its branch answer for the second. */
+	const rewindCommands = {
+		get_branch_messages: { status: "completed", result: { data: { messages: [
+			{ entryId: "entry-1", text: "hello" },
+			{ entryId: "entry-2", text: "second question" },
+			{ entryId: "entry-3", text: "third question" },
+		] } } },
+		branch: { status: "completed", result: { data: { text: "second question", cancelled: false } } },
+		get_messages: { status: "completed", result: { data: { messages: [
+			{ id: "user-1", role: "user", content: [{ type: "text", text: "hello" }] },
+			{ id: "assistant-1", role: "assistant", content: [{ type: "text", text: "hi" }] },
+		] } } },
+	};
+	const rollbackCommand = {
+		type: "thread.conversation.rollback" as const,
+		commandId: "rollback-1",
+		threadId: session.id,
+		messageId: "user-2",
+		numTurns: 1,
+		createdAt: "2026-09-19T00:05:00.000Z",
+	};
+
+	it("rewinds to a message that is not the last one, and sends nothing after it", async () => {
+		// §10 item 1b: the window's "Revert to this message" control was gated on turn-diff
+		// checkpoints this adapter never projects, and its click dispatched `thread.checkpoint.revert`
+		// - a command the adapter refuses. The rewind is OMP's own branch, addressed by the message the
+		// user named, and it stops at the branch: the returned text belongs in the composer, never in
+		// a new turn.
+		const { bridge, calls } = fakeBridge(rewindFrames, { commands: rewindCommands });
+		const api = createCediaNativeApi({ bridge });
+
+		await api.orchestration.dispatchCommand({ ...rollbackCommand });
+
+		const sent = sentCommands(calls);
+		expect(sent.map(call => call.command)).toEqual(["get_branch_messages", "branch", "get_messages"]);
+		// The second of three messages: the entry branched at is the second rewind point, not the tail.
+		expect(sent[1]?.payload).toEqual({ entryId: "entry-2" });
+	});
+
+	it("puts the rewound message back into the composer and focuses it", async () => {
+		const thread = ThreadId.makeUnsafe(session.id);
+		useComposerDraftStore.getState().setPrompt(thread, "");
+		const focusesBefore = useComposerFocusRequestStore.getState().requestsByThreadId[session.id] ?? 0;
+		const { bridge } = fakeBridge(rewindFrames, { commands: rewindCommands });
+		const api = createCediaNativeApi({ bridge });
+
+		await api.orchestration.dispatchCommand({ ...rollbackCommand });
+
+		expect(useComposerDraftStore.getState().draftsByThreadId[thread]?.prompt).toBe("second question");
+		expect(useComposerFocusRequestStore.getState().requestsByThreadId[session.id]).toBe(focusesBefore + 1);
+		useComposerDraftStore.getState().setPrompt(thread, "");
+	});
+
+	it("refuses to rewind when OMP's rewind points and the transcript disagree", async () => {
+		// OMP omits user messages whose extracted text is empty, and Cedia's journal keeps rows OMP's
+		// current branch no longer holds. Two points against three rows is exactly that skew, and the
+		// Nth row then names a different message than the user's: here the second row would branch at
+		// OMP's second point, which the user never named. The text has to single a point out, and it
+		// does not, so nothing is branched.
+		const { bridge, calls } = fakeBridge(rewindFrames, { commands: {
+			get_branch_messages: { status: "completed", result: { data: { messages: [
+				{ entryId: "entry-1", text: "hello" },
+				{ entryId: "entry-2", text: "third question" },
+			] } } },
+		} });
+		const api = createCediaNativeApi({ bridge });
+
+		await expect(api.orchestration.dispatchCommand({ ...rollbackCommand })).rejects.toThrow(/does not single one out/);
+
+		expect(sentCommands(calls).map(call => call.command)).toEqual(["get_branch_messages"]);
+	});
+
+	it("finds the rewind point by text when OMP lists a message the window never rendered", async () => {
+		// The other side of the same skew: OMP's branch holds a user message this transcript has no
+		// row for, so the ordinal would branch one message early. The text names exactly one point and
+		// that point is the one branched at.
+		const { bridge, calls } = fakeBridge(rewindFrames, { commands: {
+			get_branch_messages: { status: "completed", result: { data: { messages: [
+				{ entryId: "entry-1", text: "hello" },
+				{ entryId: "entry-2", text: "a summary this window never rendered" },
+				{ entryId: "entry-3", text: "second question" },
+				{ entryId: "entry-4", text: "third question" },
+			] } } },
+			branch: { status: "completed", result: { data: { text: "second question", cancelled: false } } },
+			get_messages: rewindCommands.get_messages,
+		} });
+		const api = createCediaNativeApi({ bridge });
+
+		await api.orchestration.dispatchCommand({ ...rollbackCommand });
+
+		const sent = sentCommands(calls);
+		expect(sent.map(call => call.command)).toEqual(["get_branch_messages", "branch", "get_messages"]);
+		expect(sent[1]?.payload).toEqual({ entryId: "entry-3" });
+	});
+
+	it("refuses to rewind a running task, like the edit path does", async () => {
+		const { bridge, calls } = fakeBridge(rewindFrames, { commands: rewindCommands, session: { status: "running" } });
+		const api = createCediaNativeApi({ bridge });
+
+		await expect(api.orchestration.dispatchCommand({ ...rollbackCommand })).rejects.toThrow("Interrupt the current turn before rewinding to an earlier message.");
+
+		expect(calls.some(call => call.path.endsWith("/commands"))).toBe(false);
 	});
 
 	it("keeps the pure projection stable for an empty host", () => {
