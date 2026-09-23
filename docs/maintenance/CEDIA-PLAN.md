@@ -4754,12 +4754,23 @@ deletions so dead code is not carried across.
     `rg "webview.ts|TASK_WEBVIEW_CSS"` has no users, a test asserts the two bridge-kind sets are
     equal, an inline-edit refusal is visible on screen, and the suites are green.
 
-64. **Terminal convergence receipt (decision 8's terminal pair).** The pair is converged by
-    topology — the dock renders the same bundle, whose Terminal pane talks to the host PTY
-    registry — but no receipt has ever exercised it: the dock's Terminal pane has never run in a
-    packaged build. Closes when a packaged run opens a terminal from the IDE dock, runs a
-    command, and the screen is served by the host's PTY registry/checkpoint route (one registry,
-    two windows), receipt attached.
+64. ~~**Terminal convergence receipt (decision 8's terminal pair).**~~ **Re-scoped and closed
+    2026-09-23, on the owner's decision.** The item's premise was measured false in a packaged
+    build: the IDE dock renders **no right dock at all** (`[data-right-dock-content]` count 0 —
+    the embedded runtime gates it off by construction), its terminal transport is refused by the
+    IDE bridge (which wires the `panel` surfaces `files` and `git` only, while the same frame's
+    `git.status` answers, so the refusal is the terminal surface's), and neither window's Terminal
+    pane uses the host PTY registry: the Agents window's pane is a per-window node-pty shell in
+    the Electron main service, and the registry holds OMP's `cedia_terminal_*` checkpoints for
+    iOS. So §3 decision 6's "one host PTY registry rendered by the bundle in both windows" is not
+    what the build does, and the re-scope is what it is: **one PTY per window** — the
+    Electron-main shell in the Agents window, the workbench's own terminal in the IDE (the user's
+    private dev shell, §5) — with the host registry serving OMP's agent terminals to iOS. The
+    receipt is `docs/maintenance/CEDIA-PLAN.md` §9's "Packaged receipts" entry and
+    `dist/agent-ide-smoke/dock-terminal-receipt.json`, which the IDE smoke still writes on every
+    run: it attempts the real transport and polls `GET /v1/sessions/:id/terminals`, so it flips
+    from `resolved: false` to `true` on the day a convergence lands. If that convergence is ever
+    wanted, it needs a new item, not this one.
 
 65. **Host hardening (architecture review 2026-09-22).** Five measured gaps in `apps/host`:
     (a) the events table is **unbounded** while `store.ts:1-8` documents a "bounded journal" —
