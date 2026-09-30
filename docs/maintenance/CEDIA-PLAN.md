@@ -5984,7 +5984,7 @@ deletions so dead code is not carried across.
     no ghost bubble and the active turn preserved. Final root tests pass 1,453/1,453
     with a 60-second test-runner budget; root/UI typechecks pass. The temporary
     native copy was removed, leaving about 35 GiB free. These follow-up corrections
-    remain local and uncommitted; the published checkpoint is `24669f0a717`.
+    are now committed in `7cff2cb80a7` on `codex/mac-local-checkpoint-2026-09-30`.
     The subsequent image lifecycle slice fixes missing transcript previews and
     hardcoded zero image counts in the OMP queue projection. Package
     `2026-09-30T08:25:21.069Z` passes 12/12 checks and native A/B/C image execution:
@@ -5995,6 +5995,7 @@ deletions so dead code is not carried across.
     Independent review corrections preserve previews during stale snapshot merging
     and cache unchanged validation. Failed immediate picker/fill sequences and the
     strengthened keyboard-driven proof remain in the same local Mac receipt.
+    That image slice is also committed in `7cff2cb80a7`.
     This closes a bounded raster-image scenario, not generic file-byte delivery,
     every rapid-input/shared-draft race, provider-backed behavior or full D/F.
     The final `2026-09-30T03:15:47.176Z` package includes readiness-before-discovery,
