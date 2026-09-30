@@ -593,7 +593,10 @@ export function useChatTurnSubmission({
       composerImagesForSend = captures.composerImagesForSend;
       if (hasPendingCacheReview()) return false;
 
-      if (hasQueueableLiveTurn && dispatchMode === "queue" && queuedChatTurn === null) {
+      // OMP owns its live follow-up queue. Dispatch through the adapter now so
+      // host queue controls and other windows observe the same durable intent.
+      // Other providers retain Synara's renderer-side deferred queue.
+      if (selectedProviderForSend !== "omp" && hasQueueableLiveTurn && dispatchMode === "queue" && queuedChatTurn === null) {
         clearComposerInput(activeThread.id);
         scheduleComposerFocus();
         const queuedImagesForPersistence = await Promise.all(
@@ -819,30 +822,36 @@ export function useChatTurnSubmission({
           }),
         );
       }
-      setOptimisticUserMessages((existing) => [
-        ...existing,
-        {
-          id: messageIdForSend,
-          role: "user",
-          text: outgoingMessageText,
-          dispatchMode,
-          ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
-          ...(mentionedSkillsForSend.length > 0 ? { skills: mentionedSkillsForSend } : {}),
-          ...(mentionedPluginMentionsForSend.length > 0
-            ? { mentions: mentionedPluginMentionsForSend }
-            : {}),
-          createdAt: messageCreatedAt,
-          streaming: false,
-          source: "native",
-        },
-      ]);
-      // Mark the transcript as anchored before the optimistic row lands. The tail
-      // anchor sizes the spacer that lets this message sit at the viewport top,
-      // and its hook owns the slide; auto-follow stays armed for bookkeeping but
-      // pauses until the in-flight flag clears.
-      armTranscriptAutoFollow(threadIdForSend, true);
-      tailAnchorScrollInFlightRef.current = true;
-      setTailAnchor({ threadId: threadIdForSend, messageId: messageIdForSend });
+      // A native OMP follow-up is only queued, not transcript history yet.
+      // Its queue receipt is visible in Task controls; a dropped entry will
+      // never produce the user echo that normally reconciles optimistic rows.
+      const isOmpQueuedFollowUp = selectedProviderForSend === "omp" && hasQueueableLiveTurn && dispatchMode === "queue";
+      if (!isOmpQueuedFollowUp) {
+        setOptimisticUserMessages((existing) => [
+          ...existing,
+          {
+            id: messageIdForSend,
+            role: "user",
+            text: outgoingMessageText,
+            dispatchMode,
+            ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
+            ...(mentionedSkillsForSend.length > 0 ? { skills: mentionedSkillsForSend } : {}),
+            ...(mentionedPluginMentionsForSend.length > 0
+              ? { mentions: mentionedPluginMentionsForSend }
+              : {}),
+            createdAt: messageCreatedAt,
+            streaming: false,
+            source: "native",
+          },
+        ]);
+        // Mark the transcript as anchored before the optimistic row lands. The tail
+        // anchor sizes the spacer that lets this message sit at the viewport top,
+        // and its hook owns the slide; auto-follow stays armed for bookkeeping but
+        // pauses until the in-flight flag clears.
+        armTranscriptAutoFollow(threadIdForSend, true);
+        tailAnchorScrollInFlightRef.current = true;
+        setTailAnchor({ threadId: threadIdForSend, messageId: messageIdForSend });
+      }
 
       setThreadError(threadIdForSend, null);
       if (expiredTerminalContextCount > 0) {

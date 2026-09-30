@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "proof": "packaged-task-controls-observation",
+  "stagedAppPath": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-native-send-fixed.gYGlC0NfFW/Cedia.app",
+  "stateDir": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-QnstCe/s",
+  "projects": {
+    "pending": "464adb96-3d82-466e-b82f-9603a03770fb",
+    "dirty": "f390dd94-1fc5-4d10-9347-3ca8cce6acc0"
+  },
+  "pendingModel": {
+    "revision": 1,
+    "state": "awaiting",
+    "label": "awaiting OMP · fixture/fixture-model-2",
+    "nativeGate": {
+      "enabled": true,
+      "readyPath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/pending-model-ready.json",
+      "releasePath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/pending-model-release",
+      "releasedAt": "2026-09-30T04:31:22.054Z",
+      "screenshots": [
+        "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/pending-model-window-0.png"
+      ],
+      "semanticClaim": "operator-observed-only"
+    }
+  },
+  "dirtyCopy": {
+    "ok": true,
+    "sessionCount": 1,
+    "submittedTurnCount": 1,
+    "addedWorktreeCount": 1,
+    "transientWorktreeCount": 0,
+    "selectedPaths": [
+      "keep.txt"
+    ],
+    "sessionId": "bc573f65-d128-4c8a-b68f-29ca7244267a",
+    "worktree": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-QnstCe/s/worktrees/bc573f65-d128-4c8a-b68f-29ca7244267a",
+    "addedWorktrees": [
+      {
+        "path": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-QnstCe/s/worktrees/bc573f65-d128-4c8a-b68f-29ca7244267a",
+        "branch": "refs/heads/cedia/task-bc573f65-d128-4c8a-b68f-29ca7244267a"
+      }
+    ],
+    "checks": {
+      "oneSession": true,
+      "oneSubmittedTurn": true,
+      "oneWorktree": true,
+      "noTransientWorktree": true,
+      "sessionWorktreeMatches": true,
+      "baseMatches": true,
+      "selectedKeepOnly": true,
+      "sourcePreserved": true,
+      "worktreeFilesMatch": true
+    }
+  },
+  "nativeSend": {
+    "requested": true,
+    "cuaEnabled": true,
+    "accepted": true,
+    "enabled": true
+  },
+  "nativeGates": {
+    "pendingModel": {
+      "enabled": true,
+      "readyPath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/pending-model-ready.json",
+      "releasePath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/pending-model-release",
+      "releasedAt": "2026-09-30T04:31:22.054Z",
+      "screenshots": [
+        "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/pending-model-window-0.png"
+      ],
+      "semanticClaim": "operator-observed-only"
+    },
+    "dirtyWorktree": {
+      "enabled": true,
+      "readyPath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/dirty-worktree-ready.json",
+      "releasePath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/dirty-worktree-release",
+      "releasedAt": "2026-09-30T04:33:16.137Z",
+      "screenshots": [
+        "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/dirty-worktree-window-0.png"
+      ],
+      "semanticClaim": "operator-observed-only"
+    }
+  },
+  "providerRequests": 0,
+  "semanticAcceptance": "not-claimed-by-fixture-or-DOM-automation",
+  "limitations": [
+    "Native-send mode validates one real UI submission against the fixture OMP host and selected worktree evidence; it does not claim provider-backed model semantics.",
+    "Native gates do not claim full §11.1 semantic acceptance from DOM automation.",
+    "The held fake-host turn and native-send turn are fixture OMP turns, not provider-backed model turns."
+  ]
+}

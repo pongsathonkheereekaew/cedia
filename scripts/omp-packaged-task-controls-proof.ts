@@ -16,8 +16,11 @@
  * The native observations are deliberately operator-gated.  Set
  * `CEDIA_TASK_CONTROLS_CUA=1` and touch each `*-release` file printed by the runner after
  * looking at the actual staged window with Computer Use.  Each gate has a ten-minute
- * deadline.  The result records the screenshots and release markers, but never calls a
- * Playwright locator a semantic acceptance claim.
+ * deadline.  The optional `CEDIA_TASK_CONTROLS_NATIVE_SEND=1` mode requires CUA and turns
+ * the dirty-worktree gate into a real operator send: select only `keep.txt`, enter the fixture
+ * prompt, and click Send.  The host then validates the resulting task, turn, worktree, and
+ * source-file evidence.  Route-only mode remains the default.  The result records the
+ * screenshots and release markers, but never calls a Playwright locator a semantic acceptance claim.
  *
  * The app path must be a separately staged scratch copy.  The runner hash-checks the staged
  * Agent Window main process against the current source build, installs the reviewed Login
@@ -28,6 +31,9 @@
  *
  * Run (native gates enabled):
  * `CEDIA_TASK_CONTROLS_APP_PATH=/tmp/<staged>/Cedia.app CEDIA_TASK_CONTROLS_CUA=1 bun scripts/omp-packaged-task-controls-proof.ts`
+ *
+ * Run (native send opt-in):
+ * `CEDIA_TASK_CONTROLS_APP_PATH=/tmp/<staged>/Cedia.app CEDIA_TASK_CONTROLS_CUA=1 CEDIA_TASK_CONTROLS_NATIVE_SEND=1 bun scripts/omp-packaged-task-controls-proof.ts`
  */
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -250,6 +256,249 @@ type NativeGateResult = {
 	readonly semanticClaim: "operator-observed-only" | "not-run";
 };
 
+export type NativeSendMode = {
+	readonly requested: boolean;
+	readonly cuaEnabled: boolean;
+	readonly accepted: boolean;
+	readonly enabled: boolean;
+};
+
+/**
+ * Resolve the explicit native-send opt-in without ever silently enabling it when CUA is off.
+ * The packaged alias remains accepted for compatibility with older proof invocations.
+ */
+export function resolveNativeSendMode(environment: Readonly<Record<string, string | undefined>> = process.env): NativeSendMode {
+	const requested = environment.CEDIA_TASK_CONTROLS_NATIVE_SEND === "1";
+	const cuaEnabled = environment.CEDIA_TASK_CONTROLS_CUA === "1"
+		|| environment.CEDIA_PACKAGED_TASK_CONTROLS_CUA === "1";
+	return {
+		requested,
+		cuaEnabled,
+		accepted: !requested || cuaEnabled,
+		enabled: requested && cuaEnabled,
+	};
+}
+
+export type NativeSendProofObservation = {
+	readonly beforeSessionIds: readonly string[];
+	readonly sessions: readonly {
+		readonly id: string;
+		readonly cwd: string;
+		readonly workspace?: {
+			readonly mode?: unknown;
+			readonly baseRef?: unknown;
+			readonly sourceCommit?: unknown;
+			readonly dirtyCopy?: {
+				readonly mode?: unknown;
+				readonly entries?: readonly { readonly path?: unknown; readonly state?: unknown }[];
+			};
+		};
+		readonly turns?: readonly { readonly state?: unknown }[];
+	}[];
+	readonly beforeWorktrees: readonly { readonly path: string; readonly branch?: string }[];
+	readonly afterWorktrees: readonly { readonly path: string; readonly branch?: string }[];
+	readonly baseCommit: string;
+	readonly sourceKeep: string;
+	readonly sourceDrop: string;
+	readonly worktreeKeep: string | null;
+	readonly worktreeDrop: string | null;
+	readonly expectedSourceKeep: string;
+	readonly expectedSourceDrop: string;
+	readonly expectedWorktreeKeep: string;
+	readonly expectedWorktreeDrop: string;
+};
+
+export type NativeSendProofResult = {
+	readonly ok: boolean;
+	readonly sessionCount: number;
+	readonly submittedTurnCount: number;
+	readonly addedWorktreeCount: number;
+	readonly transientWorktreeCount: number;
+	readonly selectedPaths: readonly string[];
+	readonly sessionId?: string;
+	readonly worktree?: string;
+	readonly addedWorktrees: readonly { readonly path: string; readonly branch?: string }[];
+	readonly checks: {
+		readonly oneSession: boolean;
+		readonly oneSubmittedTurn: boolean;
+		readonly oneWorktree: boolean;
+		readonly noTransientWorktree: boolean;
+		readonly sessionWorktreeMatches: boolean;
+		readonly baseMatches: boolean;
+		readonly selectedKeepOnly: boolean;
+		readonly sourcePreserved: boolean;
+		readonly worktreeFilesMatch: boolean;
+	};
+};
+
+const TRANSIENT_NATIVE_WORKTREE_BRANCH = /^(?:refs\/heads\/)?(?:cedia|synara)\/[0-9a-f]{8}$/;
+
+/**
+ * Evaluate only structured evidence collected after a native operator pressed Send.  Keeping
+ * this boundary pure makes the proof fail closed on duplicate sessions, transient worktrees,
+ * or a dirty-file copy that does not match the requested selection.
+ */
+export function evaluateNativeSendProof(input: NativeSendProofObservation): NativeSendProofResult {
+	const beforeSessionIds = new Set(input.beforeSessionIds);
+	const newSessions = input.sessions.filter(session => !beforeSessionIds.has(session.id));
+	const session = newSessions.length === 1 ? newSessions[0] : undefined;
+	const turns = session?.turns ?? [];
+	const submittedTurns = turns.filter(turn => turn.state === "running" || turn.state === "completed");
+	const beforeWorktreePaths = new Set(input.beforeWorktrees.map(worktree => worktree.path));
+	const addedWorktrees = input.afterWorktrees.filter(worktree => !beforeWorktreePaths.has(worktree.path));
+	const transientWorktrees = addedWorktrees.filter(worktree => typeof worktree.branch === "string" && TRANSIENT_NATIVE_WORKTREE_BRANCH.test(worktree.branch));
+	const entries = session?.workspace?.dirtyCopy?.entries ?? [];
+	const selectedPaths = entries.flatMap(entry => typeof entry.path === "string" ? [entry.path] : []);
+	const selectedKeepOnly = session?.workspace?.dirtyCopy?.mode === "selected"
+		&& entries.length === 1
+		&& entries[0]?.path === "keep.txt"
+		&& entries[0]?.state === "applied";
+	const checks = {
+		oneSession: newSessions.length === 1,
+		oneSubmittedTurn: turns.length === 1 && submittedTurns.length === 1,
+		oneWorktree: addedWorktrees.length === 1,
+		noTransientWorktree: transientWorktrees.length === 0,
+		sessionWorktreeMatches: session !== undefined && addedWorktrees.length === 1 && session.cwd === addedWorktrees[0]?.path,
+		baseMatches: session?.workspace?.mode === "worktree"
+			&& session.workspace.baseRef === "main"
+			&& session.workspace.sourceCommit === input.baseCommit,
+		selectedKeepOnly,
+		sourcePreserved: input.sourceKeep === input.expectedSourceKeep && input.sourceDrop === input.expectedSourceDrop,
+		worktreeFilesMatch: input.worktreeKeep === input.expectedWorktreeKeep && input.worktreeDrop === input.expectedWorktreeDrop,
+	};
+	return {
+		ok: Object.values(checks).every(Boolean),
+		sessionCount: newSessions.length,
+		submittedTurnCount: submittedTurns.length,
+		addedWorktreeCount: addedWorktrees.length,
+		transientWorktreeCount: transientWorktrees.length,
+		selectedPaths,
+		...(session === undefined ? {} : { sessionId: session.id, worktree: session.cwd }),
+		addedWorktrees,
+		checks,
+	};
+}
+
+function listGitWorktrees(projectPath: string): Array<{ path: string; branch?: string }> {
+	const records = git(projectPath, ["worktree", "list", "--porcelain"]).split(/\n{2,}/);
+	return records.flatMap(recordText => {
+		const pathLine = recordText.split("\n").find(line => line.startsWith("worktree "));
+		if (!pathLine) return [];
+		const branchLine = recordText.split("\n").find(line => line.startsWith("branch "));
+		return [{
+			path: resolve(pathLine.slice("worktree ".length)),
+			...(branchLine === undefined ? {} : { branch: branchLine.slice("branch ".length) }),
+		}];
+	});
+}
+
+function nativeSessionObservation(value: unknown): NativeSendProofObservation["sessions"][number] | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const row = value as Record<string, unknown>;
+	if (typeof row.id !== "string" || typeof row.cwd !== "string") return undefined;
+	const workspaceValue = row.workspace;
+	const workspace = workspaceValue && typeof workspaceValue === "object" && !Array.isArray(workspaceValue)
+		? workspaceValue as Record<string, unknown>
+		: undefined;
+	const dirtyCopyValue = workspace?.dirtyCopy;
+	const dirtyCopy = dirtyCopyValue && typeof dirtyCopyValue === "object" && !Array.isArray(dirtyCopyValue)
+		? dirtyCopyValue as Record<string, unknown>
+		: undefined;
+	const entries = Array.isArray(dirtyCopy?.entries)
+		? dirtyCopy.entries.flatMap(entry => {
+			if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+			const candidate = entry as Record<string, unknown>;
+			return [{ path: candidate.path, state: candidate.state }];
+		})
+		: undefined;
+	const turns = Array.isArray(row.turns)
+		? row.turns.flatMap(turn => {
+			if (!turn || typeof turn !== "object" || Array.isArray(turn)) return [];
+			return [{ state: (turn as Record<string, unknown>).state }];
+		})
+		: undefined;
+	return {
+		id: row.id,
+		cwd: row.cwd,
+		...(workspace === undefined ? {} : {
+			workspace: {
+				mode: workspace.mode,
+				baseRef: workspace.baseRef,
+				sourceCommit: workspace.sourceCommit,
+				...(dirtyCopy === undefined ? {} : {
+					dirtyCopy: {
+						mode: dirtyCopy.mode,
+						...(entries === undefined ? {} : { entries }),
+					},
+				}),
+			},
+		}),
+		...(turns === undefined ? {} : { turns }),
+	};
+}
+
+async function runNativeDirtySendProof(
+	host: HostDescriptor,
+	projectId: string,
+	projectPath: string,
+	beforeSessionIds: readonly string[],
+	beforeWorktrees: readonly { readonly path: string; readonly branch?: string }[],
+	output: string,
+	providerRequests: () => number,
+): Promise<NativeSendProofResult> {
+	const baseCommit = git(projectPath, ["rev-parse", "main"]);
+	const observed = await waitFor("native dirty-send task submission", async () => {
+		const response = await request(host, "GET", `/v1/sessions?projectId=${encodeURIComponent(projectId)}`);
+		const rows = Array.isArray(response) ? response : [];
+		const sessions = rows.flatMap(value => {
+			const session = nativeSessionObservation(value);
+			return session === undefined ? [] : [session];
+		});
+		const newSessions = sessions.filter(session => !beforeSessionIds.includes(session.id));
+		if (newSessions.length > 1) return { sessions, afterWorktrees: listGitWorktrees(projectPath) };
+		if (newSessions.length !== 1 || (newSessions[0]?.turns?.length ?? 0) !== 1) return undefined;
+		return { sessions, afterWorktrees: listGitWorktrees(projectPath) };
+	}, NATIVE_GATE_TIMEOUT_MS);
+	const session = observed.sessions.find(candidate => !beforeSessionIds.includes(candidate.id));
+	const worktreePath = session?.cwd;
+	const sourceKeep = await readFile(join(projectPath, "keep.txt"), "utf8").catch(() => "");
+	const sourceDrop = await readFile(join(projectPath, "drop.txt"), "utf8").catch(() => "");
+	const worktreeKeep = worktreePath === undefined ? null : await readFile(join(worktreePath, "keep.txt"), "utf8").catch(() => null);
+	const worktreeDrop = worktreePath === undefined ? null : await readFile(join(worktreePath, "drop.txt"), "utf8").catch(() => null);
+	const proof = evaluateNativeSendProof({
+		beforeSessionIds,
+		sessions: observed.sessions,
+		beforeWorktrees,
+		afterWorktrees: observed.afterWorktrees,
+		baseCommit,
+		sourceKeep,
+		sourceDrop,
+		worktreeKeep,
+		worktreeDrop,
+		expectedSourceKeep: DIRTY_KEEP,
+		expectedSourceDrop: DIRTY_DROP,
+		expectedWorktreeKeep: DIRTY_KEEP,
+		expectedWorktreeDrop: DIRTY_DROP_BASE,
+	});
+	check(proof.checks.oneSession, "native send creates exactly one additional task");
+	check(proof.checks.oneSubmittedTurn, "native send records exactly one submitted turn");
+	check(proof.checks.oneWorktree, "native send creates exactly one additional worktree");
+	check(proof.checks.noTransientWorktree, "native send leaves no transient Synara worktree");
+	check(proof.checks.sessionWorktreeMatches, "native task owns the sole additional worktree");
+	check(proof.checks.baseMatches, "native task starts at the selected main revision");
+	check(proof.checks.selectedKeepOnly, "native task receipt selects keep.txt only");
+	check(proof.checks.worktreeFilesMatch, "native task carries keep.txt and leaves drop.txt at base");
+	check(proof.checks.sourcePreserved, "native send leaves both source dirty files unchanged");
+	await writeFile(join(output, "dirty-copy-native.json"), `${JSON.stringify({
+		projectId,
+		baseCommit,
+		omp: "fixture",
+		...proof,
+		providerRequests: providerRequests(),
+	}, null, 2)}\n`);
+	return proof;
+}
+
 async function nativeGate(
 	name: string,
 	instructions: readonly string[],
@@ -334,7 +583,24 @@ async function runDirtyCopyRouteProof(
 	return { sessionId, worktree: cwd, baseCommit, dirtyCopy: workspace.dirtyCopy };
 }
 
+/** Stop tasks created by the native gate before Electron is asked to quit; retain their records for proof diagnostics. */
+async function cleanupNativeTasks(host: HostDescriptor, projectId: string, baselineSessionIds: readonly string[]): Promise<void> {
+	const baseline = new Set(baselineSessionIds);
+	const sessions = (await request(host, "GET", `/v1/sessions?projectId=${encodeURIComponent(projectId)}`));
+	if (!Array.isArray(sessions)) return;
+	for (const value of sessions) {
+		if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+		const session = value as Record<string, unknown>;
+		const id = typeof session.id === "string" ? session.id : "";
+		const incarnation = typeof session.incarnation === "string" ? session.incarnation : "";
+		if (!id || !incarnation || baseline.has(id)) continue;
+		await stopTask(host, id, incarnation);
+	}
+}
+
 async function main(): Promise<void> {
+	const nativeSendMode = resolveNativeSendMode(process.env);
+	if (nativeSendMode.requested) check(nativeSendMode.accepted, "native-send opt-in requires CUA=1");
 	const appPathInput = process.env.CEDIA_TASK_CONTROLS_APP_PATH ?? process.env.CEDIA_PACKAGED_TASK_CONTROLS_APP_PATH;
 	check(typeof appPathInput === "string" && appPathInput.length > 0,
 		"CEDIA_TASK_CONTROLS_APP_PATH names a separately staged scratch Cedia.app");
@@ -385,6 +651,8 @@ async function main(): Promise<void> {
 	let page: StagedPage | undefined;
 	let pendingSessionId = "";
 	let pendingIncarnation = "";
+	let dirtyProjectId = "";
+	let dirtyBaselineSessionIds: string[] = [];
 	let failure: unknown;
 	let result: Record<string, unknown> | undefined;
 	let providerRequests = 0;
@@ -427,6 +695,8 @@ async function main(): Promise<void> {
 		});
 		const pendingProject = host.host.store.createProject({ path: pendingProjectPath, name: PENDING_PROJECT_NAME });
 		const dirtyProject = host.host.store.createProject({ path: dirtyProjectPath, name: DIRTY_PROJECT_NAME });
+		dirtyProjectId = dirtyProject.id;
+		dirtyBaselineSessionIds = host.host.store.listSessions(dirtyProject.id, { includeArchived: true }).map(session => session.id);
 		const pendingSession = host.host.createSession(pendingProject.id, PENDING_TASK_TITLE);
 		pendingSessionId = pendingSession.id;
 		check(pendingSessionId.length > 0, "pending-model fixture task is durable");
@@ -496,20 +766,31 @@ async function main(): Promise<void> {
 			{ project: PENDING_PROJECT_NAME, task: PENDING_TASK_TITLE, expected: formatPendingModelObservation(pending as PendingModelLike) },
 		);
 
+		const dirtyBeforeSessionIds = host.host.store.listSessions(dirtyProject.id, { includeArchived: true }).map(session => session.id);
+		const dirtyBeforeWorktrees = listGitWorktrees(dirtyProjectPath);
 		dirtyGate = await nativeGate(
 			"dirty-worktree",
-			[
-				`Open the ${DIRTY_PROJECT_NAME} row and create a new thread.`,
-				"Choose the New worktree environment, keep base branch main, and inspect Carry changes into worktree.",
-				"Confirm the real picker lists keep.txt and drop.txt as selected by default; do not send the draft. Record your screenshot/AX notes separately, then touch the releasePath.",
-			],
+			nativeSendMode.enabled
+				? [
+					`Open the ${DIRTY_PROJECT_NAME} row and create a new thread.`,
+					"Choose the New worktree environment, keep base branch main, and inspect Carry changes into worktree.",
+					"Select keep.txt only; clear drop.txt if it is selected. Enter a short fixture prompt (a single key such as `a` is sufficient), click Send once, and wait for the turn to be accepted.",
+					"Do not create another task. Record your screenshot/AX notes separately, then touch the releasePath.",
+				]
+				: [
+					`Open the ${DIRTY_PROJECT_NAME} row and create a new thread.`,
+					"Choose the New worktree environment, keep base branch main, and inspect Carry changes into worktree.",
+					"Confirm the real picker lists keep.txt and drop.txt as selected by default; do not send the draft. Record your screenshot/AX notes separately, then touch the releasePath.",
+				],
 			output,
 			app,
 			page,
-			{ project: DIRTY_PROJECT_NAME, expectedBaseBranch: "main", expectedFiles: ["keep.txt", "drop.txt"], selectedRouteFile: "keep.txt" },
+			{ project: DIRTY_PROJECT_NAME, expectedBaseBranch: "main", expectedFiles: ["keep.txt", "drop.txt"], mode: nativeSendMode.enabled ? "native-send" : "route-only", selectedRouteFile: "keep.txt" },
 		);
 
-		const dirtyRoute = await runDirtyCopyRouteProof(hostDescriptor, dirtyProject.id, dirtyProjectPath, output);
+		const dirtyCopy = nativeSendMode.enabled
+			? await runNativeDirtySendProof(hostDescriptor, dirtyProject.id, dirtyProjectPath, dirtyBeforeSessionIds, dirtyBeforeWorktrees, output, () => providerRequests)
+			: await runDirtyCopyRouteProof(hostDescriptor, dirtyProject.id, dirtyProjectPath, output);
 		check(providerRequests === 0, "provider tripwire received zero requests");
 		check(rendererErrors.length === 0, `staged renderer emitted no page errors (${JSON.stringify(rendererErrors.slice(0, 3))})`);
 		result = {
@@ -524,14 +805,17 @@ async function main(): Promise<void> {
 				label: formatPendingModelObservation(pending as PendingModelLike),
 				nativeGate: pendingGate,
 			},
-			dirtyCopy: dirtyRoute,
+			dirtyCopy,
+			nativeSend: nativeSendMode,
 			nativeGates: { pendingModel: pendingGate, dirtyWorktree: dirtyGate },
 			providerRequests,
 			semanticAcceptance: "not-claimed-by-fixture-or-DOM-automation",
 			limitations: [
-				"The host route and selected copy are real provider-free assertions.",
-				"Native gates are operator-observed screenshots only; they do not claim full §11.1 semantic acceptance.",
-				"The held fake-host turn is not a provider-backed model turn.",
+				nativeSendMode.enabled
+					? "Native-send mode validates one real UI submission against the fixture OMP host and selected worktree evidence; it does not claim provider-backed model semantics."
+					: "The host route and selected copy are real provider-free assertions; native gates are operator-observed screenshots only.",
+				"Native gates do not claim full §11.1 semantic acceptance from DOM automation.",
+				"The held fake-host turn and native-send turn are fixture OMP turns, not provider-backed model turns.",
 			],
 		};
 		await writeFile(join(output, "result.json"), `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
@@ -547,6 +831,13 @@ async function main(): Promise<void> {
 		throw error;
 	} finally {
 		if (pendingSessionId && pendingIncarnation && host) await stopTask(host.descriptor, pendingSessionId, pendingIncarnation);
+		if (nativeSendMode.enabled && host && dirtyProjectId) {
+			try {
+				await cleanupNativeTasks(host.descriptor, dirtyProjectId, dirtyBaselineSessionIds);
+			} catch (error) {
+				console.error(`TASK_CONTROLS_NATIVE_CLEANUP_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
 		await app?.close().catch(() => {});
 		await host?.close().catch(() => {});
 		if (provider) await new Promise<void>(resolveClose => provider!.close(() => resolveClose()));

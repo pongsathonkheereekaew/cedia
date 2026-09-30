@@ -1,0 +1,33 @@
+{
+  "projectId": "f390dd94-1fc5-4d10-9347-3ca8cce6acc0",
+  "baseCommit": "d904f3adae950c9d79acaa929205ef3003047a55",
+  "omp": "fixture",
+  "ok": true,
+  "sessionCount": 1,
+  "submittedTurnCount": 1,
+  "addedWorktreeCount": 1,
+  "transientWorktreeCount": 0,
+  "selectedPaths": [
+    "keep.txt"
+  ],
+  "sessionId": "bc573f65-d128-4c8a-b68f-29ca7244267a",
+  "worktree": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-QnstCe/s/worktrees/bc573f65-d128-4c8a-b68f-29ca7244267a",
+  "addedWorktrees": [
+    {
+      "path": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-QnstCe/s/worktrees/bc573f65-d128-4c8a-b68f-29ca7244267a",
+      "branch": "refs/heads/cedia/task-bc573f65-d128-4c8a-b68f-29ca7244267a"
+    }
+  ],
+  "checks": {
+    "oneSession": true,
+    "oneSubmittedTurn": true,
+    "oneWorktree": true,
+    "noTransientWorktree": true,
+    "sessionWorktreeMatches": true,
+    "baseMatches": true,
+    "selectedKeepOnly": true,
+    "sourcePreserved": true,
+    "worktreeFilesMatch": true
+  },
+  "providerRequests": 0
+}

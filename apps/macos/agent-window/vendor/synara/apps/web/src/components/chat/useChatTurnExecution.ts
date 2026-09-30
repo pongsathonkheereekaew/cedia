@@ -27,7 +27,11 @@ import {
 } from "~/projectInstructionsStore";
 import { dispatchThreadGoal } from "~/threadGoal";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "../../composer-logic";
-import { type DraftThreadEnvMode, type QueuedComposerChatTurn } from "../../composerDraftStore";
+import {
+  type DraftThreadEnvMode,
+  type QueuedComposerChatTurn,
+  useComposerDraftStore,
+} from "../../composerDraftStore";
 import {
   cloneComposerImageAttachment,
   stageUploadComposerAttachments,
@@ -249,6 +253,11 @@ export function useChatTurnExecution({
         composerMentionsSnapshot,
       } = preparedTurn;
 
+      // CEDIA's OMP host owns the first worktree for a local draft. Other
+      // providers still use Synara's renderer-side preparation flow, which is
+      // why this remains scoped to the OMP provider and draft promotion.
+      const hostCreatesWorktree =
+        isLocalDraftThread && selectedModelSelectionForSend.provider === "omp";
       let createdServerThreadForLocalDraft = false;
       let createdWorktreeForSendPath: string | null = null;
       let switchedToLocalCheckout = false;
@@ -260,6 +269,11 @@ export function useChatTurnExecution({
         // checkout. Awaited before the turn dispatch so the session resolves the
         // local cwd instead of the abandoned worktree.
         const applyWorkLocallySwitch = async () => {
+          if (hostCreatesWorktree && createdServerThreadForLocalDraft) {
+            throw new Error(
+              "CEDIA already created this worktree task. Continue that task or start a separate local task.",
+            );
+          }
           switchedToLocalCheckout = true;
           nextThreadEnvMode = "local";
           nextThreadBranch = null;
@@ -319,7 +333,7 @@ export function useChatTurnExecution({
         };
 
         // On first message: lock in branch + create worktree if needed.
-        if (baseBranchForWorktree && worktreeSetupResolution) {
+        if (baseBranchForWorktree && worktreeSetupResolution && !hostCreatesWorktree) {
           // The server streams each real setup phase (branch → worktree → copy
           // changes); advance the card's rows from those events instead of
           // letting one row spin through the whole creation.
@@ -393,6 +407,25 @@ export function useChatTurnExecution({
           }
         }
 
+        if (hostCreatesWorktree && baseBranchForWorktree && worktreeSetupResolution) {
+          // Resolve the user's choice before asking the host to create anything.
+          // Once the host owns the task/worktree, switching it to the project
+          // checkout would only change renderer metadata and leave a durable
+          // worktree behind.
+          await consumeWorktreeSetupResolution();
+        }
+
+        if (hostCreatesWorktree && baseBranchForWorktree && worktreeSetupResolution && !switchedToLocalCheckout) {
+          // Keep the setup card honest while the host performs its atomic
+          // thread.create + worktree transaction. The host has no per-phase
+          // renderer callback, so it is already at the thread-preparation step.
+          beginLocalDispatch({
+            worktreeSetupStepId: "prepare-thread",
+            setupScriptName: worktreeSetupScriptName,
+            copyLocalChanges: worktreeCopiesLocalChanges,
+          });
+        }
+
         const threadCreateModelSelection: ModelSelection = buildModelSelection(
           selectedModelSelectionForSend.provider,
           selectedModelSelectionForSend.model ||
@@ -415,6 +448,17 @@ export function useChatTurnExecution({
             threadNotes,
             projectInstructions: inheritedProjectInstructions,
           });
+          // The draft can be edited or rehydrated while attachments and workspace
+          // setup are awaiting. Read its scoped dirty-file choice at the last
+          // possible moment so an explicit [] is not replaced by the stale thread
+          // projection (or by the host's default).
+          const currentDraftThread = useComposerDraftStore
+            .getState()
+            .getDraftThread(threadIdForSend);
+          const dirtyFilesForThreadCreate =
+            currentDraftThread?.dirtyFiles === undefined
+              ? activeThread.dirtyFiles
+              : currentDraftThread.dirtyFiles;
           // The host resolves the selected base ref to an immutable commit before creating the
           // worktree. Keep it on the promotion envelope only for a first worktree send; local
           // tasks must never carry a meaningless base revision.
@@ -441,13 +485,81 @@ export function useChatTurnExecution({
             // applies to a first worktree send; the host carries exactly those paths (or none for
             // []) and refuses a malformed list before creating anything. Untouched means the host
             // default (carry the checkout's changes), so nothing is sent.
-            ...(nextThreadEnvMode === "worktree" && baseBranchForWorktree && activeThread.dirtyFiles
-              ? { dirtyFiles: [...activeThread.dirtyFiles] }
+            ...(nextThreadEnvMode === "worktree" &&
+            baseBranchForWorktree &&
+            dirtyFilesForThreadCreate !== null &&
+            dirtyFilesForThreadCreate !== undefined
+              ? { dirtyFiles: [...dirtyFilesForThreadCreate] }
               : {}),
             lastKnownPr: activeThread.lastKnownPr ?? null,
             createdAt: activeThread.createdAt,
           };
           await promoteThreadCreate(threadCreateCommand, api);
+          // Mark promotion as complete before any host projection readback or
+          // setup step. If a later step fails, the durable host task/worktree
+          // must be retained rather than deleted as a renderer draft retry.
+          createdServerThreadForLocalDraft = true;
+          if (hostCreatesWorktree && nextThreadEnvMode === "worktree") {
+            // The host chooses the managed worktree path and task branch. Read
+            // that projection back before setup scripts or terminal handoff so
+            // neither can accidentally run against the project checkout.
+            const hostSnapshot = await api.orchestration.getThreadDetailSnapshot({
+              threadId: threadIdForSend,
+            });
+            const hostThread = hostSnapshot?.thread;
+            if (!hostThread) {
+              throw new Error("CEDIA host did not return the created worktree task.");
+            }
+            const hostWorktreePath =
+              typeof hostThread.worktreePath === "string" ? hostThread.worktreePath.trim() : "";
+            const hostWorkingDirectory =
+              typeof hostThread.workingDirectory === "string"
+                ? hostThread.workingDirectory.trim()
+                : "";
+            const hostBranch = typeof hostThread.branch === "string" ? hostThread.branch.trim() : "";
+            const normalizeAbsolutePath = (value: string): string | null => {
+              if (value.length === 0 || (!value.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(value))) {
+                return null;
+              }
+              return value.replace(/[\\/]+$/, "") || "/";
+            };
+            const normalizedHostPath = normalizeAbsolutePath(
+              hostWorktreePath || hostWorkingDirectory,
+            );
+            const normalizedWorkingDirectory = normalizeAbsolutePath(hostWorkingDirectory);
+            const normalizedProjectPath = targetProjectCwdForSend.replace(/[\\/]+$/, "");
+            if (
+              hostThread.envMode !== "worktree" ||
+              hostBranch.length === 0 ||
+              normalizedHostPath === null ||
+              normalizedWorkingDirectory === null ||
+              normalizedHostPath !== normalizedWorkingDirectory ||
+              normalizedHostPath === normalizedProjectPath
+            ) {
+              throw new Error("CEDIA host did not return a canonical task worktree.");
+            }
+            nextThreadEnvMode = hostThread.envMode ?? nextThreadEnvMode;
+            nextThreadBranch = hostBranch;
+            nextThreadWorktreePath = hostWorktreePath || hostWorkingDirectory;
+            nextThreadWorkingDirectory = hostWorkingDirectory;
+            nextAssociatedWorktreePath = hostThread.associatedWorktreePath ?? nextThreadWorktreePath;
+            nextAssociatedWorktreeBranch = hostThread.associatedWorktreeBranch ?? nextThreadBranch;
+            nextAssociatedWorktreeRef = hostThread.associatedWorktreeRef ?? null;
+            setStoreThreadWorkspace(threadIdForSend, {
+              envMode: nextThreadEnvMode,
+              branch: nextThreadBranch,
+              worktreePath: nextThreadWorktreePath,
+              workingDirectory: nextThreadWorkingDirectory,
+              associatedWorktreePath: nextAssociatedWorktreePath,
+              associatedWorktreeBranch: nextAssociatedWorktreeBranch,
+              associatedWorktreeRef: nextAssociatedWorktreeRef,
+            });
+            // A choice that arrives while the host is creating or projecting the
+            // task must be consumed before notes, setup scripts, or turn start.
+            // Work-locally now fails explicitly; the already-created host task is
+            // retained for the user to continue or replace deliberately.
+            await consumeWorktreeSetupResolution();
+          }
           // `thread.create` does not carry notes, so seed the freshly created
           // server thread's notepad with the inherited project instructions via a
           // dedicated meta update. Best-effort: a failure here must not abort the turn.
@@ -479,8 +591,12 @@ export function useChatTurnExecution({
               title,
             });
           }
-          createdServerThreadForLocalDraft = true;
         }
+
+        // Notes/goals/project metadata are asynchronous. Re-check the setup
+        // choice after those awaits so a late Cancel/Work locally action still
+        // wins before any setup script can run.
+        await consumeWorktreeSetupResolution();
 
         const setupScript = switchedToLocalCheckout ? null : setupScriptForWorktree;
         if (setupScript) {
@@ -715,7 +831,7 @@ export function useChatTurnExecution({
               () => undefined,
             );
         }
-        if (createdServerThreadForLocalDraft && !turnStartSucceeded) {
+        if (createdServerThreadForLocalDraft && !turnStartSucceeded && !hostCreatesWorktree) {
           // This rollback cleans up a retryable draft promotion; do not tombstone the draft id.
           await api.orchestration
             .dispatchCommand({

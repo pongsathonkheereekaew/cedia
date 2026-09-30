@@ -206,7 +206,7 @@ export interface DraftThreadState {
   branch: string | null;
   worktreePath: string | null;
   workingDirectory?: string | null;
-  dirtyFiles?: string[] | null | undefined;
+  dirtyFiles?: ReadonlyArray<string> | null | undefined;
   lastKnownPr?: OrchestrationThreadPullRequest | null;
   envMode: DraftThreadEnvMode;
   // Goal staged before the thread exists server-side; persisted via
@@ -220,7 +220,7 @@ interface DraftThreadMutationOptions {
   branch?: string | null;
   worktreePath?: string | null;
   workingDirectory?: string | null;
-  dirtyFiles?: string[] | null | undefined;
+  dirtyFiles?: ReadonlyArray<string> | null | undefined;
   lastKnownPr?: OrchestrationThreadPullRequest | null;
   createdAt?: string;
   // Explicitly `| undefined`: callers forward a `ThreadWorkspacePatch`, whose `envMode` is

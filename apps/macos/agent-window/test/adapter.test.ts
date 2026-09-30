@@ -927,6 +927,37 @@ function sentCommands(calls: readonly Request[]): Array<{ command: string; paylo
 		expect(calls.some(call => call.method === "PATCH" && (call.body as { title?: string }).title === "Renamed")).toBe(true);
 	});
 
+	it("projects the host-created worktree cwd and branch before renderer setup", async () => {
+		const hostWorktree = "/workspace/demo/.cedia/worktrees/session-1";
+		const { bridge } = fakeBridge(frames, {
+			session: {
+				cwd: hostWorktree,
+				workspace: {
+					mode: "worktree",
+					isGit: true,
+					cwd: "/workspace/demo",
+					root: "/workspace/demo",
+					actualCwd: hostWorktree,
+					worktreeRoot: hostWorktree,
+					taskBranch: "cedia/task-session-1",
+					sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+				},
+			},
+		});
+		const api = createCediaNativeApi({ bridge });
+
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: session.id });
+		expect(detail.thread).toMatchObject({
+			envMode: "worktree",
+			branch: "cedia/task-session-1",
+			worktreePath: hostWorktree,
+			workingDirectory: hostWorktree,
+			associatedWorktreePath: hostWorktree,
+			associatedWorktreeBranch: "cedia/task-session-1",
+			associatedWorktreeRef: "0123456789abcdef0123456789abcdef01234567",
+		});
+	});
+
 	it("archives a thread the window put away, and only an explicit delete removes one", async () => {
 		// §10 item 1d: the renderer's temporary-thread lifecycle used to dispatch `thread.delete`
 		// when focus left a draft, and this host's DELETE removes the record and its transcript -

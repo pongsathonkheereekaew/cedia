@@ -18,7 +18,7 @@ import {
 	type ProviderListSkillsInput,
 } from "@synara/contracts";
 import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState, type TranscriptEntry } from "../../src/state.ts";
-import { parseOmpGoalSnapshot, parseOmpGoalUpdatedEvent, parseOmpSubagentList, type Command, type EventPage, type Json, type OmpGoalSnapshot, type OmpSubagentRow, type Project, type Session, type SessionEvent } from "../../../../packages/protocol/src/index.ts";
+import { parseOmpGoalSnapshot, parseOmpGoalUpdatedEvent, parseOmpSubagentList, type Command, type EventPage, type Json, type OmpGoalSnapshot, type OmpSubagentRow, type Project, type Session, type SessionDirtyCopy, type SessionEvent, type SessionWorkspace } from "../../../../packages/protocol/src/index.ts";
 import { readCediaHostError } from "./host-error-codes.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
@@ -361,6 +361,52 @@ function array(value: unknown): unknown[] {
 	return Array.isArray(value) ? value : [];
 }
 
+function asSessionWorkspace(value: unknown, fallbackCwd: string): SessionWorkspace | undefined {
+	const row = record(value);
+	if (!row || (row.mode !== "local" && row.mode !== "worktree") || typeof row.isGit !== "boolean") return undefined;
+	const cwd = string(row.cwd) ?? fallbackCwd;
+	const root = string(row.root) ?? cwd;
+	const dirtyCopyValue = record(row.dirtyCopy);
+	let dirtyCopy: SessionDirtyCopy | undefined;
+	if (dirtyCopyValue && (dirtyCopyValue.mode === "all" || dirtyCopyValue.mode === "none" || dirtyCopyValue.mode === "selected")) {
+		const entries = array(dirtyCopyValue.entries).flatMap(value => {
+			const entry = record(value);
+			if (!entry || typeof entry.path !== "string" || (entry.state !== "applied" && entry.state !== "copied" && entry.state !== "unchanged" && entry.state !== "conflict")) return [];
+			const state = entry.state as SessionDirtyCopy["entries"][number]["state"];
+			return [{ path: entry.path, state, ...(typeof entry.reason === "string" ? { reason: entry.reason } : {}) }];
+		});
+		if (entries.length === array(dirtyCopyValue.entries).length) dirtyCopy = { mode: dirtyCopyValue.mode, entries };
+	}
+	const text = (key: string): string | undefined => string(row[key]);
+	const cleanupState = row.cleanupState === "retained" || row.cleanupState === "archive_requested" || row.cleanupState === "prepared" || row.cleanupState === "removed"
+		? row.cleanupState
+		: undefined;
+	return {
+		mode: row.mode,
+		isGit: row.isGit,
+		cwd,
+		root,
+		...(text("branch") ? { branch: text("branch") } : {}),
+		...(text("sourceCommit") ? { sourceCommit: text("sourceCommit") } : {}),
+		...(text("baseRef") ? { baseRef: text("baseRef") } : {}),
+		...(dirtyCopy ? { dirtyCopy } : {}),
+		...(text("taskId") ? { taskId: text("taskId") } : {}),
+		...(text("projectId") ? { projectId: text("projectId") } : {}),
+		...(text("repositoryId") ? { repositoryId: text("repositoryId") } : {}),
+		...(text("worktreeRoot") ? { worktreeRoot: text("worktreeRoot") } : {}),
+		...(text("actualCwd") ? { actualCwd: text("actualCwd") } : {}),
+		...(text("taskBranch") ? { taskBranch: text("taskBranch") } : {}),
+		...(text("integrationTargetRef") ? { integrationTargetRef: text("integrationTargetRef") } : {}),
+		...(text("integrationTargetCommit") ? { integrationTargetCommit: text("integrationTargetCommit") } : {}),
+		...(text("integrationObservedCommit") ? { integrationObservedCommit: text("integrationObservedCommit") } : {}),
+		...(text("restorationRef") ? { restorationRef: text("restorationRef") } : {}),
+		...(text("restorationSha") ? { restorationSha: text("restorationSha") } : {}),
+		...(Number.isSafeInteger(row.cleanupGeneration) ? { cleanupGeneration: row.cleanupGeneration as number } : {}),
+		...(cleanupState ? { cleanupState } : {}),
+		...(text("lastFailure") ? { lastFailure: text("lastFailure") } : {}),
+	};
+}
+
 /**
  * Why a failed transcript entry failed, in the provider's own words.
  *
@@ -489,6 +535,7 @@ function asSessions(value: unknown): Session[] {
 		const updatedAt = string(row?.updatedAt) ?? createdAt;
 		const status = row.status;
 		if (!id || !projectId || !cwd || !incarnation || !createdAt || !updatedAt) return [];
+		const workspace = asSessionWorkspace(row.workspace, cwd);
 		return [{
 			id,
 			projectId,
@@ -503,6 +550,7 @@ function asSessions(value: unknown): Session[] {
 			pinned: row.pinned === true,
 			createdAt,
 			updatedAt,
+			...(workspace ? { workspace } : {}),
 			// Null for an ordinary task, the source task's id for a sidechat fork.
 			sidechatSourceThreadId: string(row.sidechatSourceThreadId) ?? null,
 			// The host's turn projection travels with the row: it is what tells a caller whether a
@@ -1045,6 +1093,18 @@ function threadProjection(
 	const turnIds = turnIdsByEntry(state);
 	const subagentTurnId = latestTurn?.turnId ?? [...turnIds.values()].at(-1) ?? null;
 	const ownSubagent = subagents?.find(candidate => candidate.id === session.id || candidate.sessionFile === session.sessionFile);
+	// The host's session row is authoritative immediately after a worktree task is
+	// created. Renderer metadata is only a compatibility override for older rows and
+	// explicit handoff updates; do not fall back to the project root while that local
+	// metadata map is still empty.
+	const hostWorkspace = session.workspace;
+	const projectedEnvMode = workspace?.envMode ?? hostWorkspace?.mode ?? "local";
+	const projectedBranch = workspace?.branch ?? hostWorkspace?.taskBranch ?? hostWorkspace?.branch ?? null;
+	const projectedWorktreePath = workspace?.worktreePath ??
+		(projectedEnvMode === "worktree" ? hostWorkspace?.actualCwd ?? hostWorkspace?.worktreeRoot ?? hostWorkspace?.cwd ?? session.cwd : null);
+	const projectedAssociatedWorktreePath = workspace?.associatedWorktreePath ?? projectedWorktreePath;
+	const projectedAssociatedWorktreeBranch = workspace?.associatedWorktreeBranch ?? projectedBranch;
+	const projectedAssociatedWorktreeRef = workspace?.associatedWorktreeRef ?? hostWorkspace?.sourceCommit ?? hostWorkspace?.baseRef ?? null;
 	const sessionView = {
 		threadId: session.id,
 		status: sessionStatus(session.status, latestTurn),
@@ -1079,13 +1139,13 @@ function threadProjection(
 		modelSelection,
 		runtimeMode: "approval-required",
 		interactionMode: "default",
-		envMode: workspace?.envMode ?? "local",
-		branch: workspace?.branch ?? null,
-		worktreePath: workspace?.worktreePath ?? null,
+		envMode: projectedEnvMode,
+		branch: projectedBranch,
+		worktreePath: projectedWorktreePath,
 		workingDirectory: session.cwd,
-		associatedWorktreePath: workspace?.associatedWorktreePath ?? null,
-		associatedWorktreeBranch: workspace?.associatedWorktreeBranch ?? null,
-		associatedWorktreeRef: workspace?.associatedWorktreeRef ?? null,
+		associatedWorktreePath: projectedAssociatedWorktreePath,
+		associatedWorktreeBranch: projectedAssociatedWorktreeBranch,
+		associatedWorktreeRef: projectedAssociatedWorktreeRef,
 		createBranchFlowCompleted: workspace?.createBranchFlowCompleted ?? false,
 		isPinned: session.pinned === true,
 		parentThreadId: null,

@@ -393,3 +393,304 @@ Fresh verification: `bun run check:repo` exits 0 with
 `CI-OK parents=198 ui=75 children=129 lock-shas=3 doc-links=853 md=389 evidence=360`.
 This is documentation validation, not a rerun of runtime tests or closure of the
 remaining login, semantic-acceptance or excluded remote/device scenarios.
+
+## Post-checkpoint native worktree Send — failed, 2026-09-30
+
+Source checkpoint: `b848dd51cdb`. Package stamp: `2026-09-30T03:15:47.176Z`;
+fresh `check:packaged` passed 12/12 before this run. The unchanged task-controls
+runner used a freshly copied scratch app, isolated host/profile, fake OMP and
+provider tripwire. Native interaction used the available app-native Computer Use
+tool; the requested custom-model skill could not be initialized because its
+referenced bundled instruction file was absent.
+
+Run: `dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/`.
+The pending-model observation passed. In the dirty project, the native New
+worktree picker showed `From main` and both files selected. Immediately before
+Send, AX showed `Carry changes into worktree (1 of 2)`, `drop.txt` unchecked and
+`keep.txt` checked. Clipboard transport timed out; native single-key input entered
+the fixture prompt `a`. No provider-backed prompt was sent.
+
+Native Send created task `badde4f1-fe70-4e14-86b2-6d9ed7afe62a` with one running
+fixture turn, but produced two worktrees: first `bf5cd622-a559-40e3-b5c1-85b8584a504f`
+on `synara/97f932d5`, then the task-named worktree on its `cedia/task-...` branch.
+The final receipt said `dirtyCopy: { mode: "all", entries: [] }`. A direct byte
+assertion failed: unselected `drop.txt` contained `dirty drop not selected\n`,
+not `base drop\n`. Selected `keep.txt` contained its dirty bytes. This is a failed
+native Send acceptance result, not a pass inferred from the earlier picker test.
+
+The runner subsequently created its separate HTTP-route task
+`14ac49a8-123d-478e-b02c-22474d9953aa`; that route still copied only `keep.txt` and
+left `drop.txt` at base. Its `result.json` therefore passes only the original
+observation/route scope, not the additional native Send. Provider requests and
+renderer exceptions were both zero. Native Stop and Quit confirmed shutdown of
+the extra held fixture task; the runner exited 0 and retained its scratch state
+for diagnosis. No user project or production session was changed.
+
+Durable [submitted native task capture](native-send-before-fix.png) and
+[original observation/route result](native-send-diagnostic-route-result.json).
+The latter's `ok: true` applies only to the separately created route task, not
+the failed native selected-file Send described above.
+
+## Native worktree Send correction and reproof — 2026-09-30
+
+The failure had two distinct causes: the inherited renderer flow pre-created a
+temporary Synara worktree before the CEDIA host created its own task worktree;
+persisted/shared draft normalization also omitted `dirtyFiles`. The OMP draft
+path now lets the host own worktree creation, preserves selected paths and an
+explicit empty selection across hydration, and reads the latest draft selection
+immediately before promotion. The adapter projects the host workspace back to the
+renderer. Setup and turn dispatch require a matching absolute host worktree/cwd,
+a task branch, and a path different from the source checkout.
+
+Cancel/Work locally choices are consumed before creation and before setup.
+After host creation, failures retain the durable task/worktree; a late Work
+locally choice explicitly refuses this Send rather than pretending the host cwd
+changed. Independent source review found no remaining material issue in that
+flow. The generic non-OMP worktree path is unchanged.
+
+Revision: `b848dd51cdb` plus the local production diff (SHA-256
+`51502bb60d4775998862e546c95d378a11092e241c521c55295e3b8c29ae92cc`, covering
+`cedia-adapter.ts`, `ChatView.logic.ts`, `useChatTurnExecution.ts`,
+`composerDraftDomain.ts`, and `composerDraftPersistence.ts`). Package stamp:
+`2026-09-30T04:25:38.600Z`; Agent Window asset receipt:
+`3e00a051bb69ed7b0d53cf997a42b9670b3186fb0f36e32651350154a14f959d`.
+The package build and all 12 packaged checks passed. A post-freeze two-expression
+path fallback change was discarded, restoring the exact reviewed production
+source used for this package; test-only additions do not change the package.
+
+Run: `dist/task-controls-packaged-proof/2026-09-30T04-28-28-187Z/`, using
+`CEDIA_TASK_CONTROLS_NATIVE_SEND=1` and CUA. The enhanced gate creates no separate
+route task in this mode. The scratch app used isolated state and the reviewed
+Login Item shim; no production profile, Keychain, or provider-backed turn was used.
+
+Native CUA observed the pending-model label again, created one dirty-project
+draft, chose Worktree from `main`, entered `a`, unchecked `drop.txt`, and entered
+`b`. AX retained `1 of 2` after that prompt edit. One native Send submitted `ab`.
+AX then showed the running fixture turn and branch
+`cedia/task-bc573f65-d128-4c8a-b68f-29ca7244267a`.
+
+The structured gate passed all assertions: exactly one additional task, one
+running/completed submitted turn (native AX observed running), one additional
+worktree, no temporary Synara worktree, task cwd matching that worktree, and the
+selected `main` commit `d904f3adae950c9d79acaa929205ef3003047a55`.
+The dirty-copy receipt contains only applied `keep.txt`; its dirty bytes are
+present, `drop.txt` remains `base drop\n`, and both source dirty files remain
+unchanged. Provider requests and renderer exceptions are zero. Cleanup stopped
+the fixture tasks, closed the app/host, retained diagnostic state, and exited 0.
+
+Durable evidence: [native submitted task](native-send-fixed.png),
+[complete native-mode result](native-send-fixed-result.json), and
+[worktree/file assertions](native-send-fixed-files.json).
+
+Fresh focused tests passed 76/76 (254 assertions), including adapter projection,
+selected/empty dirty-file persistence and negative proof-gate cases. Root and
+Agent Window typechecks passed. Attempted full-ChatView browser cases could not
+execute: the existing suite imports the absent `src/test/effectRpcWebSocketMock`
+helper and has no general browser config. A temporary config confirmed the
+missing-helper failure before tests. The temporary config and unvalidated new
+browser cases were removed; this change retains the executable focused tests.
+Cancellation/readback cases therefore have source-review coverage, not claimed
+browser runtime acceptance.
+
+This closes the reproduced native selected-file Send defect with fixture OMP.
+It does not certify provider-backed turn semantics, a real macOS login cycle,
+all D/F rows, or any excluded W/N/Tailscale/iPhone work. This continuation is
+uncommitted; the earlier checkpoint and Draft PR are unchanged.
+
+### Broader verification remains open
+
+The default root suite reported 1,451 passes and one five-second model-role
+persistence timeout. Its four-test file passed with a 60-second test budget
+(runtime startup took 5.2–6.7 seconds, persistence 7.9 seconds). No production
+timeout or assertion was weakened. A second full run with `--timeout 60000`,
+overlapping build/UI verification, reported 1,448 passes and four failures in Git
+round trips, version-probe responsiveness, and real owner attachment. The two Git
+cases and version-probe case passed when isolated. Owner attachment first failed
+with `owner did not answer in time`, then passed alone (27 assertions).
+
+A final full run without overlapping build/UI work still observed an owner
+read-client attachment failure at `omp-owner-attach.test.ts:437`. Before its
+terminal summary could be retained, the repository's entire `dist/` directory
+disappeared outside this task's actions, including the redirected test log. That
+run exited 1; no final pass count is claimed. Further builds/tests were paused
+pending coordination with the owner about possible concurrent cleanup. The
+native artifacts copied into this evidence directory before that event survive.
+This receipt does not claim a green full suite or diagnose the intermittent
+owner-attachment failure as fixed.
+
+### Resume after cleanup and disk-aware verification — 2026-09-30
+
+The owner confirmed cleanup had ended and authorized continuation, asking that
+free space be checked. The data volume initially had 48 GiB available. No user
+files, caches, old builds, or scratch applications were deleted by this follow-up.
+The persistent app occupies approximately 1.4 GB; no new app copy or full app
+package was built. Final free space was approximately 44 GiB, adequate for this
+bounded verification; subsequent full builds should recheck capacity first.
+The final OS reading also reported approximately 6.5 GiB of swap in use, so
+avoiding concurrent heavy builds/test suites remains useful for memory pressure
+as well as disk growth. This observation does not establish the cause of the
+earlier intermittent failures.
+
+The packaged OMP binary passed the formerly intermittent real-owner test four
+consecutive times without changing its two-second internal probe deadlines.
+A serial full suite using that binary reported 1,451 passes and one failure:
+`cli-launcher.test.ts:179` deliberately clears runtime overrides and requires
+`dist/omp/omp`, which cleanup had removed. Its actual result was `undefined`.
+
+`bun run prepare:omp` restored the development launcher and build receipts through
+the normal verified preparation path. Cargo reused its 3.4 GB target directory
+and downloaded missing dependency cache entries; the recreated `dist/` itself
+was only 12 KB. The prepared runtime attestation passed for source revision
+`fc671eba383f2a7208500836673b485c0dc7073d`, source tree
+`cf54f5c95b75442ea9c131c0405f10923fc5b8b1`, and launcher SHA-256
+`f78a41a46ca6f76240f4e0c6c07dcc9b6537823babbe97cc5872cdc435a1c107`.
+
+Fresh serial verification, without an OMP binary override:
+
+```sh
+bun test packages/omp-adapter packages/relay apps/host apps/macos/test scripts/lib --timeout 60000
+```
+
+Result: **1,452 pass, 0 fail, 8,636 assertions across 173 files**, exit 0 in
+65.46 seconds. The real-owner record/read-client case passed in 761.51 ms and the
+restored default-launcher lookup passed. The 60-second budget belongs only to the
+test runner; production connection deadlines, assertions and source code were
+not changed. Focused native-proof/adapter/dirty-picker tests also passed 76/76,
+254 assertions. The [retained full-run log](root-tests-after-cleanup.log) has SHA-256
+`fb27780c8abd21090e0beaa84f05008c9ec65075d515d5557b70910371f03217`.
+
+The current full suite is green. Earlier intermittent owner failures are not
+claimed permanently fixed: source tracing identified bounded handshake/read
+deadlines and runtime startup/queue timing as investigation points, not a proven
+root cause. No speculative timeout increase or retry was introduced. The prior
+native Send receipt remains qualified at its recorded package revision. Full
+D/F acceptance, real login/device/excluded remote work, and publication of these
+uncommitted changes remain separate.
+
+### Executable worktree Send hook coverage — 2026-09-30
+
+The earlier source-review-only cancellation/readback limitation above is now
+partially closed by a dedicated Chrome-headless hook suite. It mounts the real
+`useChatTurnExecution` hook and uses the real promotion and resolution helpers,
+without importing the broken full-ChatView browser harness. Native API, stores,
+attachments and setup execution are controlled fixtures; this is executable hook
+coverage, not a native UI or real-host cancellation receipt.
+
+Eight cases pass: canonical host worktree success for selected `keep.ts` and
+explicit carry-none `[]`; Cancel before creation; late Cancel and Work locally
+while host readback is deferred; and null, rejected or noncanonical readback.
+Failure cases await the completed false result before checking no setup, turn,
+task deletion or worktree removal, and check prompt restoration. Setup is enabled
+in the negative fixtures so its absence is meaningful. Success checks ensure the
+generic renderer worktree creator is skipped and setup receives the canonical
+host cwd. A separate read-only review found no material defects in the harness.
+
+Run from `apps/macos/agent-window/vendor/synara/apps/web`:
+
+```sh
+bunx vitest run --config vitest.worktree-send.config.ts
+```
+
+Fresh result: **8 passed, 0 failed**, one file, exit 0 in 2.31 seconds using
+Vitest 4.1.11 and installed Chrome. The [browser log](worktree-send-hook-browser.log)
+has SHA-256 `bd40460a338510931076c5d39212112121ff170e1489447e549a4fea5092b668`.
+The initial runner-root/dependency resolution and harness-mount/promise errors
+were corrected in test code/config only. The log retains a Node deprecation
+warning; no passing tests are inferred from those failed setup attempts.
+Browser test files are excluded from the existing vendor typecheck; no new
+typecheck coverage is claimed. Focused Bun checks also passed 76/76, 254 assertions.
+
+The five production-file diff hash remains
+`51502bb60d4775998862e546c95d378a11092e241c521c55295e3b8c29ae92cc`:
+no production change or new app package was needed. Disk space was approximately
+44 GiB after verification. Only this run's failed-harness screenshots were moved
+to `/tmp/cedia-worktree-hook-diagnostics.Rbk3fm` (recoverable); no user files or
+caches were deleted. These additions are uncommitted and the checkpoint PR is
+unchanged. The next bounded local candidate is live queue-panel Drop last
+interaction; existing backend queue smoke and static markup checks do not prove
+that UI action. Full D/F and excluded remote/device acceptance remain separate.
+
+### Live queue-panel Drop last — 2026-09-30
+
+The bounded queue-panel gap above now passes via
+`bun scripts/omp-queue-smoke.ts --browser`. The opt-in harness serves the existing
+Mac package's Agent Window assets in headless Chrome, connects the production
+adapter/handler to an isolated real host and OMP 18.4.3, opens Task controls, and
+clicks the actual Drop last button. The active turn and queued follow-up are
+seeded through the host, not through composer Send; this does not qualify
+composer enqueue behavior or native Electron/window acceptance.
+
+The final run at `2026-09-30T05-30-29.037Z` exited 0. It observed the exact queued
+text, one successful UI drop attempt, Dropped text and Nothing queued. Fresh host
+readback confirmed both queues empty, the dropped intent `cancelled`, and the
+original held turn still `running`. The loopback model fixture received exactly
+one request; no external provider was used. Renderer errors were empty. The
+shipped entry-script SHA-256 was
+`78d0d8e1e2a1a64845bb4247a8a4fcd9101bfd05753360d5c5a5328b4b4aa888`.
+No app package was rebuilt or launched and no Keychain operation was used.
+
+Evidence: [before drop](queue-before-drop.png), [after drop](queue-after-drop.png),
+[structured result](queue-browser-result.json), and [complete run log](queue-browser.log).
+The initial run timed out because Task controls was collapsed. Review also found
+the initial handler omitted its explicit fixture state directory, allowing its
+theme/draft-cache access to fall back to the user's default directory. That run
+is not an isolation receipt; no claim is made that it never accessed default UI
+state. The corrected final run passes the fixture directory to both gateway and
+handler. Review's remaining findings (count attempts before awaiting results;
+load Playwright before acquiring a listener) were corrected and re-reviewed.
+
+Root typecheck passed, and the queue adapter/surface/turn-state tests passed
+10/10 with 31 assertions. Only test/proof code and documentation changed in this
+slice. Free space was approximately 42 GiB. Successful fixture directories were
+removed by the smoke's existing cleanup; screenshots and logs above are retained.
+The failed run's diagnostic scratch data was not purged. No new commit/push was
+performed. Full D/F acceptance and excluded remote/device work remain open.
+
+### Composer enqueue to OMP and Drop last — 2026-09-30
+
+The owner approved continuing the composer-driven queue scenario and a follow-up
+checkpoint. Testing the existing package exposed a real integration gap: after
+the first Send was acknowledged, Enter on a follow-up created a Synara
+renderer-local queued row, not an OMP follow-up. Only one native turn dispatch
+was recorded. [Failure diagnostics](composer-queue-before-fix.json) and the
+[failure screenshot](composer-queue-before-fix.png) preserve this result.
+An earlier harness attempt pressed Enter before the first dispatch settled and
+left text in the composer; the retained reproduction waits for dispatch
+settlement, the Stop button and cleared composer before entering the follow-up.
+
+The bounded production fix bypasses the renderer-local chat queue for OMP only,
+using the existing execution hook and adapter's `follow_up` dispatch. Other
+providers retain their existing queue. Review identified a second effect:
+optimistic transcript insertion left a normal user bubble after a queued prompt
+was dropped. The extended proof [failed with two copies](composer-queue-optimistic-red.log)
+before the fix. Live OMP queue submissions now omit optimistic transcript
+insertion and its tail anchor; the OMP queue receipt represents acceptance, and
+an eventual durable user echo still supplies real transcript history.
+
+Build the frontend with `bun run --cwd apps/macos/agent-window build`, then run:
+
+```sh
+CEDIA_QUEUE_UI_ASSETS=/Users/pond/cedia/dist/agent-window bun scripts/omp-queue-smoke.ts --composer
+```
+
+Final run `2026-09-30T05-50-47.998Z` exited 0: exactly two composer submissions,
+host states running/queued, exact Drop last receipt, dropped intent cancelled,
+fresh empty queues, original turn still running, Stop still visible, and dropped
+text only in Drop history rather than the transcript. One loopback model request
+and zero renderer errors were recorded. Evidence: [result](composer-queue-fixed-result.json),
+[log](composer-queue-fixed.log), [final screen](composer-queue-fixed.png).
+The rebuilt frontend entry SHA-256 is
+`41344f5ef6dd24dbd4c82538aa45f9eaee2ac6be79a8659a24540b796a51f2c7`.
+
+This is a source-built frontend/real-host/OMP proof in headless Chrome, **not** a
+repackaged native application proof. The installed package still needs this queue
+fix incorporated and native qualification. Multiple pending entries, subsequent
+queue execution and attachment-specific lifecycle are not qualified by this
+plain-text cancellation scenario. Root and Agent Window typechecks pass; Agent
+Window tests pass 424/424 (1,532 assertions). Build warnings about chunk sizes
+and Node's deprecated module registration remain, without build failure.
+Review of the follow-up fix found no remaining material findings in this slice.
+Disk space after the frontend-only build was approximately 41 GiB. No provider
+credential, Keychain, native app launch, deployment or excluded device work was
+used. The checkpoint retains prior worktree fixes, both queue proof stages and
+these qualifications; unrelated monochrome artwork remains outside it.

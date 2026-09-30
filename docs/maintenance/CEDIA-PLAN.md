@@ -5932,7 +5932,34 @@ deletions so dead code is not carried across.
     Send/edit (one prompt; revision 2 preserved), catalog add/remove, and shared draft
     edits, legacy-copy preservation and restart/readback. Native Appearance retained
     Spacious/Wide after restart. Native pending-model/dirty-picker observations and a
-    separate selected-file carry route also pass; no native worktree Send is claimed.
+    separate selected-file carry route also pass. Post-checkpoint native worktree Send
+    on `b848dd51cdb` exposed lost selected files and duplicate worktrees. The local
+    correction and package `2026-09-30T04:25:38.600Z` now pass that native Send:
+    one task/turn/worktree, selected-file bytes only, source preserved, zero provider
+    calls and renderer exceptions. The local Mac receipt retains both failed and
+    passing evidence; this is fixture OMP, not full provider-backed acceptance.
+    After owner-authorized cleanup, standard runtime preparation restored the
+    missing development launcher. A fresh serial root suite passes 1,452/1,452
+    with a 60-second test-runner budget; production deadlines are unchanged.
+    Earlier intermittent owner-attachment failures are not claimed permanently
+    fixed. Disk-aware verification ended with approximately 44 GiB available;
+    no further app package/copy was required. See the same local Mac receipt.
+    A dedicated Chrome-headless Send-hook suite now passes eight selected-file,
+    carry-none, cancellation and invalid-host-readback cases. It uses the real
+    hook with controlled host/store fixtures, not full native UI acceptance;
+    production source and the qualified package are unchanged. The same receipt
+    retains the command, limits and browser log. Live queue-panel Drop last now
+    also passes with shipped assets in headless Chrome against isolated real
+    host/OMP: exact removed text, empty queue readback, cancelled queued intent,
+    active turn still running and only one loopback model request. Queue setup
+    was host-driven; composer enqueue and native-window acceptance are not
+    claimed by that first queue receipt. A subsequent composer-driven proof
+    exposed renderer-local OMP follow-ups; source now sends them to OMP and
+    avoids optimistic transcript bubbles for queued submissions. Fresh source
+    frontend/real-host verification passes two composer submissions and Drop
+    last without a ghost bubble or extra model request. The installed package
+    has not yet incorporated/requalified this queue fix. The same receipt
+    retains failures, screenshots, result, command and remaining limitations.
     The final `2026-09-30T03:15:47.176Z` package includes readiness-before-discovery,
     a single RPC stdout writer, scoped owner survival after stdout disconnect, and
     raw-string settings-editor hydration. Its real native OMP settings stale-write /

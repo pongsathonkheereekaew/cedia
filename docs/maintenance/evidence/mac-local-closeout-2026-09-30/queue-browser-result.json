@@ -1,0 +1,22 @@
+{
+  "body": {
+    "state": "available",
+    "revision": 7,
+    "steering": [],
+    "followUp": [],
+    "dropped": [
+      {
+        "text": "drop this queued local submission",
+        "truncated": false,
+        "images": 0
+      }
+    ]
+  },
+  "commandId": "fe4eb6c2-6c40-4d8a-be48-8f2590a8745c",
+  "output": "/Users/pond/cedia/dist/queue-browser-proof/2026-09-30T05-30-29.037Z",
+  "assetSha256": "78d0d8e1e2a1a64845bb4247a8a4fcd9101bfd05753360d5c5a5328b4b4aa888",
+  "errors": [],
+  "ok": true,
+  "modelHits": 1,
+  "intentState": "cancelled"
+}

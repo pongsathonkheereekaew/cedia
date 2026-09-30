@@ -1,0 +1,68 @@
+{
+  "ok": true,
+  "proof": "packaged-task-controls-observation",
+  "stagedAppPath": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-native-send.Ul7zrlG8Ye/Cedia.app",
+  "stateDir": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-eo6PsZ/s",
+  "projects": {
+    "pending": "9dbd9507-15d2-4ad5-b10f-3060157ee01d",
+    "dirty": "b97e6c8e-d7ef-4959-a24c-fdd92fd68800"
+  },
+  "pendingModel": {
+    "revision": 1,
+    "state": "awaiting",
+    "label": "awaiting OMP · fixture/fixture-model-2",
+    "nativeGate": {
+      "enabled": true,
+      "readyPath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/pending-model-ready.json",
+      "releasePath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/pending-model-release",
+      "releasedAt": "2026-09-30T03:50:37.846Z",
+      "screenshots": [
+        "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/pending-model-window-0.png"
+      ],
+      "semanticClaim": "operator-observed-only"
+    }
+  },
+  "dirtyCopy": {
+    "sessionId": "14ac49a8-123d-478e-b02c-22474d9953aa",
+    "worktree": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/c-tc-eo6PsZ/s/worktrees/14ac49a8-123d-478e-b02c-22474d9953aa",
+    "baseCommit": "ba10ec96bcbab2f55777149f8e12dc44eb165cc9",
+    "dirtyCopy": {
+      "mode": "selected",
+      "entries": [
+        {
+          "path": "keep.txt",
+          "state": "applied"
+        }
+      ]
+    }
+  },
+  "nativeGates": {
+    "pendingModel": {
+      "enabled": true,
+      "readyPath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/pending-model-ready.json",
+      "releasePath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/pending-model-release",
+      "releasedAt": "2026-09-30T03:50:37.846Z",
+      "screenshots": [
+        "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/pending-model-window-0.png"
+      ],
+      "semanticClaim": "operator-observed-only"
+    },
+    "dirtyWorktree": {
+      "enabled": true,
+      "readyPath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/dirty-worktree-ready.json",
+      "releasePath": "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/dirty-worktree-release",
+      "releasedAt": "2026-09-30T03:55:37.635Z",
+      "screenshots": [
+        "/Users/pond/cedia/dist/task-controls-packaged-proof/2026-09-30T03-49-35-437Z/dirty-worktree-window-0.png"
+      ],
+      "semanticClaim": "operator-observed-only"
+    }
+  },
+  "providerRequests": 0,
+  "semanticAcceptance": "not-claimed-by-fixture-or-DOM-automation",
+  "limitations": [
+    "The host route and selected copy are real provider-free assertions.",
+    "Native gates are operator-observed screenshots only; they do not claim full §11.1 semantic acceptance.",
+    "The held fake-host turn is not a provider-backed model turn."
+  ]
+}

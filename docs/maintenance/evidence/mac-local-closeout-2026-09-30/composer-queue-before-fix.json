@@ -1,0 +1,30 @@
+{
+  "error": "TimeoutError: waitForFunction: Timeout 20000ms exceeded.",
+  "errors": [],
+  "browser": {
+    "text": "Cedia\nNew thread\nProjects\nQueue smoke\nQueue smoke\nChats\nNo chats yet\nSettings\nQueue smoke\nHand off\nAdd action\nIDE\n\nhold this local request while the queue drop is tested\n\n12:45 PM\n\nWorking for 20s\nThinking\nTask controls\n\ndrop this queued local submission\n\nSteer\n\n\n\n\nAsk for follow-up changes\nAsk for approval\nCedia queue smoke fixture\nPause\n\nEnvironment\n\nChanges\nLocal\nSelect branch\nCommit and Push\nCompare branch\n\nSubagents\n\nNo subagents in this task\n\nSources\n\nSources added to messages appear here\n\nLocal Servers\n0\n\nEditor\n\nOpen in Cedia IDE\nTerminal\nBrowser\nFiles\nSide chats\niOS Simulator\nhost · live\nmodel · cedia-queue-fixture/cedia-queue-fixture-model\nqueue · running cedia-queue-fixture/cedia-queue-fixture-model\nsession · running\nbranch · —\nToggle Sidebar",
+    "submissions": [
+      {
+        "type": "thread.turn.start",
+        "commandId": "1b2db997-c397-410b-a745-76495393c456",
+        "threadId": "83f4791c-194c-45b2-b07b-75e1a6325fde",
+        "message": {
+          "messageId": "11294934-c2c9-4c60-af7e-65bf3ac68a3c",
+          "role": "user",
+          "text": "hold this local request while the queue drop is tested",
+          "attachments": []
+        },
+        "modelSelection": {
+          "provider": "omp",
+          "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+        },
+        "assistantDeliveryMode": "streaming",
+        "dispatchMode": "queue",
+        "runtimeMode": "approval-required",
+        "interactionMode": "default",
+        "createdAt": "2026-09-30T05:45:01.287Z",
+        "proofSettled": true
+      }
+    ]
+  }
+}

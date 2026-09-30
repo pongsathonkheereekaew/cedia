@@ -7,7 +7,11 @@
  * durable command, and remain owner-only. The model fixture never answers, so no provider request
  * can complete during this run.
  *
- * Run: bun scripts/omp-queue-smoke.ts
+ * Run: bun scripts/omp-queue-smoke.ts [--browser | --composer]
+ * --browser uses the existing Mac package assets in headless Chrome to click Drop last;
+ * queue setup remains host-driven, not composer-submit acceptance.
+ * --composer submits both prompts from the real composer before clicking Drop last.
+ * CEDIA_QUEUE_UI_ASSETS selects a freshly built frontend instead of package assets.
  */
 import { createServer, type Server } from "node:http";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
@@ -16,6 +20,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { OMP_BASELINE_VERSION, OmpRpcClient, isSupportedOmpVersion } from "../packages/omp-adapter/src/index.ts";
 import { startHostServer } from "../apps/host/src/server.ts";
+import { dropQueueThroughBrowser } from "./lib/queue-browser-proof.ts";
 
 function check(value: unknown, message: string): asserts value {
 	if (!value) throw new Error(`OMP queue smoke failed: ${message}`);
@@ -171,6 +176,10 @@ try {
 		payload: { provider: "cedia-queue-fixture", modelId: "cedia-queue-fixture-model" },
 	});
 	check(["completed", "acknowledged"].includes(model.status), "the held-turn fixture model is accepted by OMP");
+	const composerMode = process.argv.includes("--composer");
+	let runningCommandId = "queue-smoke-running-turn";
+	let queuedCommandId = "queue-smoke-follow-up";
+	if (!composerMode) {
 	await started.host.command(session.id, "owner", {
 		commandId: "queue-smoke-running-turn",
 		incarnation,
@@ -199,8 +208,23 @@ try {
 	const queuedBody = record(queued.body, "queued queue body");
 	const followUpRows = Array.isArray(queuedBody.followUp) ? queuedBody.followUp : [];
 	check(queued.status === 200 && followUpRows.some(row => record(row).text === "drop this queued local submission"), "the host projects the queued text from OMP");
+	}
 
-	const liveDrop = await started.router({
+	const browserProof = (process.argv.includes("--browser") || composerMode) ? await dropQueueThroughBrowser({
+		root: resolve(import.meta.dir, ".."), stateDir: hostStateDir,
+		sessionTitle: session.title, queuedText: "drop this queued local submission",
+		...(composerMode ? { composer: {
+			firstText: "hold this local request while the queue drop is tested",
+			onSubmitted: async (commandId: string, phase: "running" | "queued") => {
+				if (phase === "running") runningCommandId = commandId; else queuedCommandId = commandId;
+				const deadline = Date.now() + 20_000;
+				while ((started.host.store.getTurnIntentByCommand(session.id, commandId)?.state !== phase || modelHits !== 1) && Date.now() < deadline) await new Promise(resolveWait => setTimeout(resolveWait, 25));
+				check(started.host.store.getTurnIntentByCommand(session.id, commandId)?.state === phase, `composer submission is ${phase} in host`);
+				check(modelHits === 1, "composer uses only one held local model request");
+			},
+		} } : {}),
+	}) : null;
+	const liveDrop = browserProof ? { status: 200, body: browserProof.body } : await started.router({
 		method: "POST",
 		path: `/v1/sessions/${session.id}/queue/drop`,
 		token: owner,
@@ -209,12 +233,20 @@ try {
 	const liveDropBody = record(liveDrop.body, "live drop body");
 	const droppedRows = Array.isArray(liveDropBody.dropped) ? liveDropBody.dropped : [];
 	check(liveDrop.status === 200 && droppedRows.some(row => record(row).text === "drop this queued local submission"), "the live drop returns the exact submission removed by OMP");
-	check(started.host.store.getTurnIntentByCommand(session.id, "queue-smoke-follow-up")?.state === "cancelled", "the host settles the dropped intent as cancelled");
+	check(started.host.store.getTurnIntentByCommand(session.id, queuedCommandId)?.state === "cancelled", "the host settles the dropped intent as cancelled");
 	check(!JSON.stringify(liveDrop.body).includes("droppedIntentIds"), "internal turn identities are not exposed in the queue response");
-	const liveDropReceipt = started.host.store.getCommand(session.id, "queue-smoke-drop-live");
-	check(!JSON.stringify(liveDropReceipt?.ack).includes("queue-smoke-follow-up"), "the durable drop receipt omits internal turn identities");
+	const liveDropReceipt = started.host.store.getCommand(session.id, browserProof?.commandId ?? "queue-smoke-drop-live");
+	check(!!liveDropReceipt, "the drop has a durable host command receipt");
+	const afterDrop = record((await started.router({ method: "GET", path: `/v1/sessions/${session.id}/queue`, token: owner })).body);
+	check(afterDrop.state === "available" && Array.isArray(afterDrop.steering) && afterDrop.steering.length === 0 && Array.isArray(afterDrop.followUp) && afterDrop.followUp.length === 0, "fresh host readback confirms both queues are empty");
+	check(started.host.store.getTurnIntentByCommand(session.id, runningCommandId)?.state === "running", "dropping the queued submission does not falsely complete the active turn");
+	check(!JSON.stringify(liveDropReceipt?.ack).includes(queuedCommandId), "the durable drop receipt omits internal turn identities");
 	await new Promise(resolveWait => setTimeout(resolveWait, 100));
 	check(modelHits === 1, "dropping the queued turn does not submit another provider request");
+	if (browserProof) {
+		await writeFile(join(browserProof.output, "result.json"), JSON.stringify({ ...browserProof, ok: true, modelHits, composerMode, intentState: started.host.store.getTurnIntentByCommand(session.id, queuedCommandId)?.state }, null, 2));
+		console.log(`Browser proof: ${browserProof.output}`);
+	}
 
 	const notOwner = await started.router({ method: "GET", path: `/v1/sessions/${session.id}/queue` });
 	check(notOwner.status === 401 || notOwner.status === 403, `the queue routes are owner-only (${notOwner.status})`);

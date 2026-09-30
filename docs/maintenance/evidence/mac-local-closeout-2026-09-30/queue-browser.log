@@ -1,0 +1,33 @@
+OK   OMP runtime is present at /Users/pond/cedia/dist/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+OK   the active turn reached only the local held HTTP fixture
+OK   OMP names the active turn as running
+OK   OMP accepts the follow-up as a queued turn intent
+OK   the host projects the queued text from OMP
+OK   the live drop returns the exact submission removed by OMP
+OK   the host settles the dropped intent as cancelled
+OK   internal turn identities are not exposed in the queue response
+OK   the drop has a durable host command receipt
+OK   fresh host readback confirms both queues are empty
+OK   dropping the queued submission does not falsely complete the active turn
+OK   the durable drop receipt omits internal turn identities
+OK   dropping the queued turn does not submit another provider request
+Browser proof: /Users/pond/cedia/dist/queue-browser-proof/2026-09-30T05-30-29.037Z
+OK   the queue routes are owner-only (401)
+{
+  "ok": true,
+  "version": "omp/18.4.3"
+}

@@ -8,6 +8,10 @@ import {
   WorktreeDirtyFileList,
 } from "../vendor/synara/apps/web/src/components/WorktreeDirtyFilePicker";
 import { buildDraftThreadState } from "../vendor/synara/apps/web/src/composerDraftDomain";
+import {
+  normalizeCurrentPersistedComposerDraftStoreState,
+  partializeComposerDraftStoreState,
+} from "../vendor/synara/apps/web/src/composerDraftPersistence";
 
 const files = [
   { path: "hello.txt", insertions: 3, deletions: 1 },
@@ -92,5 +96,44 @@ describe("dirty-file selection reaches the send pipeline", () => {
       null,
     );
     expect(thread.dirtyFiles).toEqual(["hello.txt"]);
+  });
+
+  it("persists selected and carry-none choices across the shared draft round trip", () => {
+    const state = {
+      draftsByThreadId: {},
+      draftThreadsByThreadId: {
+        [threadId]: buildDraftThreadState({
+          projectId: "project-1" as never,
+          options: {
+            branch: "feature",
+            envMode: "worktree",
+            dirtyFiles: ["hello.txt"],
+          },
+          createdAtMode: "preserve-existing-on-empty",
+        }),
+        [ThreadId.makeUnsafe("draft-none")]: buildDraftThreadState({
+          projectId: "project-1" as never,
+          options: {
+            branch: "feature",
+            envMode: "worktree",
+            dirtyFiles: [],
+          },
+          createdAtMode: "preserve-existing-on-empty",
+        }),
+      },
+      projectDraftThreadIdByProjectId: {},
+      stickyModelSelectionByProvider: {},
+      stickyActiveProvider: null,
+    } as never;
+
+    const persisted = partializeComposerDraftStoreState(state);
+    const hydrated = normalizeCurrentPersistedComposerDraftStoreState(
+      JSON.parse(JSON.stringify(persisted)),
+    );
+
+    expect(hydrated.draftThreadsByThreadId[threadId]?.dirtyFiles).toEqual(["hello.txt"]);
+    expect(hydrated.draftThreadsByThreadId[ThreadId.makeUnsafe("draft-none")]?.dirtyFiles).toEqual(
+      [],
+    );
   });
 });

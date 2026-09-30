@@ -774,7 +774,7 @@ export function buildLocalDraftThread(
     branch: draftThread.branch,
     worktreePath: draftThread.worktreePath,
     workingDirectory: draftThread.workingDirectory ?? null,
-    dirtyFiles: draftThread.dirtyFiles ?? null,
+    dirtyFiles: draftThread.dirtyFiles ? [...draftThread.dirtyFiles] : null,
     lastKnownPr: draftThread.lastKnownPr ?? null,
     handoff: null,
     turnDiffSummaries: [],

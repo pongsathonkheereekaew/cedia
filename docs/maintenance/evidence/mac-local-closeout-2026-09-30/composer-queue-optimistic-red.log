@@ -1,0 +1,30 @@
+OK   OMP runtime is present at /Users/pond/cedia/dist/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+OK   composer submission is running in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+108 |       await panel.getByRole("region", { name: "Dropped queue submissions", exact: true }).getByText(input.queuedText, { exact: true }).waitFor({ timeout: 20_000 });
+109 |       await panel.getByText("Nothing queued", { exact: true }).waitFor({ timeout: 20_000 });
+110 |       if (input.composer) await page.getByRole("button", { name: "Stop generation", exact: true }).waitFor({ timeout: 20_000 });
+111 |       if (input.composer) {
+112 |         const visibleCopies = await page.getByText(input.queuedText, { exact: true }).count();
+113 |         if (visibleCopies !== 1) throw new Error(`Dropped prompt remains outside queue history (${visibleCopies} copies)`);
+                                                 ^
+error: Dropped prompt remains outside queue history (2 copies)
+      at dropQueueThroughBrowser (/Users/pond/cedia/scripts/lib/queue-browser-proof.ts:113:44)
+
+Bun v1.4.2 (macOS arm64)

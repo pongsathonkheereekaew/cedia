@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 import {
 	NATIVE_GATE_TIMEOUT_MS,
 	applyLoginItemShim,
+	evaluateNativeSendProof,
 	formatPendingModelObservation,
+	resolveNativeSendMode,
 	validateStagedAppPath,
 } from "./omp-packaged-task-controls-proof.ts";
 
@@ -56,5 +58,125 @@ describe("packaged task-controls proof helpers", () => {
 		expect(patched).toContain("intercept-set-login-item");
 		expect(patched).toContain("simulated-login-state");
 		expect(() => applyLoginItemShim(source.replace("setLoginItemSettings", "setLoginItemSetting"))).toThrow(/reviewed Login Item/);
+	});
+
+	it("requires CUA before enabling the explicit native-send mode", () => {
+		expect(resolveNativeSendMode({})).toEqual({ requested: false, cuaEnabled: false, accepted: true, enabled: false });
+		expect(resolveNativeSendMode({ CEDIA_TASK_CONTROLS_NATIVE_SEND: "1" })).toEqual({ requested: true, cuaEnabled: false, accepted: false, enabled: false });
+		expect(resolveNativeSendMode({ CEDIA_TASK_CONTROLS_NATIVE_SEND: "1", CEDIA_TASK_CONTROLS_CUA: "1" })).toEqual({ requested: true, cuaEnabled: true, accepted: true, enabled: true });
+	});
+
+	it("accepts exactly one native task turn and one non-transient worktree with selected keep only", () => {
+		const proof = evaluateNativeSendProof({
+			beforeSessionIds: [],
+			sessions: [{
+				id: "task-1",
+				cwd: "/tmp/task-1",
+				workspace: {
+					mode: "worktree",
+					baseRef: "main",
+					sourceCommit: "base-commit",
+					dirtyCopy: { mode: "selected", entries: [{ path: "keep.txt", state: "applied" }] },
+				},
+				turns: [{ state: "running" }],
+			}],
+			beforeWorktrees: [{ path: "/tmp/project", branch: "main" }],
+			afterWorktrees: [
+			{ path: "/tmp/project", branch: "main" },
+			{ path: "/tmp/task-1", branch: "cedia/task-1" },
+			],
+			baseCommit: "base-commit",
+			sourceKeep: "dirty keep",
+			sourceDrop: "dirty drop",
+			worktreeKeep: "dirty keep",
+			worktreeDrop: "base drop",
+			expectedSourceKeep: "dirty keep",
+			expectedSourceDrop: "dirty drop",
+			expectedWorktreeKeep: "dirty keep",
+			expectedWorktreeDrop: "base drop",
+		});
+
+		expect(proof.ok).toBe(true);
+		expect(proof.sessionCount).toBe(1);
+		expect(proof.submittedTurnCount).toBe(1);
+		expect(proof.addedWorktreeCount).toBe(1);
+		expect(proof.transientWorktreeCount).toBe(0);
+		expect(proof.checks.selectedKeepOnly).toBe(true);
+		expect(proof.checks.sourcePreserved).toBe(true);
+		expect(proof.checks.worktreeFilesMatch).toBe(true);
+	});
+
+	it("rejects a native send that leaves a transient worktree or carries drop.txt", () => {
+		const proof = evaluateNativeSendProof({
+			beforeSessionIds: [],
+			sessions: [{
+				id: "task-1",
+				cwd: "/tmp/task-1",
+				workspace: {
+					mode: "worktree",
+					baseRef: "main",
+					sourceCommit: "base-commit",
+					dirtyCopy: { mode: "selected", entries: [
+						{ path: "keep.txt", state: "applied" },
+						{ path: "drop.txt", state: "applied" },
+					] },
+				},
+				turns: [{ state: "running" }],
+			}],
+			beforeWorktrees: [{ path: "/tmp/project", branch: "main" }],
+			afterWorktrees: [
+			{ path: "/tmp/project", branch: "main" },
+			{ path: "/tmp/synara", branch: "synara/1234abcd" },
+			{ path: "/tmp/task-1", branch: "cedia/task-1" },
+			],
+			baseCommit: "base-commit",
+			sourceKeep: "dirty keep",
+			sourceDrop: "dirty drop",
+			worktreeKeep: "dirty keep",
+			worktreeDrop: "dirty drop",
+			expectedSourceKeep: "dirty keep",
+			expectedSourceDrop: "dirty drop",
+			expectedWorktreeKeep: "dirty keep",
+			expectedWorktreeDrop: "base drop",
+		});
+
+		expect(proof.ok).toBe(false);
+		expect(proof.addedWorktreeCount).toBe(2);
+		expect(proof.transientWorktreeCount).toBe(1);
+		expect(proof.checks.selectedKeepOnly).toBe(false);
+		expect(proof.checks.worktreeFilesMatch).toBe(false);
+	});
+
+	it("does not treat an un-dispatched turn as a native submission", () => {
+		const proof = evaluateNativeSendProof({
+			beforeSessionIds: [],
+			sessions: [{
+				id: "task-1",
+				cwd: "/tmp/task-1",
+				workspace: {
+					mode: "worktree",
+					baseRef: "main",
+					sourceCommit: "base-commit",
+					dirtyCopy: { mode: "none", entries: [] },
+				},
+				turns: [{ state: "not_dispatched" }],
+			}],
+			beforeWorktrees: [{ path: "/tmp/project", branch: "main" }],
+			afterWorktrees: [{ path: "/tmp/project", branch: "main" }, { path: "/tmp/task-1", branch: "cedia/task-1" }],
+			baseCommit: "base-commit",
+			sourceKeep: "dirty keep",
+			sourceDrop: "dirty drop",
+			worktreeKeep: "dirty keep",
+			worktreeDrop: "base drop",
+			expectedSourceKeep: "dirty keep",
+			expectedSourceDrop: "dirty drop",
+			expectedWorktreeKeep: "dirty keep",
+			expectedWorktreeDrop: "base drop",
+		});
+
+		expect(proof.ok).toBe(false);
+		expect(proof.submittedTurnCount).toBe(0);
+		expect(proof.checks.oneSubmittedTurn).toBe(false);
+		expect(proof.checks.selectedKeepOnly).toBe(false);
 	});
 });
