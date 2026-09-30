@@ -16,68 +16,68 @@ inverted dark variant, and must remain legible at app-icon sizes. Trademark clea
 
 ## Artifacts
 
-- [Prototype board](../../../output/brand-prototypes/cedia-mark-2026-09-25/index.html)
-- [Contact sheet](../../../output/brand-prototypes/cedia-mark-2026-09-25/contact-sheet.svg)
-- [A — Shared aperture](../../../output/brand-prototypes/cedia-mark-2026-09-25/concepts/a-shared-aperture.svg)
-- [B — Guided fold](../../../output/brand-prototypes/cedia-mark-2026-09-25/concepts/b-guided-fold.svg)
-- [C — Fitted joint](../../../output/brand-prototypes/cedia-mark-2026-09-25/concepts/c-fitted-joint.svg)
-- [Refinement 02 board](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/index.html)
-- [Refinement 02 contact sheet](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/contact-sheet.svg)
-- [A — Guided aperture, round 2](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/concepts/a-guided-aperture.svg)
-- [B — Guided plane, round 2](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/concepts/b-guided-plane.svg)
-- [C — Workbench joint, round 2](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/concepts/c-workbench-joint.svg)
-- [AI brand language study, round 3](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/index.html)
-- [Round 3 preview image](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/preview.png)
-- [A — Grown signal](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/concepts/a-grown-signal.svg)
-- [B — Guided sail](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/concepts/b-guided-sail.svg)
-- [C — Tempered core](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/concepts/c-tempered-core.svg)
-- [Round 04 — ChatGPT × Factory monochrome study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/index.html)
-- [Round 04 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/preview.png)
-- [A — Counterweave](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/concepts/a-counterweave.svg)
-- [B — Precision crossing](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/concepts/b-precision-crossing.svg)
-- [C — Open circuit](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/concepts/c-open-circuit.svg)
-- [Round 05 — circular silhouette study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/index.html)
-- [Round 05 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/preview.png)
-- [A — Orbit link](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/concepts/a-orbit-link.svg)
-- [B — Soft lock](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/concepts/b-soft-lock.svg)
-- [C — Guided orbit](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/concepts/c-guided-orbit.svg)
-- [Round 06 — shared-core circular study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/index.html)
-- [Round 06 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/preview.png)
-- [A — Shared core](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/concepts/a-shared-core.svg)
-- [B — Guided weave](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/concepts/b-guided-weave.svg)
-- [C — Compact orbit](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/concepts/c-compact-orbit.svg)
-- [Round 07 — solid-orb draft (withdrawn after self-review)](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-07-solid-orb/index.html)
-- [Round 08 — three distinct solid silhouettes](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/index.html)
-- [Round 08 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/preview.png)
-- [A — Joined cells](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/concepts/a-joined-cells.svg)
-- [B — Keyed core](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/concepts/b-keyed-core.svg)
-- [C — Counterturn](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/concepts/c-counterturn.svg)
-- [Round 09 — twelve flat idea directions](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-sprint/index.html)
-- [Round 09 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-sprint/preview.png)
-- [Round 10 — eight CEDIA-native directions](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-10-cedia-native-ideas/index.html)
-- [Round 10 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-10-cedia-native-ideas/preview.png)
-- [Round 12 — AI category scan and CEDIA design definition](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/definition.md)
-- [Round 12 — six flat silhouette directions](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/index.html)
-- [Round 12 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/preview.png)
-- [01 — Splice](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/01-splice.svg)
-- [02 — Dovetail](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/02-dovetail.svg)
-- [03 — Bevel](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/03-bevel.svg)
-- [04 — Press](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/04-press.svg)
-- [05 — Bite](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/05-bite.svg)
-- [06 — Turn](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/06-turn.svg)
-- [Round 13 — Code + Aide studio study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/index.html)
-- [Round 13 preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/preview.png)
-- [Round 13 research and design definition](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/definition.md)
-- [01 — Syntax Seed](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/01-syntax-seed.svg)
-- [02 — Code Morph](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/02-code-morph.svg)
-- [03 — Fitted Aide](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/03-fitted-aide.svg)
-- [04 — Crafted Cut](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/04-crafted-cut.svg)
-- [05 — Folded Medium](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/05-folded-medium.svg)
-- [06 — Studio Stack](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/06-studio-stack.svg)
-- [07 — Guided Stroke](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/07-guided-stroke.svg)
-- [08 — Shifted Contour](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/08-shifted-contour.svg)
-- [Round 09 — eight-theme idea atlas (flat and volumetric)](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-atlas/index.html)
-- [Round 09 contact sheet](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-atlas/preview.png)
+- Prototype board (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/index.html`)
+- Contact sheet (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/contact-sheet.svg`)
+- A — Shared aperture (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/concepts/a-shared-aperture.svg`)
+- B — Guided fold (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/concepts/b-guided-fold.svg`)
+- C — Fitted joint (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/concepts/c-fitted-joint.svg`)
+- Refinement 02 board (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/index.html`)
+- Refinement 02 contact sheet (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/contact-sheet.svg`)
+- A — Guided aperture, round 2 (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/concepts/a-guided-aperture.svg`)
+- B — Guided plane, round 2 (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/concepts/b-guided-plane.svg`)
+- C — Workbench joint, round 2 (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-02/concepts/c-workbench-joint.svg`)
+- AI brand language study, round 3 (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/index.html`)
+- Round 3 preview image (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/preview.png`)
+- A — Grown signal (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/concepts/a-grown-signal.svg`)
+- B — Guided sail (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/concepts/b-guided-sail.svg`)
+- C — Tempered core (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-03-ai-brand-language/concepts/c-tempered-core.svg`)
+- Round 04 — ChatGPT × Factory monochrome study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/index.html`)
+- Round 04 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/preview.png`)
+- A — Counterweave (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/concepts/a-counterweave.svg`)
+- B — Precision crossing (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/concepts/b-precision-crossing.svg`)
+- C — Open circuit (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-04-chatgpt-factory-language/concepts/c-open-circuit.svg`)
+- Round 05 — circular silhouette study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/index.html`)
+- Round 05 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/preview.png`)
+- A — Orbit link (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/concepts/a-orbit-link.svg`)
+- B — Soft lock (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/concepts/b-soft-lock.svg`)
+- C — Guided orbit (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-05-circular-silhouette/concepts/c-guided-orbit.svg`)
+- Round 06 — shared-core circular study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/index.html`)
+- Round 06 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/preview.png`)
+- A — Shared core (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/concepts/a-shared-core.svg`)
+- B — Guided weave (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/concepts/b-guided-weave.svg`)
+- C — Compact orbit (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-06-shared-core/concepts/c-compact-orbit.svg`)
+- Round 07 — solid-orb draft (withdrawn after self-review) (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-07-solid-orb/index.html`)
+- Round 08 — three distinct solid silhouettes (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/index.html`)
+- Round 08 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/preview.png`)
+- A — Joined cells (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/concepts/a-joined-cells.svg`)
+- B — Keyed core (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/concepts/b-keyed-core.svg`)
+- C — Counterturn (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-08-solid-silhouettes/concepts/c-counterturn.svg`)
+- Round 09 — twelve flat idea directions (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-sprint/index.html`)
+- Round 09 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-sprint/preview.png`)
+- Round 10 — eight CEDIA-native directions (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-10-cedia-native-ideas/index.html`)
+- Round 10 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-10-cedia-native-ideas/preview.png`)
+- Round 12 — AI category scan and CEDIA design definition (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/definition.md`)
+- Round 12 — six flat silhouette directions (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/index.html`)
+- Round 12 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/preview.png`)
+- 01 — Splice (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/01-splice.svg`)
+- 02 — Dovetail (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/02-dovetail.svg`)
+- 03 — Bevel (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/03-bevel.svg`)
+- 04 — Press (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/04-press.svg`)
+- 05 — Bite (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/05-bite.svg`)
+- 06 — Turn (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-12-category-grounded/concepts/06-turn.svg`)
+- Round 13 — Code + Aide studio study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/index.html`)
+- Round 13 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/preview.png`)
+- Round 13 research and design definition (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/definition.md`)
+- 01 — Syntax Seed (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/01-syntax-seed.svg`)
+- 02 — Code Morph (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/02-code-morph.svg`)
+- 03 — Fitted Aide (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/03-fitted-aide.svg`)
+- 04 — Crafted Cut (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/04-crafted-cut.svg`)
+- 05 — Folded Medium (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/05-folded-medium.svg`)
+- 06 — Studio Stack (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/06-studio-stack.svg`)
+- 07 — Guided Stroke (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/07-guided-stroke.svg`)
+- 08 — Shifted Contour (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-13-code-aide-studio/concepts/08-shifted-contour.svg`)
+- Round 09 — eight-theme idea atlas (flat and volumetric) (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-atlas/index.html`)
+- Round 09 contact sheet (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-09-idea-atlas/preview.png`)
 
 ## Comments
 
@@ -259,7 +259,7 @@ selected. The scan is directional and does not establish trademark clearance.
 
 The owner rejected round 13 as incoherent. All recommendations from that round, including
 Code Morph and Guided Stroke, are withdrawn. The owner authorized a new silhouette exploration.
-[Round 14 contact sheet](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-14-monochrome-reset/preview.png)
+Round 14 contact sheet (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-14-monochrome-reset/preview.png`)
 contains nine black-on-white raster sketches generated with the built-in image tool, followed
 by a rendering correction to flatten shading and make the background opaque white.
 The prompt explores complementary masses, folding, modular assembly, negative space, and
@@ -282,7 +282,7 @@ four-part repetition and giving the internal seam a distinctive, intentional str
 ### Round 15 — development of 03 — 2026-09-25
 
 The owner authorized further exploration of 03. The
-[refinement sheet](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-15-fitted-geometry/preview.png)
+refinement sheet (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-15-fitted-geometry/preview.png`)
 uses the round 14 sheet as an image reference and develops only its selected 03 construction.
 Built-in image generation produced four monochrome raster studies: A uses unequal four-part
 assembly and a stepped diagonal passage; B uses three masses; C uses two masses with one
@@ -299,7 +299,7 @@ Observation: their marks combine compact rounded contours with rhythmic internal
 and counterspaces. Factory's homepage mark uses repeated pointed curved forms around a
 center; this is visual observation, not an official explanation of its meaning.
 The prior disk-and-cuts studies underrepresented this internal rhythm.
-[Round 16](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-16-structural-rhythm/preview.png)
+Round 16 (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-16-structural-rhythm/preview.png`)
 explores three original stroke-and-channel assemblies through built-in image generation.
 Prompt: compact circular gestalt, broad strokes and open white space, curved outer contours
 and controlled interior joints; exclude OpenAI knot and Factory petal topology, rings,
@@ -310,9 +310,9 @@ C branching paths. Raster studies only; no user selection or uniqueness clearanc
 
 The owner requested development followed by autonomous self-review. Four studies derived
 from 03 were narrowed to a three-part stepped-spine construction, then refined twice.
-[Preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-17-stepped-spine/preview.png),
-[optical review](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-17-stepped-spine/review.html),
-and [review findings](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-17-stepped-spine/review.md).
+Preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-17-stepped-spine/preview.png`),
+optical review (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-17-stepped-spine/review.html`),
+and review findings (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-17-stepped-spine/review.md`).
 Browser inspection covered approximate visible-mark sizes 16–64 CSS px and reverse contrast.
 Verdict: cleaner construction but overly mechanical, unequal top/bottom mass, weak step detail
 at 16 px. Not recommended as final identity. Round 16 recommendation is withdrawn following
@@ -327,7 +327,7 @@ for clear element recognition, rejected the joined-left construction as play-but
 and rejected the offset construction for poor compactness. A subsequent edit failed to
 repair crossing continuity. A fresh construction prompt yielded a continuous foreground
 chevron and interrupted background frame.
-[Current raster study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-18-chevron-box/preview.png).
+Current raster study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-18-chevron-box/preview.png`).
 Prompt essentials: one rounded square, one continuous greater-than polyline, controlled
 crossing clearance, black outline on opaque white, no knot or radial repetition.
 Review: substantially clearer concept and foreground relation; chevron remains optically
@@ -339,7 +339,7 @@ Not a final unique identity; no similarity search or production vector validatio
 The owner explicitly requested the ChatGPT style. Built-in image generation explored a
 four-part woven construction with broad curved bands and a near-round footprint, followed
 by a rendering correction for opaque white background and clearer crossing separators.
-[Study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-18-woven-study/preview.png).
+Study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-18-woven-study/preview.png`).
 Self-review: this captures the requested flowing interlaced visual family more directly,
 but remains strongly reminiscent of the reference. Band widths, crossing logic and corner
 transitions need refinement. This is a style study, not a distinct final CEDIA identity.
@@ -351,7 +351,7 @@ The owner liked the woven direction and supplied an image of a broad three-direc
 interwoven ribbon sculpture as the next shape reference. Built-in image generation used
 that image to produce a flat black-on-white interpretation with a rounded triangular
 footprint, top loop and two lower sweeping loops.
-[Preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-19-ribbon-knot/preview.png).
+Preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-19-ribbon-knot/preview.png`).
 Prompt preserved the supplied loop arrangement and broad ribbon curvature while replacing
 material, lighting and depth with black masses and white crossing separations.
 Self-review: more faithful to the owner's newly explicit shape preference; lower band is
@@ -364,7 +364,7 @@ round. This is a raster direction study, not an approved final logo.
 The owner requested a single continuous strand and removal of the two central black
 triangular fragments. Two built-in image edits removed those fragments and closed the
 unnecessary exterior slits, retaining only the three interior over-under junctions.
-[Preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-20-single-strand/preview.png).
+Preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-20-single-strand/preview.png`).
 Prompt: preserve the rounded triangular footprint; one closed trefoil ribbon path, three
 alternating crossings, no isolated black triangles, flat black on opaque white.
 Visual review confirms the fragments are absent and the outside turns are uninterrupted.
@@ -390,7 +390,7 @@ image search or trademark registry clearance was performed, and no final identit
 The owner requested five beautiful, differentiated concepts retaining the woven visual
 family they like in ChatGPT. Built-in image generation created one five-concept sheet and
 an edit corrected the background and crossing contrast.
-[Five studies](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-21-five-weaves/preview.png).
+Five studies (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-21-five-weaves/preview.png`).
 Prompt varied the silhouette and path layout: asymmetric C-like sweep, squared weave,
 offset circular braid, five-turn weave, and diagonal folded loop. All used flat black on
 white and excluded the OpenAI sixfold and Treyarch triangular constructions.
@@ -403,7 +403,7 @@ logic is not yet a verified single closed vector path. No final mark or uniquene
 The owner authorized developing round 21 candidate 01. Built-in image generation preserved
 the large left arc, small right return and diagonal direction, then a targeted edit removed
 the cut across the central diagonal band.
-[Preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-22-asymmetric-weave/preview.png).
+Preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-22-asymmetric-weave/preview.png`).
 Prompt emphasized controlled ribbon weight, clear crossing hierarchy, large/small negative
 spaces and a continuous strand. Visual review: cleaner diagonal flow and stronger asymmetry;
 still risks reading as a G or two linked elements, and the bottom-right white seam pinches.
@@ -414,7 +414,7 @@ market check or production vector; retain as a candidate for owner feedback, not
 
 The owner accepted botanical exploration but explicitly removed ribbons from the brief.
 This supersedes the continuous-strand requirement for the new direction.
-[Petal studies](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-23-petal-studies/preview.png)
+Petal studies (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-23-petal-studies/preview.png`)
 were generated with the built-in image tool: orchid-inspired, jade-vine-inspired and
 Franklinia-inspired abstractions using solid masses and open separations, without weaving.
 Botanical grounding: [Kew jade vine](https://www.kew.org/read-and-watch/dig-deeper-jade-vine)
@@ -428,7 +428,7 @@ unique market-cleared identities. No final direction approved.
 
 The owner requested more beautiful floral sources, specifically Colorado Columbine.
 Inspected flower image references and the [NPS species page](https://www.nps.gov/romo/learn/nature/blue_purple.htm).
-[Five concepts](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-24-columbine/preview.png)
+Five concepts (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-24-columbine/preview.png`)
 were generated with the built-in image tool, using flat black petal masses and white
 counterspaces without ribbons. Prompt: 01 frontal layered Columbine, 02 oblique Columbine,
 03 geometric petal reduction, 04 simplified passionflower, 05 compact iris.
@@ -443,7 +443,7 @@ The owner clarified that beautiful flowers should supply structural inspiration,
 flower illustrations, naming Colorado Columbine as an example. References included
 [Flora of North America](https://www.efloras.org/florataxon.aspx?flora_id=1&taxon_id=233500096)
 and [University of Colorado](https://www.colorado.edu/asmagazine-archive/node/1766).
-[Five abstractions](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-24-columbine-abstractions/preview.png)
+Five abstractions (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-24-columbine-abstractions/preview.png`)
 were generated with the built-in image tool, using alternating outer sepals/inner petals,
 projecting spurs and offset layer relationships as prompts. Black solid masses on white,
 no ribbon, no literal stem, leaf or stamen. The outputs vary in fidelity to that structure.
@@ -456,7 +456,7 @@ two-layer rhythm is underdeveloped. Exploratory sheet only, no selection or uniq
 The owner reiterated the need for a non-derivative identity. Built-in image generation
 first explored asymmetric columbine-derived masses; these read as animals/flames and were
 rejected in self-review. A second study returned to five paired pointed/rounded forms.
-[Second study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-25-distinctiveness-study/preview.png).
+Second study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-25-distinctiveness-study/preview.png`).
 It is more visually coherent but still a conventional five-petal floral construction,
 and does not establish the requested distinctiveness. No market search, uniqueness claim,
 owner approval, or final logo delivery. Do not frame this study as a successful final mark.
@@ -465,7 +465,7 @@ owner approval, or final logo delivery. Do not frame this study as a successful 
 
 The owner authorized continued development. Built-in image generation explored three
 asymmetric petal constructions and refined the first into a single monochrome candidate.
-[Preview](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-26-nested-petals/preview.png).
+Preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-26-nested-petals/preview.png`).
 Prompt: dominant cupped outer petal, two shorter nested masses, open C-like bay, controlled
 curvature, no ribbons or radial flower repetition. The refinement widened gaps and softened
 outer tips. Visual review: compact C-like silhouette and clearer hierarchy; the upper inner
@@ -480,7 +480,7 @@ search found many stock C-and-leaf constructions, including
 [VectorStock](https://www.vectorstock.com/royalty-free-vector/green-leaf-c-logo-plant-nature-vector-27965418).
 These are family-level comparisons, not exact matches to round 26. The finding motivated
 blunting leaf tips and changing the nested masses into concave cup forms.
-[Two developments](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-27-cupped-counterforms/preview.png)
+Two developments (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-27-cupped-counterforms/preview.png`)
 were generated with the built-in image tool from round 26: A retains three masses and
 opposed inner cups; B fuses the upper cup into the outside form. Self-review favors A for
 layered structure; B becomes top-heavy and may read as a helmet/head. A's upper inside tip
@@ -494,7 +494,7 @@ The owner authorized continued development. A first built-in image edit of round
 collapsed the source into generic three-part masses and was rejected in self-review.
 A second generated study returned to five paired rounded/flat-ended layers derived from
 columbine's two tiers.
-[Layered study](../../../output/brand-prototypes/cedia-mark-2026-09-25/round-28-layered-columbine/preview.png).
+Layered study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-25/round-28-layered-columbine/preview.png`).
 The layered rhythm is now visible, but ten separate masses and thin outer separations make
 the result too busy for a small icon. Some outer caps read as decorative bands. This study
 is a structural experiment, not a successful unique final identity. No new market search,
@@ -505,15 +505,15 @@ small-size validation, production asset or user selection.
 The owner requested five further refinements and six choices. Five sequential built-in image
 passes were performed, plus one rendering correction. The last correction degraded structural
 differentiation, so pass 4 was selected as the strongest comparison sheet.
-[Six options](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-29-six-directions/selection.png)
-and [pass-by-pass review](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-29-six-directions/review.md).
+Six options (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-29-six-directions/selection.png`)
+and pass-by-pass review (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-29-six-directions/review.md`).
 All five intermediate outputs are retained alongside the selection. A, D and F are the stronger
 discussion candidates. No claim of market uniqueness, final vector or owner selection.
 
 ### Round 30 — humanistic radial studies — 2026-09-26
 
 The owner requested a Claude-like direction. Reviewed public icon imagery and generated
-[six studies](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-30-humanistic-radials/preview.png)
+six studies (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-30-humanistic-radials/preview.png`)
 with the built-in image tool. Prompt transferred warmth, irregular radial rhythm and
 hand-shaped contours while excluding the exact Claude ray arrangement; no ribbons.
 A/B use blunt organic rays; C/F branching forms; D broad cut-paper projections; E curved
@@ -526,7 +526,7 @@ need refinement to avoid generic splats. No unique-market claim or final selecti
 The owner requested a Pangaea shape. A visual search of reconstruction maps informed a
 built-in image generation of a single joined landmass with a broad east-facing bay.
 A second edit corrected the white background.
-[Pangaea study](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-30-pangaea/preview.png).
+Pangaea study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-30-pangaea/preview.png`).
 Stylized silhouette only, not a scientifically exact reconstruction or a cleared logo.
 No floral or ribbon requirement carried into this newly requested shape.
 
@@ -534,7 +534,7 @@ No floral or ribbon requirement carried into this newly requested shape.
 
 The owner requested the earlier flower style applied to the Pangaea shape. Used the
 round-30 silhouette and round-29 selection as image references for a new
-[petal-segmented study](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-31-pangaea-petals/preview.png).
+petal-segmented study (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-31-pangaea-petals/preview.png`).
 Four black masses follow curved white seams around the retained east-facing bay.
 
 ### Resolution — 2026-09-26
@@ -552,8 +552,8 @@ After seeing the icon in the macOS Dock, the owner requested a prettier refineme
 that the first smooth C-like alternative resembled a croissant. The adopted Pangaea-petal mark
 remains active while this request is explored. Round 33 compares four smoother fused-petal
 silhouettes; self-review favors A's flow, but no option is approved for replacement yet.
-[Round 33 board](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-33-fused-petals/preview.png)
-with [self-review](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-33-fused-petals/review.md).
+Round 33 board (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-33-fused-petals/preview.png`)
+with self-review (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-33-fused-petals/review.md`).
 
 ### Round 34 — fused-bloom refinement — 2026-09-26
 
@@ -561,8 +561,8 @@ Refined option A from the round-33 board into a single app-tile candidate with t
 petal lobes and two curved incisions. It has cleaner contours and a stronger central join;
 self-review still finds the incisions too close at small scale and some continent reading.
 This raster remains exploratory and does not replace the active approved assets.
-[Round 34 preview](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-34-fused-bloom-refinement/preview.png)
-with [self-review](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-34-fused-bloom-refinement/review.md).
+Round 34 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-34-fused-bloom-refinement/preview.png`)
+with self-review (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-34-fused-bloom-refinement/review.md`).
 
 ### Rounds 35–36 — small-size and single-cut refinement — 2026-09-26
 
@@ -570,7 +570,7 @@ The owner asked to continue. Round 35 compared incision count and placement with
 previews; self-review favored B's single curved cut because it kept the strongest core.
 Round 36 refined B with a shorter incision and smoother perimeter. The silhouette remains
 somewhat blob/map-like and is still exploratory; production assets have not changed.
-[Round 35 board](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-35-small-size-board/preview.png),
-[Round 35 review](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-35-small-size-board/review.md),
-[Round 36 preview](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-36-option-b-refinement/preview.png),
-and [Round 36 review](../../../output/brand-prototypes/cedia-mark-2026-09-26/round-36-option-b-refinement/review.md).
+Round 35 board (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-35-small-size-board/preview.png`),
+Round 35 review (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-35-small-size-board/review.md`),
+Round 36 preview (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-36-option-b-refinement/preview.png`),
+and Round 36 review (unavailable; original path: `../../../output/brand-prototypes/cedia-mark-2026-09-26/round-36-option-b-refinement/review.md`).

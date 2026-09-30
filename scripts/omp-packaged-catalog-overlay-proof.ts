@@ -8,7 +8,7 @@
  * scripts/omp-dynamic-provider-smoke.ts. No product file is touched: no
  * `CEDIA_EXTRA_TRUSTED_EXTENSION` channel, no CLI change.
  *
- * Driver path (all headless, no CUA/paid calls):
+ * Driver path (provider-free; optional CEDIA_CATALOG_CUA=1 native observation):
  *  1. stage tmp Cedia.app (guards: bundle under tmpdir, never the installed one),
  *  2. overlay the staged bundled lock file + current-source host/OMP/agent-window,
  *     codesign, launch staged app on scratch profile/state,
@@ -18,18 +18,16 @@
  *  5. fire `/dynamic-provider add` through POST /v1/sessions/:id/commands,
  *     wait for the durable prompt to complete, assert the fixture provider/model
  *     appears in the same packaged session's `get_available_models`,
- *  6. read the packaged host global GET /v1/models as a diagnostic: that route
- *     spawns short-lived `--no-extensions` metadata workers
- *     (apps/host/src/model-catalog.ts `metadataArgs`), so the fixture row is
- *     expected ABSENT there — this records the renderer-propagation gap, it does
- *     not assert propagation,
+ *  6. assert the read-only session picker route gains the row, while global
+ *     GET /v1/models remains isolated (`--no-extensions` metadata workers),
  *  7. fire `/dynamic-provider remove`, assert the session catalog loses it,
  *  8. stale `set_model` refused, restore staged originals, re-codesign.
  *
  * What this proves: packaged extension mechanics (lock-first wrapper loads,
  * register/unregister propagate to the owning session catalog, stale selection
- * refused) with zero provider calls. What stays open: on-screen picker-row
- * capture and the global-catalog propagation gap above.
+ * refused) with zero provider calls. Native observation gates are opt-in and
+ * separate from automated route assertions; their releases alone are not UI
+ * assertions. Record actual visible picker rows in the dated receipt.
  *
  * Run: CEDIA_PACKAGED_CATALOG_APP_PATH=/tmp/<staged>/Cedia.app bun scripts/omp-packaged-catalog-overlay-proof.ts
  */
@@ -42,6 +40,8 @@ import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { isSupportedOmpVersion } from "../packages/omp-adapter/src/index.ts";
 import type { HostDescriptor } from "../packages/protocol/src/index.ts";
+import { dereferencePackagedResponse } from "./lib/packaged-proof-http.ts";
+import { packagedProofModelSlugs as modelSlugs } from "./lib/packaged-proof-catalog.ts";
 
 interface StagedPage {
 	on(event: string, listener: (error: Error) => void): void;
@@ -51,6 +51,7 @@ interface StagedPage {
 
 interface StagedApp {
 	firstWindow(): Promise<StagedPage>;
+	windows(): StagedPage[];
 	close(): Promise<void>;
 }
 
@@ -181,6 +182,8 @@ let hostDescriptor: HostDescriptor | undefined;
 let sessionId: string | undefined;
 let proofPassed = false;
 const rendererErrors: string[] = [];
+const cuaCapture = process.env.CEDIA_CATALOG_CUA === "1";
+const lifecycleShimLog = join(output, "login-item-shim.jsonl");
 const appEnv = {
 	...process.env,
 	HOME: home,
@@ -189,7 +192,29 @@ const appEnv = {
 	PI_CODING_AGENT_DIR: ompProfile,
 	PI_NO_PTY: "1",
 	PI_NOTIFICATIONS: "off",
+	CEDIA_LIFECYCLE_SHIM_LOG: lifecycleShimLog,
 };
+
+// Optional native observation gates never perform an input or fabricate a UI
+// result. The operator opens the actual task/picker using Computer Use, records
+// the visible rows, and releases each gate; the host assertions remain separate.
+async function captureGate(phase: string): Promise<void> {
+	if (!cuaCapture) return;
+	await writeFile(join(output, `${phase}-ready.json`), `${JSON.stringify({
+		phase, stagedAppPath: resolvedAppBundle, sessionId, project: PROJECT_NAME,
+		task: TASK_TITLE, model: "Ephemeral Packaged Fixture Model", output,
+	})}\n`);
+	console.log(`CATALOG_CUA_READY: ${join(output, `${phase}-ready.json`)}`);
+	await waitFor(`native ${phase} observation`, async () =>
+		access(join(output, `${phase}-release`)).then(() => true).catch(() => undefined), 180_000);
+	if (hostDescriptor) {
+		await writeFile(join(output, `${phase}-preferences.json`), `${JSON.stringify(
+			await request(hostDescriptor, "GET", "/v1/settings"), null, 2)}\n`);
+	}
+	for (const [index, page] of (currentApp?.windows() ?? []).entries()) {
+		await page.screenshot({ path: join(output, `${phase}-window-${index}.png`) });
+	}
+}
 
 async function readHost(): Promise<{ descriptor: HostDescriptor; identity: Record<string, unknown> } | undefined> {
 	try {
@@ -205,7 +230,7 @@ async function readHost(): Promise<{ descriptor: HostDescriptor; identity: Recor
 	} catch { return undefined; }
 }
 
-async function request(hostValue: HostDescriptor, method: string, path: string, body?: unknown): Promise<unknown> {
+async function requestRaw(hostValue: HostDescriptor, method: string, path: string, body?: unknown): Promise<unknown> {
 	const response = await fetch(`${hostValue.url}${path}`, {
 		method,
 		headers: { Authorization: `Bearer ${hostValue.token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
@@ -215,6 +240,12 @@ async function request(hostValue: HostDescriptor, method: string, path: string, 
 	const result = await response.json() as unknown;
 	if (!response.ok) throw new Error(`${failPrefix}: ${method} ${path} returned ${response.status}: ${JSON.stringify(result)}`);
 	return result;
+}
+
+async function request(hostValue: HostDescriptor, method: string, path: string, body?: unknown): Promise<unknown> {
+	const result = await requestRaw(hostValue, method, path, body);
+	return dereferencePackagedResponse(result, async (sha256, offset) =>
+		requestRaw(hostValue, "GET", `/v1/responses/${encodeURIComponent(sha256)}?offset=${offset}`));
 }
 
 async function launch(generation: string): Promise<void> {
@@ -253,18 +284,6 @@ async function listCommands(descriptor: HostDescriptor, id: string): Promise<Rec
 	const rows = await request(descriptor, "GET", `/v1/sessions/${id}/commands`, undefined);
 	if (!Array.isArray(rows)) throw new Error(`${failPrefix}: commands list is not an array`);
 	return rows as Record<string, unknown>[];
-}
-
-function modelSlugs(catalog: unknown): Set<string> {
-	const row = object(catalog, "model catalog envelope");
-	const data = "models" in row && Array.isArray(row.models) ? row.models : [];
-	if (!Array.isArray(data)) throw new Error(`${failPrefix}: runtime model catalog is not an array`);
-	return new Set((data as Record<string, unknown>[]).map(model => {
-		const provider = typeof model.provider === "string" ? model.provider
-			: typeof model.upstreamProviderId === "string" ? model.upstreamProviderId : "";
-		const mid = typeof model.id === "string" ? model.id : "";
-		return `${provider}/${mid}`;
-	}));
 }
 
 async function sessionModelNames(descriptor: HostDescriptor, id: string, incarnation: string): Promise<Set<string>> {
@@ -317,6 +336,18 @@ try {
 	check(createHash("sha256").update(await readFile(bundledHost)).digest("hex") === sourceHostSha256,
 		"the staged app carries the current source host executable");
 	check(true, "the current source extension and Agent Window are staged only in the temp app copy");
+	// Never mutate the user's Login Item registration during a scratch proof.
+	// This intercepts Login Item APIs only; Keychain is neither read nor mocked.
+	const mainPath = join(stagedAgentWindowDirectory, "main.cjs");
+	const sourceMain = await readFile(join(sourceAgentWindowDirectory, "main.cjs"), "utf8");
+	const setter = "setLoginItemSettings: (settings) => electronApp.setLoginItemSettings(settings),";
+	const getter = "wasOpenedAtLogin = electronApp.getLoginItemSettings().wasOpenedAtLogin === true;";
+	check((await readFile(mainPath, "utf8")) === sourceMain
+		&& sourceMain.split(setter).length === 2 && sourceMain.split(getter).length === 2,
+		"current-source staged Login Item interception points match");
+	await writeFile(mainPath, sourceMain
+		.replace(setter, `setLoginItemSettings: (settings) => { require("node:fs").appendFileSync(process.env.CEDIA_LIFECYCLE_SHIM_LOG, JSON.stringify({ event: "intercept-set-login-item", settings }) + "\\n"); },`)
+		.replace(getter, `wasOpenedAtLogin = false; require("node:fs").appendFileSync(process.env.CEDIA_LIFECYCLE_SHIM_LOG, JSON.stringify({ event: "simulated-login-state", isPackaged: electronApp.isPackaged, openedAtLogin: false }) + "\\n");`));
 
 	const stagedOriginalLock = await readFile(stagedLockFile, "utf8");
 	check(stagedOriginalLock.includes("lockOmpSession"), "the staged bundled lock file carries the session lock");
@@ -384,6 +415,10 @@ export default function __cediaPackagedCatalogOverlay(pi: {
 
 	const generation = `packaged-catalog-${randomUUID()}`;
 	await launch(generation);
+	const shimEvents = (await readFile(lifecycleShimLog, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+	check(shimEvents.some(event => event.event === "intercept-set-login-item")
+		&& shimEvents.some(event => event.event === "simulated-login-state" && event.isPackaged === true),
+		"scratch Login Item setter/getter interception was observed");
 	const firstHost = await waitFor("the packaged app to start its bundled host", readHost, 60_000);
 	check(firstHost.identity.appGeneration === generation, "the packaged host records the staged app generation");
 	const hostCommand = execFileSync("ps", ["-p", String(firstHost.descriptor.pid), "-o", "command="], { encoding: "utf8" }).trim();
@@ -404,12 +439,19 @@ export default function __cediaPackagedCatalogOverlay(pi: {
 	let models = await sessionModelNames(packagedHost, sessionId, incarnation);
 	check(!models.has(`${PROVIDER}/${MODEL_ID}`), "dynamic provider is absent before the extension command");
 	check(models.has("cedia-packaged-catalog-baseline/baseline-model"), "baseline row is present before the extension command");
+	await captureGate("before-add");
 
 	const addResult = await sendPrompt(packagedHost, sessionId, incarnation, "/dynamic-provider add", "add");
 	check(addResult.agentInvoked === false, "provider add ran locally without an agent or inference turn");
 	models = await sessionModelNames(packagedHost, sessionId, incarnation);
 	check(models.has(`${PROVIDER}/${MODEL_ID}`), "provider add appears atomically in the packaged session catalog");
 	check(models.has("cedia-packaged-catalog-baseline/baseline-model"), "adding the provider preserves baseline rows");
+	const sessionCatalog = await request(packagedHost, "GET", `/v1/sessions/${sessionId}/models`);
+	check(modelSlugs(sessionCatalog).has(`${PROVIDER}/${MODEL_ID}`),
+		"the picker session-catalog route exposes the added extension model");
+	check(modelSlugs(sessionCatalog).has("cedia-packaged-catalog-baseline/baseline-model"),
+		"the picker session-catalog route preserves baseline rows after add");
+	await captureGate("after-add");
 
 	// Global-catalog diagnostic: expected ABSENT by construction (--no-extensions
 	// metadata workers). A presence here would contradict model-catalog.ts.
@@ -423,7 +465,7 @@ export default function __cediaPackagedCatalogOverlay(pi: {
 		globalCatalogSample: [...globalSlugs].slice(0, 20),
 		reason: "GET /v1/models spawns --no-extensions metadata workers (model-catalog.ts metadataArgs); session extensions never reach it.",
 	}, null, 2)}\n`);
-	check(globalHasFixture === false, "the packaged global catalog omits the session extension row (renderer-propagation gap recorded, not claimed)");
+	check(globalHasFixture === false, "the global metadata catalog stays isolated from session extension models");
 	if (currentPage) await currentPage.screenshot({ path: join(output, "packaged-app-after-add.png") }).catch(() => {});
 
 	const removeResult = await sendPrompt(packagedHost, sessionId, incarnation, "/dynamic-provider remove", "remove");
@@ -431,6 +473,11 @@ export default function __cediaPackagedCatalogOverlay(pi: {
 	models = await sessionModelNames(packagedHost, sessionId, incarnation);
 	check(!models.has(`${PROVIDER}/${MODEL_ID}`), "provider removal appears atomically in the packaged session catalog");
 	check(models.has("cedia-packaged-catalog-baseline/baseline-model"), "removal preserves baseline rows");
+	const removedSessionCatalog = modelSlugs(await request(packagedHost, "GET", `/v1/sessions/${sessionId}/models`));
+	check(!removedSessionCatalog.has(`${PROVIDER}/${MODEL_ID}`), "the picker session-catalog route removes the extension model");
+	check(removedSessionCatalog.has("cedia-packaged-catalog-baseline/baseline-model"),
+		"the picker session-catalog route preserves baseline rows after removal");
+	await captureGate("after-remove");
 
 	const stale = object(await request(packagedHost, "POST", `/v1/sessions/${sessionId}/commands`, {
 		commandId: `packaged-catalog-stale-${randomUUID()}`,
@@ -443,19 +490,27 @@ export default function __cediaPackagedCatalogOverlay(pi: {
 	check(/not found|unknown|unavailable|invalid model/i.test(staleError), `stale selection carries the runtime refusal (${staleError.slice(0, 300)})`);
 	check(providerRequests === 0, "no provider inference request was made");
 	check(rendererErrors.length === 0, `no renderer page errors (${JSON.stringify(rendererErrors.slice(0, 3))})`);
-	console.log(JSON.stringify({
+	const result = {
 		ok: true,
 		version: packagedRuntimeVersion,
+		sourceOmpSha256,
+		sourceHostSha256,
 		provider: `${PROVIDER}/${MODEL_ID}`,
 		transitions: ["absent", "added", "removed", "stale-selection-refused"],
 		sessionCatalog: "propagated",
 		globalCatalog: "omits session extension row by construction (--no-extensions workers)",
 		providerCalls: providerRequests,
-		limitations: "Staged-app proof only: packaged session-catalog add/remove verified. On-screen picker-row capture and global-catalog propagation stay open.",
-	}, null, 2));
+		nativeObservationGates: cuaCapture,
+		limitations: "Staged-app proof only. Route assertions prove session-catalog propagation and global isolation; native picker observations require the separate dated receipt.",
+	};
+	await writeFile(join(output, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
+	console.log(JSON.stringify(result, null, 2));
 	proofPassed = true;
 } catch (error) {
 	await writeFile(join(output, "failure.json"), `${JSON.stringify({ error: String(error), rendererErrors: rendererErrors.slice(0, 10) }, null, 2)}\n`).catch(() => {});
+	// Preserve the isolated host diagnostic before cleanup. Public route errors
+	// deliberately redact runtime details, so they cannot diagnose a boot failure.
+	await cp(join(stateDir, "host.log"), join(output, "host-failure.log")).catch(() => {});
 	try {
 		if (currentPage) await currentPage.screenshot({ path: join(output, "failure.png") }).catch(() => {});
 	} catch { /* screenshots are best-effort. */ }
@@ -476,6 +531,6 @@ export default function __cediaPackagedCatalogOverlay(pi: {
 		await cp(originalStagedAgentWindowDirectory, stagedAgentWindowDirectory, { recursive: true });
 		execFileSync("codesign", ["--force", "--deep", "--sign", "-", resolvedAppBundle], { stdio: "ignore" });
 	} catch { /* restore is best-effort but recorded below. */ }
-	if (!proofPassed) await rm(scratch, { recursive: true, force: true }).catch(() => {});
+	// Keep failed isolated state for diagnosis; no user credentials were copied in.
 	console.log(`PACKAGED-CATALOG: scratch=${scratch} output=${output} passed=${proofPassed}`);
 }

@@ -268,7 +268,9 @@ export const providerDiscoveryQueryKeys = {
     apiEndpoint: string | null,
     agentDir: string | null,
     cwd: string | null,
-  ) => ["provider-discovery", "models", provider, binaryPath, apiEndpoint, agentDir, cwd] as const,
+    threadId: string | null = null,
+  ) =>
+    ["provider-discovery", "models", provider, binaryPath, apiEndpoint, agentDir, cwd, threadId] as const,
   agentsForProvider: (provider: ProviderKind) =>
     ["provider-discovery", "agents", provider] as const,
   agents: (provider: ProviderKind, binaryPath: string | null, cwd: string | null) =>
@@ -278,8 +280,10 @@ export const providerDiscoveryQueryKeys = {
 /** Refetch only the active, shared OMP catalog when its composer picker opens. */
 export function refetchActiveOmpModelCatalog(queryClient: QueryClient): Promise<void> {
   return queryClient.refetchQueries({
-    queryKey: providerDiscoveryQueryKeys.models("omp", null, null, null, null),
-    exact: true,
+    // Match both the sessionless settings catalog and every active task catalog. A dynamic
+    // provider update belongs to the owner session, so refreshing only the old global key leaves
+    // an open task picker stale.
+    queryKey: [...providerDiscoveryQueryKeys.modelsAll, "omp"],
     type: "active",
   });
 }
@@ -405,6 +409,7 @@ export function isInitialModelDiscoveryPending(query: {
 
 export function providerModelsQueryOptions(input: {
   provider: ProviderKind;
+  threadId?: string | null;
   binaryPath?: string | null;
   apiEndpoint?: string | null;
   agentDir?: string | null;
@@ -420,6 +425,7 @@ export function providerModelsQueryOptions(input: {
     input.apiEndpoint ?? null,
     input.agentDir ?? null,
     input.cwd ?? null,
+    input.threadId ?? null,
   );
   return queryOptions<ProviderListModelsResult, Error, ProviderListModelsResult, typeof queryKey>({
     queryKey,
@@ -436,6 +442,7 @@ export function providerModelsQueryOptions(input: {
             ...(input.apiEndpoint ? { apiEndpoint: input.apiEndpoint } : {}),
             ...(input.agentDir ? { agentDir: input.agentDir } : {}),
             ...(input.cwd ? { cwd: input.cwd } : {}),
+            ...(input.threadId ? { threadId: input.threadId } : {}),
           });
           const previous = client.getQueryData<ProviderListModelsResult>(queryKey);
           return requireDiscoveredModels(input.provider, result, previous);
@@ -469,7 +476,20 @@ export function providerModelsQueryOptions(input: {
     // 30min — matches NEW_THREAD_MODEL_PREFETCH_STALE_TIME_MS in
     // providerModelPrefetch.ts (not imported: that module imports from here).
     gcTime: 30 * 60_000,
-    placeholderData: (previous) => previous ?? EMPTY_MODELS_RESULT,
+    placeholderData: (previous, previousQuery) => {
+      if (input.provider === "omp") {
+        // React Query reuses the previous observer result while a key changes. OMP's session
+        // catalog is task-owned, so carrying session A (or the global catalog) into session B
+        // would briefly offer models that are not valid for the active owner. Keep the normal
+        // previous-data behavior for the same exact task identity and for the sessionless key.
+        const previousThreadId = previousQuery?.queryKey?.[7] ?? null;
+        const currentThreadId = input.threadId ?? null;
+        if (previousThreadId !== currentThreadId) {
+          return EMPTY_MODELS_RESULT;
+        }
+      }
+      return previous ?? EMPTY_MODELS_RESULT;
+    },
   });
 }
 

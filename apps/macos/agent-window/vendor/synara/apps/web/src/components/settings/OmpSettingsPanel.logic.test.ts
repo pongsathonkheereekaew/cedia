@@ -70,6 +70,10 @@ describe("OMP settings panel logic", () => {
   });
 
   it("keeps an explicit editor representation for a retry", () => {
+    // String/enum controls bind raw values (a <select> option is `high`, not `"high"`).
+    // A refresh must therefore hydrate the editor with the value the runtime accepts.
+    expect(settingValueToEditorText({ path: "defaultThinkingLevel", credential: false, redacted: false, configured: false, value: "high", settingsRevision: "r1" })).toBe("high");
+    expect(settingValueToEditorText({ path: "models.default", credential: false, redacted: false, configured: true, value: "smol", settingsRevision: "r1" })).toBe("smol");
     expect(settingValueToEditorText({ path: "cycleOrder", credential: false, redacted: false, configured: true, value: ["default"], settingsRevision: "r1" })).toBe('["default"]');
     expect(settingValueToEditorText({ path: "enabled", credential: false, redacted: false, configured: true, value: true, settingsRevision: "r1" })).toBe("true");
   });

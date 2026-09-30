@@ -63,25 +63,27 @@ cross-device path has not been run here.
 
 ## Local source anchors
 
-- [Local collab contract](../../../../upstream/omp/docs/collab.md): host/guest ownership and commands (lines 1–41), link/key forms (43–67), encryption and guest permissions (69–95), web client/settings/relay limits (97–124), and frame/topology/transcript ownership (126–138).
-- [Host implementation](../../../../upstream/omp/packages/coding-agent/src/collab/host.ts): room/link generation and relay setup (205–288), hello/token/snapshot admission (333–423), prompt/abort/UI response handling (460–520), state/model/queue fields (530–551), Agent Hub and transcript reads (594–681).
-- [Wire/link contract](../../../../upstream/omp/packages/coding-agent/src/collab/protocol.ts): frame union and guest→host commands (59–106), link generation/parsing and 32/48-byte secret validation (132–295).
-- [Crypto](../../../../upstream/omp/packages/coding-agent/src/collab/crypto.ts): AES-GCM room-key import and `[12-byte IV][ciphertext+tag]` sealing (1–54).
-- [TUI guest](../../../../upstream/omp/packages/coding-agent/src/collab/guest.ts): join/hello, writable token, prompt/abort (256–388), replica snapshot/normal resume (433–468), entry/event/state/UI application (502–610), host ask presentation and local-session restoration (662–768).
-- [Relay socket](../../../../upstream/omp/packages/coding-agent/src/collab/relay-client.ts): close-code table/backoff/buffer limits (1–26), send/reconnect behavior (35–127), fatal/transient close handling (232–281).
-- [Browser package README](../../../../upstream/omp/packages/collab-web/README.md): standalone SPA, HTTPS/WebCrypto, direct relay, and fragment-secret behavior (1–37).
-- [Browser guest client](../../../../upstream/omp/packages/collab-web/src/lib/client.ts): prompt/UI/abort/Agent Hub commands and transcript fetch (172–207), hello/reconnect phase (214–229), snapshot/event/UI application (285–404).
-- [Browser composer](../../../../upstream/omp/packages/collab-web/src/components/shell/Composer.tsx): writable/live gating, prompt and queue badge (111–140, 198–250), `select`/`editor` response and Stop controls (142–196).
-- [Browser Agent Drawer](../../../../upstream/omp/packages/collab-web/src/components/agents/AgentDrawer.tsx): on-demand host transcript polling and writable chat/kill/revive controls (14–212).
+The links in this section pin the vendored base to commit `00085d4e7dfdcfbf302c122fa2682b410a0f43d1` recorded above; the applied CEDIA patch tree remains separately recorded as `112ad5eee1cc236b5382a691ccf3202b2ced5c1e`.
+
+- [Local collab contract](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/docs/collab.md): host/guest ownership and commands (lines 1–41), link/key forms (43–67), encryption and guest permissions (69–95), web client/settings/relay limits (97–124), and frame/topology/transcript ownership (126–138).
+- [Host implementation](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/collab/host.ts): room/link generation and relay setup (205–288), hello/token/snapshot admission (333–423), prompt/abort/UI response handling (460–520), state/model/queue fields (530–551), Agent Hub and transcript reads (594–681).
+- [Wire/link contract](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/collab/protocol.ts): frame union and guest→host commands (59–106), link generation/parsing and 32/48-byte secret validation (132–295).
+- [Crypto](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/collab/crypto.ts): AES-GCM room-key import and `[12-byte IV][ciphertext+tag]` sealing (1–54).
+- [TUI guest](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/collab/guest.ts): join/hello, writable token, prompt/abort (256–388), replica snapshot/normal resume (433–468), entry/event/state/UI application (502–610), host ask presentation and local-session restoration (662–768).
+- [Relay socket](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/collab/relay-client.ts): close-code table/backoff/buffer limits (1–26), send/reconnect behavior (35–127), fatal/transient close handling (232–281).
+- [Browser package README](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/collab-web/README.md): standalone SPA, HTTPS/WebCrypto, direct relay, and fragment-secret behavior (1–37).
+- [Browser guest client](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/collab-web/src/lib/client.ts): prompt/UI/abort/Agent Hub commands and transcript fetch (172–207), hello/reconnect phase (214–229), snapshot/event/UI application (285–404).
+- [Browser composer](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/collab-web/src/components/shell/Composer.tsx): writable/live gating, prompt and queue badge (111–140, 198–250), `select`/`editor` response and Stop controls (142–196).
+- [Browser Agent Drawer](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/collab-web/src/components/agents/AgentDrawer.tsx): on-demand host transcript polling and writable chat/kill/revive controls (14–212).
 - Focused local tests include `test/collab/steer-queue.test.ts`, `read-only.test.ts`, `guest-ui-request.test.ts`, `chunked-welcome.test.ts`, `relay-client-backpressure.test.ts`, `test/collab-web/client.test.ts`, `local-relay.test.ts`, `composer.test.tsx`, and `codec.test.ts`; the command/result is recorded above.
 
 ## Current official upstream references
 
 The current primary docs were read from upstream `main` on 2026-09-23:
 
-- [Official collab documentation](https://github.com/can1357/oh-my-pi/blob/main/docs/collab.md) — confirms the same host-authoritative model, link permissions, AES-GCM relay contract, guest prompt/interrupt/Agent Hub/UI-request powers, browser client, and the non-self-hosted production relay. Its current `main` text additionally documents `collab.autoStart` and `omp collab list`/`omp collab link` local-host discovery; those additions are not in the vendored v18.1.18 files.
-- [Official collab-web README](https://github.com/can1357/oh-my-pi/blob/main/packages/collab-web/README.md) — confirms standalone browser use, offline mock-host, static build, HTTPS/WebCrypto, direct WebSocket relay, and fragment-only room key.
-- [Official host source](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/collab/host.ts), [guest source](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/collab/guest.ts), [relay client](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/collab/relay-client.ts), and [wire constants](https://github.com/can1357/oh-my-pi/blob/main/packages/wire/src/index.ts) are the source-of-truth links for current-main protocol details.
+- [Official collab documentation](https://github.com/can1357/oh-my-pi/blob/73a11421fe34fbab8ad058ab9c1a2e4f447852ea/docs/collab.md) — confirms the same host-authoritative model, link permissions, AES-GCM relay contract, guest prompt/interrupt/Agent Hub/UI-request powers, browser client, and the non-self-hosted production relay. Its current `main` text additionally documents `collab.autoStart` and `omp collab list`/`omp collab link` local-host discovery; those additions are not in the vendored v18.1.18 files.
+- [Official collab-web README](https://github.com/can1357/oh-my-pi/blob/73a11421fe34fbab8ad058ab9c1a2e4f447852ea/packages/collab-web/README.md) — confirms standalone browser use, offline mock-host, static build, HTTPS/WebCrypto, direct WebSocket relay, and fragment-only room key.
+- [Official host source](https://github.com/can1357/oh-my-pi/blob/73a11421fe34fbab8ad058ab9c1a2e4f447852ea/packages/coding-agent/src/collab/host.ts), [guest source](https://github.com/can1357/oh-my-pi/blob/73a11421fe34fbab8ad058ab9c1a2e4f447852ea/packages/coding-agent/src/collab/guest.ts), [relay client](https://github.com/can1357/oh-my-pi/blob/73a11421fe34fbab8ad058ab9c1a2e4f447852ea/packages/coding-agent/src/collab/relay-client.ts), and [wire constants](https://github.com/can1357/oh-my-pi/blob/73a11421fe34fbab8ad058ab9c1a2e4f447852ea/packages/wire/src/index.ts) are the source-of-truth links for current-main protocol details.
 
 ## Decision-relevant conclusion
 
@@ -111,13 +113,13 @@ provider or runtime test was run. These findings qualify the existing collab evi
   transaction for a cooperating CEDIA child. It is not a universal lock for unrelated OMP
   CLI writers. Same-file external-session continuation needs a verified ownership handoff.
   Import/fork into a new session does not meet the owner's same-session requirement.
-- OMP [Settings](../../../../upstream/omp/packages/coding-agent/src/config/settings.ts)
-  implements `get/set/flush/reloadFromDisk`; [layer documentation](../../../../upstream/omp/docs/config-usage.md)
+- OMP [Settings](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/config/settings.ts)
+  implements `get/set/flush/reloadFromDisk`; [layer documentation](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/docs/config-usage.md)
   says ordinary `set` persists global settings and project/overlay layers are read-only.
-  [RPC types](../../../../upstream/omp/packages/coding-agent/src/modes/rpc/rpc-types.ts)
+  [RPC types](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/modes/rpc/rpc-types.ts)
   have specialized CEDIA auth/model-role commands, but no generic settings read/write/reload
   operation. A versioned bridge is feasible source work, not an existing settings API.
-- [Approval schema](../../../../upstream/omp/packages/coding-agent/src/config/settings-schema.ts)
+- [Approval schema](https://github.com/can1357/oh-my-pi/blob/00085d4e7dfdcfbf302c122fa2682b410a0f43d1/packages/coding-agent/src/config/settings-schema.ts)
   defines OMP tool policies. CEDIA's host service separately authorizes editor mutations
   and native bridge effects. The selected single-policy UI must distinguish OMP policy from
   CEDIA-owned path/device/buffer protection; current source is not evidence of one prompt.

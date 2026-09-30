@@ -1,0 +1,19 @@
+{
+  "revision": "fc671eba383f2a7208500836673b485c0dc7073d",
+  "patches": [
+    {
+      "file": "0002-cedia-rpc-bridges-18.4.3.patch",
+      "sha256": "9ee81142bcf8c1fffb46e7fd5dcc813647419d78bcc1e8ff18d3a7d931c3a91b"
+    }
+  ],
+  "source": "/Users/pond/cedia/upstream/omp",
+  "sourceTree": "7de51d4940e6fb39be0749775548a8c6042d2eef",
+  "executable": "/Users/pond/cedia/dist/omp-standalone/omp",
+  "executableSha256": "ed61785b90a7a917a4f0f7e6d8056ed92773fd75f35950ba3ee7e3d35236a385",
+  "bun": "/Users/pond/.bun/bin/bun",
+  "bunSha256": "35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5",
+  "nativePath": "/Users/pond/cedia/upstream/omp/packages/natives/native/pi_natives.darwin-arm64.node",
+  "nativeSha256": "27f148bf4aab11a1290ce630caae9c6be6723c89c971603d5053716d99c42cbe",
+  "developmentRuntime": false,
+  "standaloneRuntime": true
+}

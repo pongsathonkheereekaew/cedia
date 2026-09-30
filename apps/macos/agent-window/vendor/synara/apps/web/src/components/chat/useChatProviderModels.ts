@@ -32,6 +32,8 @@ import { resolveRuntimeModelDescriptor } from "./runtimeModelCapabilities";
 const EMPTY_PROVIDER_STATUSES: ServerProviderStatus[] = [];
 interface ChatProviderModelsInput {
   threadId: ThreadId;
+  /** True only when ChatView resolved this id from the host's registered task list. */
+  isServerThread: boolean;
   activeThread: Thread | undefined;
   activeProject: Project | undefined;
   composerDraft: ReturnType<typeof useComposerThreadDraft>;
@@ -42,6 +44,7 @@ interface ChatProviderModelsInput {
 
 export function useChatProviderModels({
   threadId,
+  isServerThread,
   activeThread,
   activeProject,
   composerDraft,
@@ -61,6 +64,10 @@ export function useChatProviderModels({
       activeThread.messages.length > 0 ||
       activeThread.session !== null),
   );
+  // `activeThread` also represents local drafts and side-chat imports before the host creates a
+  // session. Only ChatView's server-thread identity is safe to probe; a temporary draft id would
+  // turn a normal new-task picker into a 404 and would not describe a live OMP owner.
+  const modelDiscoveryThreadId = isServerThread ? String(threadId) : null;
   // Side chats import source history as fork-import rows. Those imports must not lock the
   // provider picker before the Side produces its first native turn (#810).
   const hasProviderLockingActivity = Boolean(
@@ -139,6 +146,7 @@ export function useChatProviderModels({
     selectedProviderRuntimeModelDiscoveryPending,
   } = useProviderModelCatalog({
     selectedProvider,
+    threadId: modelDiscoveryThreadId,
     discoveryEnabled: isModelPickerOpen,
     cwd: providerModelDiscoveryCwd,
     modelHintByProvider: composerModelHintByProvider,

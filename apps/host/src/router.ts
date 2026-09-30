@@ -803,6 +803,15 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
           } else {
             result = host.sessionView(host.store.updateSession(id, patch));
           }
+        } else if (action === "models" && parts.length === 4) {
+          // The live model catalog is controller-visible, but unlike the metadata route it is
+          // bound to this task's already-running OMP owner. A stopped task returns an explicit
+          // absence marker; a live owner's failure is allowed to propagate instead of falling
+          // back to the global catalog and hiding dynamic removals.
+          if (method !== "GET") throw new HostError("method_not_allowed", "Unsupported method", 405);
+          if ([...url.searchParams.keys()].length > 0) throw new HostError("invalid_query", "Session model catalog does not accept query fields", 400);
+          if (request.body !== undefined && Object.keys(body()).length > 0) throw new HostError("invalid_body", "Session model catalog does not accept body fields", 400);
+          result = await host.listSessionModels(id);
         } else if (action === "pending-model" && parts.length === 4 && method === "POST") {
           // §2.4: a model/effort change is handed to OMP with a revision and only becomes the
           // task's selection when OMP reports committing it at its own turn boundary.

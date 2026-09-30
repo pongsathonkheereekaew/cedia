@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "proof": "packaged-agents-ide-send-edit-race",
+  "runId": "2026-09-30T01-08-04-057Z",
+  "stagedAppPath": "/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-send.w7oRZk1cqv/Cedia.app",
+  "sessionId": "ed028f0e-ae43-4607-9f52-4144fe3f0a4d",
+  "promptCommandId": "cedia_15212_muner6ut_h_d",
+  "promptCountForFixtureText": 1,
+  "draftAtEnd": {
+    "revision": 2,
+    "text": "IDE webview keeps revision two"
+  },
+  "staleAgentsEmptyWriteStatus": 409,
+  "revisionOneClear": {
+    "status": 200,
+    "cleared": false
+  },
+  "ideLocalDraft": "IDE webview keeps revision two",
+  "screenshots": [
+    "race-agents-acknowledged.png",
+    "race-ide-revision-two.png"
+  ],
+  "providerRequests": 0,
+  "rootCediaPidTouched": false,
+  "loginItemSetterCallsIntercepted": 1,
+  "loginItemStateSimulated": true,
+  "lifecycleShimLogPath": "/Users/pond/cedia/dist/send-race-packaged-proof/2026-09-30T01-08-04-057Z/login-item-shim.jsonl"
+}

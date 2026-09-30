@@ -1287,6 +1287,7 @@ export default function ChatView({
     searchableModelOptions,
   } = useChatProviderModels({
     threadId,
+    isServerThread,
     activeThread,
     activeProject,
     composerDraft,

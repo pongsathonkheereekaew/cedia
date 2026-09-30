@@ -24,8 +24,11 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
 	revision: string;
 	patches: { file: string; sha256: string }[];
 };
-if (manifest.patches.length !== 1) throw new Error("Use one consolidated patch per pinned runtime revision");
-const patch = manifest.patches[0]!;
+// Use the same rolling-pin selection as prepare-omp-runtime.ts. Historical
+// entries and patch bytes remain immutable; only the active revision is refreshed.
+const patch = manifest.patches.length === 1 ? manifest.patches[0]
+	: manifest.patches.find(entry => entry.file.includes(manifest.revision.slice(0, 12))) ?? manifest.patches.at(-1);
+if (!patch || !/^[a-zA-Z0-9_.-]+\.patch$/.test(patch.file)) throw new Error("No valid active OMP patch");
 
 const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
 if (head !== manifest.revision) {
@@ -44,6 +47,6 @@ writeFileSync(patchPath, diff);
 const sha = createHash("sha256").update(diff).digest("hex");
 writeFileSync(
 	manifestPath,
-	`${JSON.stringify({ ...manifest, patches: [{ ...patch, sha256: sha }] }, null, 2)}\n`,
+	`${JSON.stringify({ ...manifest, patches: manifest.patches.map(entry => entry === patch ? { ...entry, sha256: sha } : entry) }, null, 2)}\n`,
 );
 console.log(`Regenerated patches/omp/${patch.file} (${diff.length} bytes, sha256 ${sha}).`);

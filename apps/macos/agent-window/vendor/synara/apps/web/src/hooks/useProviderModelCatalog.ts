@@ -69,6 +69,8 @@ function modelDiscoveryError(
 
 export function useProviderModelCatalog(input: {
   selectedProvider: ProviderKind;
+  /** Active task identity; OMP catalogs are read from this task's live owner when present. */
+  threadId?: string | null;
   /**
    * Enables discovery for the on-demand providers (cursor/grok/droid/opencode/pi)
    * even when they are not selected — pass the picker's open state so their lists
@@ -88,10 +90,12 @@ export function useProviderModelCatalog(input: {
   agentDiscoveryPolicy?: "selected" | "eager-core";
 }): ProviderModelCatalog {
   const { selectedProvider, discoveryEnabled, modelHintByProvider } = input;
+  const discoveryThreadId = input.threadId ?? null;
   const agentDiscoveryPolicy = input.agentDiscoveryPolicy ?? "selected";
   const discoveryCwd = input.cwd ?? null;
   const { settings, serverSettings } = useAppSettings();
   const queryClient = useQueryClient();
+  const selectedProviderThreadId = selectedProvider === "omp" ? discoveryThreadId : null;
   const customModelsByProvider = useMemo(() => getCustomModelsByProvider(settings), [settings]);
   const hiddenProviderSet = useMemo(
     () => new Set<ProviderKind>(settings.hiddenProviders),
@@ -193,6 +197,7 @@ export function useProviderModelCatalog(input: {
     }),
     omp: providerModelsQueryOptions({
       provider: "omp",
+      threadId: discoveryThreadId,
       enabled: ompModelDiscoveryEnabled,
       refreshWhileObserved: discoveryEnabled,
     }),
@@ -224,8 +229,16 @@ export function useProviderModelCatalog(input: {
         modelApiEndpoint,
         modelAgentDir,
         modelCwd,
+        selectedProviderThreadId,
       ),
-    [modelProvider, modelBinaryPath, modelApiEndpoint, modelAgentDir, modelCwd],
+    [
+      selectedProviderThreadId,
+      modelProvider,
+      modelBinaryPath,
+      modelApiEndpoint,
+      modelAgentDir,
+      modelCwd,
+    ],
   );
 
   const selectedProviderModelsEnabled = modelQueryOptionsByProvider[selectedProvider].enabled;

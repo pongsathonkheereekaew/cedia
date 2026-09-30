@@ -82,6 +82,10 @@ export function formatOmpSettingValue(value: OmpSettingValue): string {
 /** Convert a non-secret value into the editor's text representation. */
 export function settingValueToEditorText(value: OmpSettingValue): string {
   if (value.credential || value.redacted || value.tooLarge === true || !Object.hasOwn(value, "value")) return "";
+  // Enum/string controls bind their raw option value (`high`, not `"high"`). Keeping
+  // strings unquoted lets a refresh hydrate a <select> and a subsequent Save round-trip
+  // the value the runtime validates; arrays/records still need JSON text for their editors.
+  if (typeof value.value === "string") return value.value;
   return jsonText(value.value);
 }
 

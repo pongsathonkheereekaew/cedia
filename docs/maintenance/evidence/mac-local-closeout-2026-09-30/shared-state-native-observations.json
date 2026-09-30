@@ -1,0 +1,52 @@
+[
+  {
+    "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/cedia/agent/index.html#/21ba7fbd-ea5b-4cba-8bac-847b176f5d29",
+    "title": "Cedia",
+    "bodyText": "Cedia\nNew thread\nProjects\nShared state fixture\nShared-state task\nChats\nNo chats yet\nSettings\nIDE\nWhat should we do in Shared state fixture?\nTask controls\nShared state fixture\nShared folder\nLocal\nTemporary\n\nIDE window draft wins\n\nAsk for approval\nFixture model\nmedium\n\nEnvironment\n\nLocal\nSelect branch\nInitialize Git\n\nSubagents\n\nNo subagents in this task\n\nSources\n\nSources added to messages appear here\n\nLocal Servers\n0\n\nEditor\n\nOpen in Cedia IDE\nTerminal\nBrowser\nFiles\nSide chats\niOS Simulator\nhost · live\nmodel · fixture/fixture-model\nsession · ready\nbranch · —\nToggle Sidebar",
+    "editors": [
+      {
+        "text": "IDE window draft wins",
+        "ariaLabel": null,
+        "testId": "composer-editor"
+      }
+    ],
+    "activeDensity": "",
+    "frames": [
+      {
+        "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/cedia/agent/index.html#/21ba7fbd-ea5b-4cba-8bac-847b176f5d29",
+        "editorCount": 1,
+        "activeDensity": ""
+      }
+    ]
+  },
+  {
+    "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html",
+    "title": "Shared state fixture — Cedia",
+    "bodyText": "Shared state fixture — Cedia\nOpen in Agents\nEXPLORER\nPROJECT\n.vscode\nfixture.txt\nOUTLINE\nTIMELINE\nOpen Chat\n⌃\n⌘\nI\nShow All Commands\n⇧\n⌘\nP\nFind in Files\n⇧\n⌘\nF\nAGENT\n Cedia ready\n 0 \n 0\nScreen Reader Optimized",
+    "editors": [
+      {
+        "text": "IDE window draft wins",
+        "ariaLabel": null,
+        "testId": "composer-editor"
+      }
+    ],
+    "activeDensity": "",
+    "frames": [
+      {
+        "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html",
+        "editorCount": 0,
+        "activeDensity": ""
+      },
+      {
+        "url": "vscode-webview://0vjrsv04nhts6t9pq9hcnvn7bf83un7cd579srtql2g9ajjbnc95/index.html?id=a64b89cd-fa67-4c9c-8d55-10543d7b2e59&parentId=2&origin=3d85cf18-7b1e-4166-b225-011583f86f83&swVersion=6&extensionId=cedia.cedia&platform=electron&vscode-resource-base-authority=vscode-resource.vscode-cdn.net&parentOrigin=vscode-file%3A%2F%2Fvscode-app&purpose=webviewView",
+        "editorCount": 0,
+        "activeDensity": ""
+      },
+      {
+        "url": "vscode-webview://0vjrsv04nhts6t9pq9hcnvn7bf83un7cd579srtql2g9ajjbnc95/index.html?id=a64b89cd-fa67-4c9c-8d55-10543d7b2e59&parentId=2&origin=3d85cf18-7b1e-4166-b225-011583f86f83&swVersion=6&extensionId=cedia.cedia&platform=electron&vscode-resource-base-authority=vscode-resource.vscode-cdn.net&parentOrigin=vscode-file%3A%2F%2Fvscode-app&purpose=webviewView#/21ba7fbd-ea5b-4cba-8bac-847b176f5d29",
+        "editorCount": 1,
+        "activeDensity": ""
+      }
+    ]
+  }
+]

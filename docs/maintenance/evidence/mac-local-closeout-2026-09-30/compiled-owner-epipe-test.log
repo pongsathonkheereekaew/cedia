@@ -1,0 +1,10 @@
+bun test v1.4.2 (744846f84)
+
+packages/coding-agent/test/cedia-owner-bridge-controller.test.ts:
+(pass) Cedia owner controller lease > survives real rpc-ui stdout close and stdin EOF and supports two sequential attachments to one session [6613.49ms]
+
+ 1 pass
+ 10 filtered out
+ 0 fail
+ 8 expect() calls
+Ran 1 test across 1 file. [6.79s]

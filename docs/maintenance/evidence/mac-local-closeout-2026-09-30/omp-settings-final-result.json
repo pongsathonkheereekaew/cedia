@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "proof": "packaged-omp-settings-cas-native-conflict-retry",
+  "stagedAppPath": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app",
+  "projectId": "8bb3079b-72c6-4fd0-9869-4f4dc38453d2",
+  "sessionId": "e7ae8ae7-7b32-412c-881b-8d5d5ce0a34b",
+  "setting": {
+    "path": "defaultThinkingLevel",
+    "originalValue": "high",
+    "nativeTarget": "low",
+    "routeWinner": "minimal",
+    "initialRevision": "642fca8d027cf7195e1a70eb41107b87",
+    "routeRevision": "f909a9aa935ed0fa71e32c34e3cb9852",
+    "finalRevision": "52ad0d017f6a461f568231e30dfb4fb0",
+    "staleCode": "omp_settings_stale_revision",
+    "staleRouteStatus": 409
+  },
+  "providerRequests": 0,
+  "nativeObservationGates": true,
+  "nativeWindows": 1,
+  "rendererErrors": [],
+  "limitations": "Native labels and saved/readback text were observed read-only after Computer Use releases; route CAS is the host authority."
+}

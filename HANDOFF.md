@@ -27,9 +27,32 @@ The owner authorized a baseline commit of the accumulated source, tests, patches
 cited evidence. Current verification and explicit exclusions are recorded in
 [the baseline receipt](docs/maintenance/evidence/baseline-snapshot-2026-09-30/findings.md).
 The plan's opening status and item 70 now reflect OMP 18.4.3 and 1,101 mappings.
-Documentation validation still reports 105 existing failures; the packaged app is absent
-from this checkout. D/W/N/F acceptance remains open. Earlier receipts below keep their
+The [local Mac follow-up](docs/maintenance/evidence/mac-local-closeout-2026-09-30/findings.md)
+rebuilds the package (12/12 checks), records native Send/edit, shared draft/restart,
+catalog and settings-conflict evidence, and fixes RPC startup/output/owner-disconnect
+and settings-editor defects. Final root tests pass 1,452; Agent Window/settings tests
+pass 429. Documentation validation now passes after the owner-authorized repair of
+eight missing-artifact references and one evidence-index entry in the historical
+monochrome research; artwork and validator rules are unchanged.
+D/W/N/F acceptance remains open. Earlier receipts below keep their
 original scope and are not evidence that a package is currently installed or running.
+
+### Checkpoint before remaining acceptance work
+
+The owner authorized a checkpoint commit and Draft PR on
+`codex/mac-local-checkpoint-2026-09-30`. It retains the local Mac fixes, tests,
+proof scripts, dated receipts and documentation repairs. The branch also retains
+the 22 earlier local commits ahead of `origin/main` at checkpoint preparation;
+the PR is a cumulative checkpoint, not a small isolated fix or release sign-off.
+Unrelated `assets/brand/monochrome-explorations/` artwork stays outside the commit.
+
+Fresh pre-commit checks pass: 138 focused host/adapter/proof-helper tests, 11
+settings/catalog tests, root typecheck, source coverage (1,101/1,101), repository
+validation and whitespace validation. Previously recorded package/native runs
+remain historical evidence at their stated revisions; they were not rerun for
+this checkpoint. Continue from the canonical plan's item 70; real login and
+remaining semantic acceptance are still open. No merge or release is authorized
+by this checkpoint.
 
 ## Historical checkpoint (2026-09-28, with September 29 follow-ups)
 

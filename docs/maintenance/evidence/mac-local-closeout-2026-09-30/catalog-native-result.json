@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "version": "omp/18.4.3",
+  "sourceOmpSha256": "775c6815f6accb5d06f5b130fdb2a91ff3c07f02bb9d6d9188a425376a2ccacd",
+  "sourceHostSha256": "5446e477fb4c05bfc17aa0be9142fa822093007e9c3c168f9b109098009b355e",
+  "provider": "cedia_packaged_catalog_fixture/ephemeral-packaged-model",
+  "transitions": [
+    "absent",
+    "added",
+    "removed",
+    "stale-selection-refused"
+  ],
+  "sessionCatalog": "propagated",
+  "globalCatalog": "omits session extension row by construction (--no-extensions workers)",
+  "providerCalls": 0,
+  "nativeObservationGates": true,
+  "limitations": "Staged-app proof only. Route assertions prove session-catalog propagation and global isolation; native picker observations require the separate dated receipt."
+}

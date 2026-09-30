@@ -100,11 +100,17 @@ requirements change, this file changes; supporting records do not become another
 **Current status (2026-09-30): the implementation baseline uses OMP 18.4.3.**
 The current source coverage gate passes 1,101/1,101 mappings with zero gaps. Root,
 Agent Window and iOS tests/typechecks pass on the pinned runtime. This is a source
-baseline, not D/W/N/F acceptance: packaged Send/edit requalification, the real login
-cycle, remote/device scenarios and remaining semantic evidence still apply. Repository
-documentation validation has 105 existing failures, and the packaged app is absent
-from this checkout. See the [baseline receipt](evidence/baseline-snapshot-2026-09-30/findings.md)
-and item 70. The earlier checkpoint below records its own revision.
+baseline, not D/W/N/F acceptance. The Mac package has now been rebuilt and passes
+all 12 package checks. Local native receipts cover Send/edit, shared drafts and
+migration/restart, catalog pickers, task controls and OMP settings conflict/retry,
+with each receipt retaining its actual package revision. The final binary also
+passes closed-stdout owner continuity and strict catalog routes. The real login
+cycle, remote/device scenarios and remaining semantic evidence still apply.
+Documentation validation now passes after the owner-authorized repair of the remaining
+eight missing-artifact references and one evidence-index entry; no artwork or validator rules changed.
+See the [baseline receipt](evidence/baseline-snapshot-2026-09-30/findings.md),
+[local Mac receipt](evidence/mac-local-closeout-2026-09-30/findings.md) and item 70.
+The earlier checkpoint below records its own revision.
 
 **Historical status (2026-09-28): final implementation baseline for the inspected OMP pin; the
 CEDIA D-terminal app mark is owner-approved and adopted.** Planning is complete; targeted D and F
@@ -1290,6 +1296,14 @@ Defaults described as proposals are reviewable engineering choices, not new owne
 | IDE > save, syntax/font, language/debug/extensions | Code-OSS configuration service with User/Workspace scope | Manual Save for fresh profile; Preserve compatible existing IDE preferences with report. Expose scope and use original settings UI for specialist controls. Reset removes only selected explicit overrides and never uninstalls extensions or deletes files. |
 | General > Updates | CEDIA release/update owner; upstream intake governed by §8 | Notify when a validated compatible update is available; installation is an explicit owner action. No automatic install or restart on Quit. Preserve the current working app until update/rollback gates pass. |
 | Onboarding/version metadata | CEDIA application lifecycle, not editable preference | Preserve compatible completion marker; initial new-design tour can explain changes. Excluded from category Reset. |
+
+The active registered task's composer reads `/v1/sessions/:id/models` from its
+existing OMP owner, with a task-scoped query cache. This read never starts another
+runtime. Local drafts and settings use `/v1/models`; a registered task may fall
+back to that metadata only on an explicit no-live-runtime response, never after
+a failed live read. Session extension models must not leak into another task or
+global configuration, and removed models are revalidated against the same owner
+before selection.
 
 **Explicit exclusions:** all non-OMP harness binary paths, homes, endpoint/password/socket
 settings, custom-model arrays, provider enabled/hidden/order/install/update fields; generic
@@ -5904,14 +5918,32 @@ deletions so dead code is not carried across.
     §6.4 settings and §6.5 remote boundaries.
 
     **Current checkpoint (2026-09-30):** OMP is pinned to 18.4.3; current verification
-    passes 1,101/1,101 source mappings, 1,438 root tests, 418 Agent Window tests, 172 iOS
-    tests and all three typecheck commands. Source, patches and cited receipts are being
-    retained as one owner-authorized baseline commit. Local runtime databases and advisor
-    state remain on disk outside Git; unrelated monochrome brand exploration remains
-    untracked. `check:repo` reports 105 existing documentation failures. No packaged
-    app is present for requalification. D/W/N/F acceptance remains open; September 29
-    packaged receipts remain historical evidence. Details and exclusions are in the
-    [baseline receipt](evidence/baseline-snapshot-2026-09-30/findings.md).
+    passes 1,101/1,101 source mappings, 1,452 root tests and 429 Agent Window/settings tests;
+    the baseline separately recorded 172 iOS tests. Root and Agent Window typechecks pass.
+    Source, patches and cited baseline receipts were retained in owner-authorized commit
+    `d2cee3c9d31`; the local Mac follow-up is included in the owner-authorized checkpoint
+    on `codex/mac-local-checkpoint-2026-09-30`. Local runtime databases and advisor
+    state remain on disk outside Git; unrelated monochrome artwork remains untracked,
+    while the repaired historical research documents are retained in the checkpoint.
+    The owner-authorized missing-artifact reference and index repair closes
+    the remaining 9 documentation failures; `check:repo` now passes without validator changes.
+    The fresh Mac package passes 12/12 checks
+    with the rebuilt virtual-UI runtime. That package passed native two-window
+    Send/edit (one prompt; revision 2 preserved), catalog add/remove, and shared draft
+    edits, legacy-copy preservation and restart/readback. Native Appearance retained
+    Spacious/Wide after restart. Native pending-model/dirty-picker observations and a
+    separate selected-file carry route also pass; no native worktree Send is claimed.
+    The final `2026-09-30T03:15:47.176Z` package includes readiness-before-discovery,
+    a single RPC stdout writer, scoped owner survival after stdout disconnect, and
+    raw-string settings-editor hydration. Its real native OMP settings stale-write /
+    Refresh-and-retry scenario passes, as do strict catalog routes and the actual
+    standalone owner-continuity regression. Earlier native receipts retain their
+    package revisions; they are not relabelled as final-build reruns.
+    The temporary Login Item retargeting during native
+    inspection was restored to the persistent application; see the local receipt.
+    D/W/N/F acceptance remains open. Details and exclusions are in the
+    [baseline receipt](evidence/baseline-snapshot-2026-09-30/findings.md) and
+    [local Mac receipt](evidence/mac-local-closeout-2026-09-30/findings.md).
 
     **Historical checkpoint (2026-09-28):** the coverage integrity gate passes at 1,041/1,041
     mappings; the complete gate passes after the owner-approved O02 `switchSession`
@@ -7263,6 +7295,12 @@ what must pass; only dated evidence from the relevant revision establishes that 
 Every receipt under `docs/maintenance/evidence/` is listed exactly once: either inline in §9
 (where it backs a specific landed claim) or in this index. A receipt that appears nowhere is a
 defect, because an unindexed run is a run whose result nobody can find.
+
+**Historical brand exploration (2026-09-28)**
+
+| Receipt | What it records |
+|---|---|
+| [`cedia-monochrome-icon-research-2026-09-28`](evidence/cedia-monochrome-icon-research-2026-09-28/findings.md) | Unadopted monochrome exploration and companion Twin Trace market scan. Missing generated outputs are explicitly identified; this is not product adoption, trademark clearance or runtime acceptance. |
 
 **Full pinned-OMP planning audit (2026-09-23)**
 

@@ -1,0 +1,46 @@
+[
+  {
+    "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/cedia/agent/index.html#/settings?section=appearance",
+    "title": "Cedia",
+    "bodyText": "Back to app\nPersonal\nGeneral\nRemote\nProfile\nAppearance\nNotifications\nChat behavior\nKeybindings\nCoding\nAgent providers\nModels & writing\nAI / OMP settings\nSystem\nSystem tools\nCapability status\nArchived\nArchived threads\nAppearance\n\nCustomize the theme, typography, density, and time format.\n\nRestore defaults\nTheme\nTheme\n\nCedia follows the IDE theme. Change it in the IDE window (Preferences: Color Theme); both windows repaint together.\n\nFollowing the IDE\nTypography and spacing\nUse system UI font\n\nIgnore the theme's custom UI font and render the interface with the native system font (SF Pro on macOS).\n\nUI density\n\nControl spacing in the sidebar, composer, chat gutters, and settings rows without changing font size.\n\nCompact\nComfortable\nSpacious\nChat width\n\nControl how wide the chat column grows. Wide and Full give tables and wide content more room.\n\nStandard\nWide\nFull\nBase font size\n\nAdjust the app text base in pixels. Chat and UI typography scale proportionally from this value.\n\npx\nTerminal font size\n\nAdjust terminal text independently from the app and chat font size.\n\npx\nTerminal font\n\nType any monospace font installed on this device (e.g. Fira Code). Leave empty for the default. Fonts that aren't installed fall back to the system monospace.\n\nFont smoothing\n\nUse macOS-style antialiasing for lighter, crisper text rendering.\n\nTime and reading\nTime format\n\nSystem default follows your browser or OS clock preference.\n\nSystem default\nToggle Sidebar",
+    "editors": [],
+    "activeDensity": "Spacious",
+    "frames": [
+      {
+        "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/cedia/agent/index.html#/settings?section=appearance",
+        "editorCount": 0,
+        "activeDensity": "Spacious"
+      }
+    ]
+  },
+  {
+    "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html",
+    "title": "Shared state fixture — Cedia",
+    "bodyText": "Shared state fixture — Cedia\nOpen in Agents\nEXPLORER\nPROJECT\n.vscode\nfixture.txt\nOUTLINE\nTIMELINE\nOpen Chat\n⌃\n⌘\nI\nShow All Commands\n⇧\n⌘\nP\nToggle Terminal\n⌃\n`\nAGENT\n Cedia ready\n 0 \n 0\nScreen Reader Optimized",
+    "editors": [
+      {
+        "text": "IDE window draft wins",
+        "ariaLabel": null,
+        "testId": "composer-editor"
+      }
+    ],
+    "activeDensity": "",
+    "frames": [
+      {
+        "url": "vscode-file://vscode-app/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html",
+        "editorCount": 0,
+        "activeDensity": ""
+      },
+      {
+        "url": "vscode-webview://0vjrsv04nhts6t9pq9hcnvn7bf83un7cd579srtql2g9ajjbnc95/index.html?id=fb7d25d6-5815-442b-95bb-d332361ae7c8&parentId=2&origin=3d85cf18-7b1e-4166-b225-011583f86f83&swVersion=6&extensionId=cedia.cedia&platform=electron&vscode-resource-base-authority=vscode-resource.vscode-cdn.net&parentOrigin=vscode-file%3A%2F%2Fvscode-app&purpose=webviewView",
+        "editorCount": 0,
+        "activeDensity": ""
+      },
+      {
+        "url": "vscode-webview://0vjrsv04nhts6t9pq9hcnvn7bf83un7cd579srtql2g9ajjbnc95/index.html?id=fb7d25d6-5815-442b-95bb-d332361ae7c8&parentId=2&origin=3d85cf18-7b1e-4166-b225-011583f86f83&swVersion=6&extensionId=cedia.cedia&platform=electron&vscode-resource-base-authority=vscode-resource.vscode-cdn.net&parentOrigin=vscode-file%3A%2F%2Fvscode-app&purpose=webviewView#/21ba7fbd-ea5b-4cba-8bac-847b176f5d29",
+        "editorCount": 1,
+        "activeDensity": ""
+      }
+    ]
+  }
+]

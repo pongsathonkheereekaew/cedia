@@ -19,7 +19,7 @@ import { OmpHostDispatcher } from "../../../packages/omp-adapter/src/host.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { CEDIA_HOST_URI_SCHEME, readCediaArtifactUri } from "./host-uri.ts";
 import { suggestWorkspaceMode, type WorkspaceJudge, type WorkspaceSuggestion } from "./workspace-mode.ts";
-import { createOmpModelCatalog, type OmpModelCatalog } from "./model-catalog.ts";
+import { createOmpModelCatalog, normalizeOmpModelCatalog, type OmpModelCatalog } from "./model-catalog.ts";
 import type { ModelCatalogResult } from "../../../packages/protocol/src/models.ts";
 import { readOmpCapabilities } from "./omp-capabilities.ts";
 import { attachCediaOwnerControlClient, probeCediaOwner, readCediaOwnerSummary, recoverStaleCediaOwnerEndpoint, type CediaOwnerAttachment } from "./owner-endpoint.ts";
@@ -202,6 +202,12 @@ export type SessionView = Session & { sidechatSourceThreadId: string | null };
 const NO_LIVE_OMP_RUNTIME_REASON = "No OMP runtime is running; Cedia reads the capability table from a live session runtime.";
 const NO_LIVE_OMP_SETTINGS_REASON = "No OMP runtime is running; Cedia reads OMP settings from a live session runtime.";
 const NO_CAPABILITY_BRIDGE_REASON = "The live OMP runtime does not advertise the Cedia capability bridge.";
+const NO_SESSION_OMP_MODEL_RUNTIME_REASON = "No OMP runtime is running; Cedia cannot read this task's live model catalog.";
+
+export type SessionModelCatalogResult = ModelCatalogResult | {
+  readonly state: "unavailable";
+  readonly reason: string;
+};
 
 const terminal = new Set(["completed", "failed", "outcome_unknown", "not_dispatched"]);
 const turnCommands = new Set(["prompt", "abort_and_prompt"]);
@@ -3719,6 +3725,29 @@ export class CediaHost {
   listModels(): Promise<ModelCatalogResult> {
     this.#assertOpen();
     return this.#modelCatalog.list();
+  }
+
+  /**
+   * Read a task's model catalog from its already-running OMP owner.
+   *
+   * The session route deliberately does not start a task or fall back to the metadata worker when
+   * a live owner exists: extension/provider additions and removals belong to that owner. An
+   * unstarted task gets an explicit absence marker so clients may use the sessionless catalog for
+   * discovery without confusing that fallback with a failed live read.
+   */
+  async listSessionModels(sessionId: string): Promise<SessionModelCatalogResult> {
+    this.#assertOpen();
+    this.#session(sessionId);
+    const runtime = this.#runtimes.get(sessionId);
+    if (!runtime || runtime.closing || !runtime.client || runtime.client.phase !== "ready") {
+      return { state: "unavailable", reason: NO_SESSION_OMP_MODEL_RUNTIME_REASON };
+    }
+    const ack = await runtime.client.request("get_available_models", {});
+    return {
+      source: "omp",
+      cached: false,
+      models: normalizeOmpModelCatalog(ack.data),
+    };
   }
 
   /**

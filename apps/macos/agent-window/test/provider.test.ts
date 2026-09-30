@@ -5,6 +5,7 @@ import {
   MODEL_OPTIONS_BY_PROVIDER,
   ModelSelection,
   ProviderKind,
+  ProviderListModelsInput,
 } from "../vendor/synara/packages/contracts/src/index";
 import { getDefaultModel } from "../vendor/synara/packages/shared/src/model";
 import {
@@ -103,6 +104,7 @@ describe("OMP provider identity", () => {
         model: "openrouter/deepseek-v4.1-flash",
       }),
     ).toBe(true);
+    expect(Schema.is(ProviderListModelsInput)({ provider: "omp", threadId: "session-1" })).toBe(true);
   });
 
   it("has no fabricated OMP model or default model", () => {

@@ -690,6 +690,20 @@ const handle = command => {
     if (mode === "exit-after-start") setTimeout(() => process.exit(17), 10);
     return;
   }
+  if (command.type === "get_available_models") {
+    if (mode === "session-models-refuse") {
+      frame({ type: "response", command: command.type, id: command.id, success: false, error: "Live model catalog unavailable" });
+      return;
+    }
+    if (mode === "session-models") {
+      response(command.type, command.id, { models: [
+        { id: "ephemeral-model", provider: "fixture-live", label: "Ephemeral live model" },
+      ] });
+      return;
+    }
+    response(command.type, command.id, { fixture: command.type });
+    return;
+  }
   if (command.type === "set_todos") {
     fixtureTodoPhases = command.phases;
     response(command.type, command.id, { todoPhases: fixtureTodoPhases });

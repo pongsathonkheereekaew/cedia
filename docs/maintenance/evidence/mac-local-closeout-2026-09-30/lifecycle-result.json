@@ -1,0 +1,61 @@
+{
+  "ok": true,
+  "simulatedLoginBackground": true,
+  "loginItemMutation": "intercepted by scratch-only app bundle shim",
+  "boots": 3,
+  "gracefulQuitDrained": true,
+  "crashRelaunch": true,
+  "leftoverScratchProcessesAfterCrash": 1,
+  "leftoverDetailFile": "leftovers-after-crash.txt",
+  "errors": [],
+  "lifecycleShimEvents": [
+    {
+      "event": "intercept-set-login-item",
+      "settings": {
+        "openAtLogin": true,
+        "openAsHidden": true
+      }
+    },
+    {
+      "event": "simulated-login-state",
+      "isPackaged": true,
+      "openedAtLogin": true
+    },
+    {
+      "event": "intercept-set-login-item",
+      "settings": {
+        "openAtLogin": true,
+        "openAsHidden": true
+      }
+    },
+    {
+      "event": "simulated-login-state",
+      "isPackaged": true,
+      "openedAtLogin": false
+    },
+    {
+      "event": "intercept-set-login-item",
+      "settings": {
+        "openAtLogin": true,
+        "openAsHidden": true
+      }
+    },
+    {
+      "event": "simulated-login-state",
+      "isPackaged": true,
+      "openedAtLogin": false
+    },
+    {
+      "event": "intercept-set-login-item",
+      "settings": {
+        "openAtLogin": true,
+        "openAsHidden": true
+      }
+    },
+    {
+      "event": "simulated-login-state",
+      "isPackaged": true,
+      "openedAtLogin": false
+    }
+  ]
+}

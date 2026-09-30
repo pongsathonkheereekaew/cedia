@@ -14,6 +14,7 @@ import {
 	type DesktopBridge,
 	type ProviderCompactThreadInput,
 	type ProviderListCommandsInput,
+	type ProviderListModelsInput,
 	type ProviderListSkillsInput,
 } from "@synara/contracts";
 import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState, type TranscriptEntry } from "../../src/state.ts";
@@ -1355,6 +1356,11 @@ function catalogModels(value: unknown): unknown[] {
 	return row.models;
 }
 
+function isUnavailableModelCatalog(value: unknown): boolean {
+	const row = record(value);
+	return row?.state === "unavailable" && typeof row.reason === "string";
+}
+
 /** Pure adapter-side catalog projection, shared by provider tests and the native API. */
 export function normalizeOmpModelRows(value: unknown): OmpModelRow[] {
 	return normalizeOmpModels(value);
@@ -2579,10 +2585,13 @@ class CediaAgentAdapter {
 
 	async setModelIfRequested(session: Session, selection: ModelSelectionLike | undefined, options: { forSubmission?: boolean } = {}): Promise<void> {
 		if (!selection || selection.model === OMP_UNRESOLVED_MODEL) return;
-		// Model discovery is global OMP metadata. Reading it through the host route
-		// avoids starting an arbitrary existing task just to populate the picker and
-		// keeps selection and the provider.listModels surface on one catalog.
-		const catalog = await this.request<unknown>("GET", "/v1/models");
+		// A running task's owner catalog is authoritative for selection: extensions/providers may
+		// add or remove rows after the sessionless metadata worker last ran. An unstarted task gets
+		// the explicit absence marker and may safely fall back to the global discovery route.
+		const sessionCatalog = await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(session.id)}/models`);
+		const catalog = isUnavailableModelCatalog(sessionCatalog)
+			? await this.request<unknown>("GET", "/v1/models")
+			: sessionCatalog;
 		const rows = normalizeOmpModels(catalogModels(catalog));
 		const exact = rows.filter(row => row.slug === selection.model);
 		const bare = rows.filter(row => row.id === selection.model);
@@ -2824,15 +2833,34 @@ class CediaAgentAdapter {
 		if (result.status === "failed" || result.status === "outcome_unknown") throw new Error(result.error ?? "Cedia did not accept the UI response");
 	}
 
-	async listModels(): Promise<{ models: unknown[]; source: string }> {
+	async listModels(input: ProviderListModelsInput): Promise<{ models: unknown[]; source: string }> {
 		let catalog: unknown;
-		try {
-			catalog = await this.request<unknown>("GET", "/v1/models");
-		} catch {
-			// OMP metadata is optional and this read is discovery, not a turn: with the
-			// route itself unavailable the picker is simply empty, and no existing task
-			// was started as a discovery side effect.
-			return { models: [], source: "omp" };
+		if (input.provider === "omp" && input.threadId) {
+			// A live task owns the extension/provider catalog for that task. Only an explicit
+			// no-runtime marker is allowed to fall back to the sessionless metadata route;
+			// transport or OMP failures must remain visible to the picker.
+			const sessionCatalog = await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(input.threadId)}/models`);
+			if (!isUnavailableModelCatalog(sessionCatalog)) {
+				catalog = sessionCatalog;
+			} else {
+				try {
+					catalog = await this.request<unknown>("GET", "/v1/models");
+				} catch {
+					// OMP metadata is optional and this read is discovery, not a turn: with the
+					// route itself unavailable the picker is simply empty, and no existing task
+					// was started as a discovery side effect.
+					return { models: [], source: "omp" };
+				}
+			}
+		} else {
+			try {
+				catalog = await this.request<unknown>("GET", "/v1/models");
+			} catch {
+				// OMP metadata is optional and this read is discovery, not a turn: with the
+				// route itself unavailable the picker is simply empty, and no existing task
+				// was started as a discovery side effect.
+				return { models: [], source: "omp" };
+			}
 		}
 		// An answer that arrived without a list is not the same fact as an unavailable
 		// catalogue, so it surfaces instead of reading as "OMP offers nothing".
@@ -2972,7 +3000,7 @@ class CediaAgentAdapter {
 				listSkillsCatalog: async () => ({ skills: [] }),
 				listPlugins: async () => ({ marketplaces: [], marketplaceLoadErrors: [], remoteSyncError: null, featuredPluginIds: [], source: "omp" }),
 				readPlugin: unsupportedAsync("provider.readPlugin"),
-				listModels: async () => await adapter.listModels(),
+				listModels: async (input: ProviderListModelsInput) => await adapter.listModels(input),
 				listAgents: async () => ({ agents: [], source: "omp" }),
 			},
 			server: {

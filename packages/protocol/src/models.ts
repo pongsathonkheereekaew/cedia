@@ -7,8 +7,10 @@
  * `get_available_models` normalization is the only place that knows what OMP
  * actually answered, so its row is the contract and lives here.
  *
- * One route carries the catalog:
- *   GET /v1/models   OMP's own model list, provider-qualified and cached
+ * Catalog routes:
+ *   GET /v1/models                sessionless OMP metadata, cached
+ *   GET /v1/sessions/:id/models   existing owner's live models, not cached
+ * The session route returns an explicit unavailable marker when no runtime is live.
  */
 import type { ProviderAuthStatus } from "./provider-auth.ts";
 

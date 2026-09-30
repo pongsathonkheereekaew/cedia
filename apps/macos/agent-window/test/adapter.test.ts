@@ -94,6 +94,7 @@ function fakeBridge(
 				throw new Error(`Unexpected keybindings action ${action}`);
 			}
 			if (request.path === "/v1/projects") return [project];
+			if (request.path === `/v1/sessions/${session.id}/models`) return { state: "unavailable", reason: "No OMP runtime is running" };
 			if (request.path === "/v1/models") return {
 				source: "omp",
 				models: [{ id: "fixture-model", provider: "fixture", label: "Fixture model", reasoning: true, thinking: ["low", "high"], contextWindow: 128000, maxTokens: 4096 }],
@@ -1149,6 +1150,63 @@ function sentCommands(calls: readonly Request[]): Array<{ command: string; paylo
 		expect(calls.some(call => call.path.endsWith("/start"))).toBe(false);
 	});
 
+	it("reads a live task's model catalog from its session owner", async () => {
+		const { bridge, calls } = fakeBridge();
+		const sessionCalls: Request[] = [];
+		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			const request = input as Request;
+			if (request.path === `/v1/sessions/${session.id}/models`) {
+				sessionCalls.push(request);
+				return {
+					source: "omp",
+					cached: false,
+					models: [{ id: "ephemeral-model", provider: "fixture-live", label: "Ephemeral live model" }],
+				};
+			}
+			return bridge.invoke(channel, input);
+		} } });
+
+		const result = await api.provider.listModels({ provider: "omp", threadId: session.id });
+
+		expect(result.models).toEqual([expect.objectContaining({
+			slug: "fixture-live/ephemeral-model",
+			name: "Ephemeral live model",
+		})]);
+		expect(sessionCalls).toHaveLength(1);
+		expect(calls.some(call => call.path === "/v1/models")).toBe(false);
+	});
+
+	it("falls back to the global catalog only when a task has no live owner", async () => {
+		const { bridge, calls } = fakeBridge();
+		const sessionCalls: Request[] = [];
+		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			const request = input as Request;
+			if (request.path === `/v1/sessions/${session.id}/models`) {
+				sessionCalls.push(request);
+				return { state: "unavailable", reason: "No OMP runtime is running" };
+			}
+			return bridge.invoke(channel, input);
+		} } });
+
+		const result = await api.provider.listModels({ provider: "omp", threadId: session.id });
+
+		expect(result.models).toEqual([expect.objectContaining({ slug: "fixture/fixture-model" })]);
+		expect(sessionCalls).toHaveLength(1);
+		expect(calls.some(call => call.path === "/v1/models")).toBe(true);
+	});
+
+	it("does not hide a live session catalog failure behind the global catalog", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			const request = input as Request;
+			if (request.path === `/v1/sessions/${session.id}/models`) throw new Error("Live model catalog unavailable");
+			return bridge.invoke(channel, input);
+		} } });
+
+		await expect(api.provider.listModels({ provider: "omp", threadId: session.id })).rejects.toThrow("Live model catalog unavailable");
+		expect(calls.some(call => call.path === "/v1/models")).toBe(false);
+	});
+
 	it("refuses a catalog answer that carries no model list", async () => {
 		const { bridge } = fakeBridge();
 		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
@@ -1198,6 +1256,34 @@ function sentCommands(calls: readonly Request[]): Array<{ command: string; paylo
 			body: { payload: { provider: "fixture", modelId: "fixture-model" } },
 		});
 		expect(calls.some(call => call.path === "/v1/models")).toBe(true);
+	});
+
+	it("validates a selected model against the live task catalog", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge: { invoke: async (channel, input) => {
+			const request = input as Request;
+			if (request.path === `/v1/sessions/${session.id}/models`) return {
+				source: "omp",
+				cached: false,
+				models: [{ id: "ephemeral-model", provider: "fixture-live", label: "Ephemeral live model" }],
+			};
+			return bridge.invoke(channel, input);
+		} } });
+
+		await api.orchestration.dispatchCommand({
+			type: "thread.turn.start",
+			commandId: "cmd-live-model",
+			threadId: session.id,
+			message: { messageId: "message-live-model", role: "user", text: "use live fixture", attachments: [] },
+			modelSelection: { provider: "omp", model: "fixture-live/ephemeral-model", ompProvider: "fixture-live" },
+			runtimeMode: "approval-required",
+			interactionMode: "default",
+			createdAt: "2026-09-19T00:04:00.000Z",
+		});
+
+		expect(calls.find(call => call.path.endsWith("/commands") && (call.body as { command?: string })?.command === "set_model")).toMatchObject({
+			body: { payload: { provider: "fixture-live", modelId: "ephemeral-model" } },
+		});
 	});
 	it("defers a model change while a turn is running instead of restating that turn's model", async () => {
 		const { bridge, calls } = fakeBridge(frames, { session: { status: "running", turns: [{ state: "running", turnIntentId: "turn-1", commandId: "cmd-1" }] } });

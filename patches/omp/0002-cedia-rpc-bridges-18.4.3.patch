@@ -1,201 +1,3 @@
-From 4f74c7cf1fcdf57a11424e9518c4c7ed9328696e Mon Sep 17 00:00:00 2001
-From: Pongsathon Kheereekaew
- <202749603+pongsathonkheereekaew@users.noreply.github.com>
-Date: Tue, 29 Sep 2026 20:28:36 +0700
-Subject: [PATCH] apply 0002
-
----
- crates/pi-edit/src/engine.rs                  |   12 +-
- crates/pi-edit/src/files.rs                   |  102 +-
- crates/pi-edit/src/lib.rs                     |    2 +-
- crates/pi-edit/src/session.rs                 |   27 +-
- crates/pi-edit/tests/session.rs               |  233 +-
- crates/pi-natives/src/ast.rs                  |  504 +-
- crates/pi-natives/src/edit.rs                 |   77 +-
- packages/ai/src/types.ts                      |    2 +
- .../coding-agent/scripts/compile-binary.ts    |    3 +
- packages/coding-agent/src/advisor/config.ts   |    8 +
- .../coding-agent/src/config/model-registry.ts |   80 +
- .../src/config/settings-apply-timing.ts       | 5330 +++++++++++++++++
- packages/coding-agent/src/config/settings.ts  |   41 +
- packages/coding-agent/src/edit/index.ts       |  268 +-
- .../extensions/managed-timers.ts              |    9 +
- .../src/extensibility/extensions/runner.ts    |  278 +-
- packages/coding-agent/src/main.ts             |  107 +-
- .../coding-agent/src/modes/acp/acp-agent.ts   |    9 +-
- .../controllers/extension-ui-controller.ts    |    9 +-
- .../src/modes/controllers/input-controller.ts |   21 +
- .../src/modes/interactive-mode.ts             |  317 +-
- .../src/modes/rpc/cedia-advisor-bridge.ts     |   81 +
- .../modes/rpc/cedia-advisor-config-bridge.ts  |  109 +
- .../src/modes/rpc/cedia-agents-bridge.ts      |   34 +
- .../modes/rpc/cedia-agents-config-bridge.ts   |  188 +
- .../rpc/cedia-agents-lifecycle-bridge.ts      |   75 +
- .../src/modes/rpc/cedia-btw-bridge.ts         |  161 +
- .../src/modes/rpc/cedia-capability-bridge.ts  | 3305 ++++++++++
- .../src/modes/rpc/cedia-cleanse-bridge.ts     |  247 +
- .../src/modes/rpc/cedia-client-bridge.ts      |  749 +++
- .../src/modes/rpc/cedia-context-bridge.ts     |   92 +
- .../src/modes/rpc/cedia-credits-bridge.ts     |  116 +
- .../src/modes/rpc/cedia-extensions-bridge.ts  |  147 +
- .../src/modes/rpc/cedia-goal-bridge.ts        |  319 +
- .../src/modes/rpc/cedia-loop-bridge.ts        |   45 +
- .../src/modes/rpc/cedia-memory-bridge.ts      |   82 +
- .../src/modes/rpc/cedia-model-roles-bridge.ts |   31 +
- .../src/modes/rpc/cedia-omfg-bridge.ts        |  245 +
- .../src/modes/rpc/cedia-pause-bridge.ts       |   31 +
- .../src/modes/rpc/cedia-plan-bridge.ts        |  318 +
- .../src/modes/rpc/cedia-prewalk-bridge.ts     |   17 +
- .../src/modes/rpc/cedia-python-bridge.ts      |   49 +
- .../src/modes/rpc/cedia-queue-bridge.ts       |   78 +
- .../src/modes/rpc/cedia-tools-bridge.ts       |  132 +
- .../src/modes/rpc/cedia-usage-bridge.ts       |  121 +
- .../coding-agent/src/modes/rpc/host-tools.ts  |   12 +
- .../coding-agent/src/modes/rpc/host-uris.ts   |   12 +
- .../coding-agent/src/modes/rpc/rpc-mode.ts    | 1969 +++++-
- .../src/modes/rpc/rpc-subagents.ts            |    4 +-
- .../coding-agent/src/modes/rpc/rpc-types.ts   |  937 ++-
- .../src/modes/rpc/rpc-ui-terminal.ts          |   23 +
- .../src/modes/rpc/rpc-virtual-ui.ts           |  818 +++
- packages/coding-agent/src/modes/types.ts      |   47 +
- packages/coding-agent/src/sdk.ts              |  160 +
- .../src/session/agent-session-types.ts        |   55 +-
- .../coding-agent/src/session/agent-session.ts |  344 +-
- .../src/session/cedia-owner-bridge.ts         |  744 +++
- .../coding-agent/src/session/cedia-policy.ts  |   83 +
- .../coding-agent/src/session/client-bridge.ts |   98 +
- .../src/session/queued-messages.ts            |    7 +-
- .../src/slash-commands/builtin-marketplace.ts |    9 +-
- packages/coding-agent/src/tools/acp-bridge.ts |  157 +-
- packages/coding-agent/src/tools/ast-edit.ts   |  100 +-
- .../coding-agent/src/tools/ast-editor-plan.ts |  172 +
- .../src/tools/auto-generated-guard.ts         |    3 +-
- .../src/tools/native-editor-observations.ts   |  114 +
- .../coding-agent/src/tools/read-summary.ts    |   19 +-
- packages/coding-agent/src/tools/read.ts       |  179 +-
- packages/coding-agent/src/tools/write.ts      |   52 +-
- packages/coding-agent/test/acp-agent.test.ts  |    6 +-
- ...gent-session-configured-extensions.test.ts |    1 +
- ...agent-session-prompt-dispatch-race.test.ts |   10 +
- .../test/cedia-advisor-config-bridge.test.ts  |  128 +
- .../test/cedia-agent-roster.test.ts           |   84 +
- .../test/cedia-agents-config-bridge.test.ts   |   73 +
- .../cedia-agents-lifecycle-bridge.test.ts     |  172 +
- .../test/cedia-ast-editor.test.ts             |  270 +
- .../coding-agent/test/cedia-bash-pty.test.ts  |   21 +
- .../test/cedia-btw-bridge.test.ts             |  150 +
- .../test/cedia-capability-bridge.test.ts      |  849 +++
- .../test/cedia-cleanse-bridge.test.ts         |  151 +
- .../test/cedia-client-bridge.test.ts          |  139 +
- .../test/cedia-context-bridge.test.ts         |  142 +
- .../test/cedia-credit-policy.test.ts          |  147 +
- .../test/cedia-credits-bridge.test.ts         |  116 +
- .../test/cedia-editor-bridge.test.ts          |  251 +
- .../test/cedia-editor-routing.test.ts         |  738 +++
- .../test/cedia-extensions-bridge.test.ts      |  145 +
- .../test/cedia-history-bridge.test.ts         |  165 +
- .../test/cedia-loop-bridge.test.ts            |  123 +
- .../test/cedia-memory-bridge.test.ts          |  155 +
- .../test/cedia-model-roles-bridge.test.ts     |  111 +
- .../test/cedia-model-state-bridge.test.ts     |  301 +
- .../test/cedia-omfg-bridge.test.ts            |  184 +
- .../cedia-owner-bridge-controller.test.ts     |  721 +++
- .../test/cedia-pause-bridge.test.ts           |   42 +
- .../test/cedia-plan-bridge.test.ts            |  228 +
- .../test/cedia-prewalk-bridge.test.ts         |   79 +
- .../test/cedia-provider-auth.test.ts          |   71 +
- .../test/cedia-python-bridge.test.ts          |   64 +
- .../test/cedia-queue-bridge.test.ts           |  118 +
- .../test/cedia-tools-catalog-bridge.test.ts   |  225 +
- .../test/cedia-tools-codemode-bridge.test.ts  |  105 +
- .../test/cedia-tree-bridge.test.ts            |  372 ++
- .../test/cedia-usage-bridge.test.ts           |  105 +
- .../test/codex-auto-reset-integration.test.ts |   16 +-
- .../test/extensions-runner.test.ts            |  224 +
- .../test/fixtures/cedia-runtime-lock-stub.ts  |   25 +
- .../test/input-controller-keybindings.test.ts |   33 +
- .../model-registry-runtime-provider.test.ts   |   74 +
- .../test/reload-plugins-mcp.test.ts           |    3 +-
- .../coding-agent/test/rpc-host-tools.test.ts  |   14 +
- .../coding-agent/test/rpc-host-uris.test.ts   |   12 +
- .../coding-agent/test/rpc-input-frame.test.ts |   96 +
- .../coding-agent/test/rpc-subagents.test.ts   |    2 +
- .../coding-agent/test/rpc-tui-slash.test.ts   |  152 +
- .../coding-agent/test/rpc-virtual-ui.test.ts  |  243 +
- packages/natives/native/index.d.ts            |   45 +-
- packages/natives/native/loader-state.js       |   10 +
- .../natives/test/cedia-loader-cache.test.ts   |   24 +
- packages/wire/src/index.ts                    |    2 +
- 121 files changed, 27791 insertions(+), 275 deletions(-)
- create mode 100644 packages/coding-agent/src/config/settings-apply-timing.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-advisor-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-advisor-config-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-agents-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-agents-config-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-agents-lifecycle-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-btw-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-capability-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-cleanse-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-client-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-context-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-credits-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-extensions-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-goal-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-loop-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-memory-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-model-roles-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-omfg-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-pause-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-plan-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-prewalk-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-python-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-queue-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-tools-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/cedia-usage-bridge.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/rpc-ui-terminal.ts
- create mode 100644 packages/coding-agent/src/modes/rpc/rpc-virtual-ui.ts
- create mode 100644 packages/coding-agent/src/session/cedia-owner-bridge.ts
- create mode 100644 packages/coding-agent/src/session/cedia-policy.ts
- create mode 100644 packages/coding-agent/src/tools/ast-editor-plan.ts
- create mode 100644 packages/coding-agent/src/tools/native-editor-observations.ts
- create mode 100644 packages/coding-agent/test/cedia-advisor-config-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-agent-roster.test.ts
- create mode 100644 packages/coding-agent/test/cedia-agents-config-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-agents-lifecycle-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-ast-editor.test.ts
- create mode 100644 packages/coding-agent/test/cedia-bash-pty.test.ts
- create mode 100644 packages/coding-agent/test/cedia-btw-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-capability-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-cleanse-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-client-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-context-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-credit-policy.test.ts
- create mode 100644 packages/coding-agent/test/cedia-credits-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-editor-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-editor-routing.test.ts
- create mode 100644 packages/coding-agent/test/cedia-extensions-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-history-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-loop-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-memory-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-model-roles-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-model-state-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-omfg-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-owner-bridge-controller.test.ts
- create mode 100644 packages/coding-agent/test/cedia-pause-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-plan-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-prewalk-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-provider-auth.test.ts
- create mode 100644 packages/coding-agent/test/cedia-python-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-queue-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-tools-catalog-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-tools-codemode-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-tree-bridge.test.ts
- create mode 100644 packages/coding-agent/test/cedia-usage-bridge.test.ts
- create mode 100644 packages/coding-agent/test/fixtures/cedia-runtime-lock-stub.ts
- create mode 100644 packages/coding-agent/test/rpc-tui-slash.test.ts
- create mode 100644 packages/coding-agent/test/rpc-virtual-ui.test.ts
- create mode 100644 packages/natives/test/cedia-loader-cache.test.ts
-
 diff --git a/crates/pi-edit/src/engine.rs b/crates/pi-edit/src/engine.rs
 index 126e3d859b..1b7f24ab4d 100644
 --- a/crates/pi-edit/src/engine.rs
@@ -398,10 +200,10 @@ index 1e5c0d8452..f8cfe39f94 100644
  
  	fn read(&mut self, authored: &str) -> EditResult<Arc<FileRead>> {
 diff --git a/crates/pi-edit/src/lib.rs b/crates/pi-edit/src/lib.rs
-index 66e3074b86..0448c95bc1 100644
+index 66e3074b86..8ad7297dde 100644
 --- a/crates/pi-edit/src/lib.rs
 +++ b/crates/pi-edit/src/lib.rs
-@@ -37,8 +37,9 @@ pub use engine::{
+@@ -37,6 +37,7 @@ pub use engine::{
  	StagedFile,
  };
  pub use error::{EditError, EditResult};
@@ -409,8 +211,6 @@ index 66e3074b86..0448c95bc1 100644
  pub use path_policy::{PathPolicy, UrlResolution};
  pub use session::{
  	ApplyOutcome, ApplyRequest, EditWriter, FileOutcome, PreviewBatch, Session, WriteRequest,
- 	WriteResponse,
- };
 diff --git a/crates/pi-edit/src/session.rs b/crates/pi-edit/src/session.rs
 index 8aaea91b67..3beafc96d5 100644
 --- a/crates/pi-edit/src/session.rs
@@ -8148,7 +7948,7 @@ index d0bcadb1da..5698f1a43a 100644
  			if (!handlers || handlers.length === 0) continue;
  
 diff --git a/packages/coding-agent/src/main.ts b/packages/coding-agent/src/main.ts
-index ab541193c2..128cfde7e7 100644
+index ab541193c2..81cae8e0ed 100644
 --- a/packages/coding-agent/src/main.ts
 +++ b/packages/coding-agent/src/main.ts
 @@ -6,6 +6,7 @@
@@ -8167,7 +7967,7 @@ index ab541193c2..128cfde7e7 100644
  import { resolveResumableSession, type SessionInfo } from "./session/session-listing";
  import { ForkSourceNotFoundError, SessionManager } from "./session/session-manager";
  import { shouldShowStartupSplash } from "./startup-splash";
-@@ -222,6 +224,89 @@ async function loadReadlineInterface() {
+@@ -222,6 +224,112 @@ async function loadReadlineInterface() {
  export function writeStartupNotice(parsedArgs: Pick<Args, "mode">, text: string): void {
  	(parsedArgs.mode === "json" ? process.stderr : process.stdout).write(text);
  }
@@ -8179,14 +7979,23 @@ index ab541193c2..128cfde7e7 100644
 + */
 +async function startQualifiedCediaTuiBridge(session: AgentSession): Promise<CediaOwnerBridge> {
 +	const environment = process.env;
-+	if (environment.CEDIA_TUI_OWNER_BRIDGE !== "1") throw new Error("Cedia TUI owner bridge was not explicitly qualified");
-+	if (environment.CEDIA_POLICY_CREDIT_GUARD !== "1") throw new Error("Cedia TUI owner bridge requires the credit guard");
++	if (environment.CEDIA_TUI_OWNER_BRIDGE !== "1")
++		throw new Error("Cedia TUI owner bridge was not explicitly qualified");
++	if (environment.CEDIA_POLICY_CREDIT_GUARD !== "1")
++		throw new Error("Cedia TUI owner bridge requires the credit guard");
 +	const lockPath = environment.CEDIA_SESSION_LOCK;
 +	const taskId = environment.CEDIA_HOST_SESSION_ID;
 +	const incarnation = environment.CEDIA_SESSION_INCARNATION;
 +	const contextPath = environment.CEDIA_SESSION_CONTEXT_PATH;
 +	const expectedSessionFile = environment.CEDIA_SESSION_FILE;
-+	if (!lockPath || basename(resolve(lockPath)) !== "owner.sqlite" || !taskId || !incarnation || !contextPath || !expectedSessionFile) {
++	if (
++		!lockPath ||
++		basename(resolve(lockPath)) !== "owner.sqlite" ||
++		!taskId ||
++		!incarnation ||
++		!contextPath ||
++		!expectedSessionFile
++	) {
 +		throw new Error("Cedia TUI owner bridge requires the qualified task context and session lock");
 +	}
 +	let canonicalLockPath: string;
@@ -8217,21 +8026,35 @@ index ab541193c2..128cfde7e7 100644
 +	} catch {
 +		throw new Error("Cedia TUI owner bridge context is not valid JSON");
 +	}
-+	if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("Cedia TUI owner bridge context is not an object");
++	if (!context || typeof context !== "object" || Array.isArray(context))
++		throw new Error("Cedia TUI owner bridge context is not an object");
 +	const contextRow = context as Record<string, unknown>;
-+	if (contextRow.version !== 1 || contextRow.taskId !== taskId || contextRow.taskId !== basename(directory) || contextRow.incarnation !== incarnation
-+		|| contextRow.sessionFile !== expectedSessionFile || contextRow.cwd !== session.sessionManager.getCwd()
-+		|| contextRow.creditGuard !== true) {
++	if (
++		contextRow.version !== 1 ||
++		contextRow.taskId !== taskId ||
++		contextRow.taskId !== basename(directory) ||
++		contextRow.incarnation !== incarnation ||
++		contextRow.sessionFile !== expectedSessionFile ||
++		contextRow.cwd !== session.sessionManager.getCwd() ||
++		contextRow.creditGuard !== true
++	) {
 +		throw new Error("Cedia TUI owner bridge context does not match the opened session");
 +	}
 +	let canonicalSessionFile: string;
 +	try {
-+		canonicalSessionFile = join(fsSync.realpathSync(dirname(resolve(expectedSessionFile))), basename(resolve(expectedSessionFile)));
++		canonicalSessionFile = join(
++			fsSync.realpathSync(dirname(resolve(expectedSessionFile))),
++			basename(resolve(expectedSessionFile)),
++		);
 +	} catch {
 +		throw new Error("Cedia TUI owner bridge transcript parent is unavailable");
 +	}
 +	const sessionRelative = relative(directory, canonicalSessionFile);
-+	if (sessionRelative === ".." || sessionRelative.startsWith(`..${resolve("/") === "/" ? "/" : "\\"}`) || sessionRelative.includes("\0")) {
++	if (
++		sessionRelative === ".." ||
++		sessionRelative.startsWith(`..${resolve("/") === "/" ? "/" : "\\"}`) ||
++		sessionRelative.includes("\0")
++	) {
 +		throw new Error("Cedia TUI owner bridge transcript is outside its task directory");
 +	}
 +	// The trusted runtime-lock extension publishes this process's canonical lock path only after
@@ -8257,7 +8080,15 @@ index ab541193c2..128cfde7e7 100644
  
  async function checkForNewVersion(currentVersion: string): Promise<string | undefined> {
  	if (!cfgStartupCheckUpdate.get(settings)) {
-@@ -1836,7 +1921,9 @@ export async function runRootCommand(
+@@ -1651,6 +1759,7 @@ interface RunRootCommandDependencies {
+ 	discoverAuthStorage?: typeof discoverAuthStorage;
+ 	selectSession?: SessionPicker;
+ 	runAcpMode?: RunAcpMode;
++	runRpcMode?: RunRpcMode;
+ 	createForeignSessionStore?: (source: ForeignSessionSource) => ForeignSessionStore;
+ 	settings?: Settings;
+ 	forceSetupWizard?: boolean;
+@@ -1836,7 +1945,9 @@ export async function runRootCommand(
  			"modelRegistry:init",
  			() => new ModelRegistry(authStorage, undefined, { settings: settingsInstance }),
  		);
@@ -8268,7 +8099,31 @@ index ab541193c2..128cfde7e7 100644
  			Bun.env.PI_NO_PTY = "1";
  		}
  		if (
-@@ -2422,7 +2509,10 @@ export async function runRootCommand(
+@@ -2179,13 +2290,22 @@ export async function runRootCommand(
+ 		}
+ 
+ 		const createAgentSessionImpl = deps.createAgentSession ?? createAgentSession;
++		let rpcModelRefreshStarted = false;
++		const startRpcModelRefresh =
++			mode === "rpc" || mode === "rpc-ui"
++				? () => {
++						if (rpcModelRefreshStarted) return;
++						rpcModelRefreshStarted = true;
++						modelRegistry.refreshInBackground();
++					}
++				: undefined;
+ 		const createSession = async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+ 			const result = await logger.time("createAgentSession", createAgentSessionImpl, options);
+ 			// Kick off background model discovery only after createAgentSession finishes its parallel
+ 			// discovery arms; running these concurrently contends for the event loop and stretches
+ 			// every parallel arm by ~30ms. Interactive startup defers it further, behind the first
+ 			// frame (see `startDeferredStartupWork`), for the same reason.
+-			if (!isInteractive) modelRegistry.refreshInBackground();
++			if (!isInteractive && startRpcModelRefresh === undefined) modelRegistry.refreshInBackground();
+ 			return result;
+ 		};
+ 
+@@ -2422,7 +2542,10 @@ export async function runRootCommand(
  				notifs.push({ kind: "error", message: modelRegistryError.message });
  			}
  
@@ -8280,7 +8135,7 @@ index ab541193c2..128cfde7e7 100644
  				if (modelRegistryError) {
  					process.stderr.write(`${chalk.red(modelRegistryError.message)}\n\n`);
  				}
-@@ -2455,6 +2545,16 @@ export async function runRootCommand(
+@@ -2455,6 +2578,16 @@ export async function runRootCommand(
  				process.exit(1);
  			}
  
@@ -8297,16 +8152,26 @@ index ab541193c2..128cfde7e7 100644
  			if (mode === "rpc" || mode === "rpc-ui" || isInteractive) {
  				// Long-lived hosts apply on-disk config edits (config.yml, project
  				// settings, `--config` overlays) live. No-op unless this is the
-@@ -2472,6 +2572,8 @@ export async function runRootCommand(
+@@ -2465,13 +2598,17 @@ export async function runRootCommand(
+ 
+ 			if (mode === "rpc" || mode === "rpc-ui") {
+ 				// Branch-only protocol runner: keep RPC host code out of normal interactive startup.
+-				const runRpcMode: RunRpcMode = (await import("./modes/rpc/rpc-mode")).runRpcMode;
++				const runRpcMode: RunRpcMode = deps.runRpcMode ?? (await import("./modes/rpc/rpc-mode")).runRpcMode;
+ 				stopStartupWatchdog();
+ 				await runRpcMode(session, {
+ 					setToolUIContext: mode === "rpc-ui" ? setToolUIContext : undefined,
  					headless: parsedArgs.noUi === true,
  					subagentEventBus,
  					input: rpcInput,
-+					onVirtualUiReady: cediaVirtualUiRequested && !initialArgs.noPty ? () => delete Bun.env.PI_NO_PTY : undefined,
++					onReady: startRpcModelRefresh,
++					onVirtualUiReady:
++						cediaVirtualUiRequested && !initialArgs.noPty ? () => delete Bun.env.PI_NO_PTY : undefined,
 +					mcpManager,
  				});
  			} else if (isInteractive) {
  				const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
-@@ -2526,6 +2628,7 @@ export async function runRootCommand(
+@@ -2526,6 +2663,7 @@ export async function runRootCommand(
  					);
  				} finally {
  					startupLease?.dispose();
@@ -15841,14 +15706,13 @@ index 6b7e7d2c14..78f2be3af4 100644
  		const result = await this.#dispatch("read", url.href, undefined, context?.signal);
  		if (result.isError) {
 diff --git a/packages/coding-agent/src/modes/rpc/rpc-mode.ts b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
-index 3764f9e3df..bbdde72c17 100644
+index 3764f9e3df..1304f03575 100644
 --- a/packages/coding-agent/src/modes/rpc/rpc-mode.ts
 +++ b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
 @@ -12,10 +12,47 @@
   * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
   */
  import * as path from "node:path";
-+import { once } from "node:events";
 +import { randomUUID } from "node:crypto";
 +import { stat } from "node:fs/promises";
 +import { dirname } from "node:path";
@@ -15888,6 +15752,7 @@ index 3764f9e3df..bbdde72c17 100644
  import { toolWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
 -import { $env, isRecord, logger, Snowflake } from "@oh-my-pi/pi-utils";
 +import { $env, isRecord, logger, Snowflake, VERSION } from "@oh-my-pi/pi-utils";
++import * as postmortem from "@oh-my-pi/pi-utils/postmortem";
 +import { reset as resetCapabilities } from "../../capability";
 +import { AgentRegistry } from "../../registry/agent-registry";
  import { clearPluginRootsAndCaches, resolveActiveProjectRegistryPath } from "../../discovery/helpers";
@@ -15940,7 +15805,7 @@ index 3764f9e3df..bbdde72c17 100644
  import type {
  	RpcCommand,
  	RpcExtensionUIRequest,
-@@ -73,9 +134,34 @@ import type {
+@@ -73,9 +134,29 @@ import type {
  	RpcHostUriResult,
  	RpcOpenSessionResult,
  	RpcResponse,
@@ -15966,16 +15831,11 @@ index 3764f9e3df..bbdde72c17 100644
 +import { lookup, type AnySetting } from "../../config/registry";
 +import { getKnownRoleIds } from "../../config/model-roles";
 +import type { RpcCediaModelRoleEntry } from "./rpc-types";
-+import {
-+	readCediaCodeMode,
-+	readCediaToolCatalog,
-+	refreshCediaSkills,
-+	setCediaActiveTools,
-+} from "./cedia-tools-bridge";
++import { readCediaCodeMode, readCediaToolCatalog, refreshCediaSkills, setCediaActiveTools } from "./cedia-tools-bridge";
  
  // Re-export types for consumers
  export type * from "./rpc-types";
-@@ -85,6 +171,144 @@ export type PendingExtensionRequest = {
+@@ -85,6 +166,144 @@ export type PendingExtensionRequest = {
  	reject: (error: Error) => void;
  };
  
@@ -16120,7 +15980,7 @@ index 3764f9e3df..bbdde72c17 100644
  /** Pending extension UI request map that can fail closed when the RPC client disconnects. */
  export class RpcPendingExtensionRequests extends Map<string, PendingExtensionRequest> {
  	#closedError: Error | undefined;
-@@ -97,6 +321,14 @@ export class RpcPendingExtensionRequests extends Map<string, PendingExtensionReq
+@@ -97,6 +316,14 @@ export class RpcPendingExtensionRequests extends Map<string, PendingExtensionReq
  		return super.set(id, request);
  	}
  
@@ -16135,7 +15995,7 @@ index 3764f9e3df..bbdde72c17 100644
  	/** Reject every active and future extension UI request. */
  	rejectAll(message: string): void {
  		if (!this.#closedError) this.#closedError = new Error(message);
-@@ -281,20 +513,35 @@ export function dispatchRpcControlFrame(parsed: unknown, deps: RpcInputFrameDeps
+@@ -281,20 +508,35 @@ export function dispatchRpcControlFrame(parsed: unknown, deps: RpcInputFrameDeps
  	return false;
  }
  
@@ -16178,7 +16038,7 @@ index 3764f9e3df..bbdde72c17 100644
   */
  export function dispatchRpcInputFrame(parsed: unknown, deps: RpcInputFrameDeps): Promise<void> | undefined {
  	if (dispatchRpcControlFrame(parsed, deps)) return undefined;
-@@ -304,17 +551,14 @@ export function dispatchRpcInputFrame(parsed: unknown, deps: RpcInputFrameDeps):
+@@ -304,17 +546,14 @@ export function dispatchRpcInputFrame(parsed: unknown, deps: RpcInputFrameDeps):
  	// the union here.
  	const command = parsed as RpcCommand;
  
@@ -16199,7 +16059,7 @@ index 3764f9e3df..bbdde72c17 100644
  			}
  		})();
  		deps.trackBackgroundTask?.(task);
-@@ -344,16 +588,22 @@ export class RpcInputDispatcher {
+@@ -344,16 +583,22 @@ export class RpcInputDispatcher {
  			if (dispatchRpcControlFrame(parsed, this.#deps)) return;
  
  			const command = parsed as RpcCommand;
@@ -16228,7 +16088,7 @@ index 3764f9e3df..bbdde72c17 100644
  			this.#tasks.add(task);
  			void task.finally(() => {
  				this.#tasks.delete(task);
-@@ -556,6 +806,117 @@ function shouldEmitRpcTitles(): boolean {
+@@ -556,6 +801,117 @@ function shouldEmitRpcTitles(): boolean {
  	return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
  }
  
@@ -16346,10 +16206,14 @@ index 3764f9e3df..bbdde72c17 100644
  function isSubagentSubscriptionLevel(value: unknown): value is RpcSubagentSubscriptionLevel {
  	return value === "off" || value === "progress" || value === "events";
  }
-@@ -763,35 +1124,370 @@ export interface RpcModeOptions {
+@@ -761,6 +1117,27 @@ export interface RpcModeOptions {
+ 	headless?: boolean;
+ 	subagentEventBus?: EventBus;
  	input?: ReadableStream<Uint8Array>;
- }
- 
++	/** Fired after the ready frame is queued on the RPC transport. */
++	onReady?: () => void;
++}
++
 +/**
 + * Run in RPC mode.
 + * Listens for JSON commands on stdin, outputs events and responses on stdout.
@@ -16364,11 +16228,13 @@ index 3764f9e3df..bbdde72c17 100644
 +	input?: ReadableStream<Uint8Array>;
 +	/** Fired after the Cedia virtual terminal negotiates, so the host can re-enable PTY execution. */
 +	onVirtualUiReady?: () => void;
++	/** Fired after the ready frame is queued on the RPC transport. */
++	onReady?: () => void;
 +	mcpManager?: MCPManager;
-+}
-+
+ }
+ 
  /**
-  * Run in RPC mode.
+@@ -768,30 +1145,348 @@ export interface RpcModeOptions {
   * Listens for JSON commands on stdin, outputs events and responses on stdout.
   */
  export async function runRpcMode(session: AgentSession, options: RpcModeOptions = {}): Promise<never> {
@@ -16379,6 +16245,7 @@ index 3764f9e3df..bbdde72c17 100644
 +		subagentEventBus,
 +		input = claimRpcInput(),
 +		onVirtualUiReady,
++		onReady,
 +		mcpManager,
 +	} = options;
  	// Signal to RPC clients that the server is ready to accept commands
@@ -16394,6 +16261,11 @@ index 3764f9e3df..bbdde72c17 100644
 +	let ownerBridge: CediaOwnerBridge | undefined;
 +	let ownerSignalReceived = false;
 +	let ownerShutdownStarted = false;
++	let releaseOwnerStdioDisconnect: (() => void) | undefined;
++	const releaseOwnerStdioDisconnectHandler = (): void => {
++		releaseOwnerStdioDisconnect?.();
++		releaseOwnerStdioDisconnect = undefined;
++	};
 +	let performOwnerShutdown: ((ackId?: string) => Promise<void>) | undefined;
 +	const beginOwnerSignalShutdown = (): void => {
 +		ownerSignalReceived = true;
@@ -16439,6 +16311,14 @@ index 3764f9e3df..bbdde72c17 100644
  	const frameEncoder = new RpcFrameEncoder();
  	const outputWriter = new RpcOutputWriter(process.stdout, failure => {
  		logger.error("RPC output delivery failed", { error: String(failure) });
++		if (ownerBridge) {
++			// A replacement controller can keep using the session after the primary
++			// stdout pipe closes. The normal stdout error listener is registered below;
++			// invoke the same detach path from the writer's callback as well because
++			// RpcOutputWriter observes sink failures first.
++			detachPrimaryTransport();
++			return;
++		}
  		void session.dispose().finally(() => process.exit(1));
  	});
 -	outputWriter.write(
@@ -16467,30 +16347,11 @@ index 3764f9e3df..bbdde72c17 100644
 +	let fenceUncorrelatedPrimaryResponses = false;
 +	let fenceAllUnmatchedResponses = false;
 +	let primaryTransportAttached = true;
-+	const stdoutDrainWaiters = new Set<() => void>();
-+	// Ordered stdout writer honoring backpressure: chunked v2 frames are produced
-+	// lazily by the encoder and written one physical line at a time, so a near-limit
-+	// logical frame never materializes its full base64 transport in memory.
-+	let stdoutQueue: Promise<void> = Promise.resolve();
 +	const writeFrames = (frames: Iterable<string>) => {
-+		outputWriter.write(frames);
-+		stdoutQueue = stdoutQueue
-+			.then(async () => {
-+				for (const line of frames) {
-+					if (!primaryTransportAttached) return;
-+					if (!process.stdout.write(line)) {
-+						await Promise.race([
-+							once(process.stdout, "drain").then(
-+								() => undefined,
-+								() => undefined,
-+							),
-+							new Promise<void>(resolve => stdoutDrainWaiters.add(resolve)),
-+						]);
-+					}
-+				}
-+			})
-+			// stdout gone (host exited) — nothing left to deliver; keep the queue alive.
-+			.catch(() => {});
++		// RpcOutputWriter is the sole owner of stdout.  Keeping a second direct write
++		// queue here races its backpressure/spool path and can duplicate or interleave
++		// JSONL frames on a real pipe.
++		if (primaryTransportAttached) outputWriter.write(frames);
 +	};
 +	const readyFrame = {
 +		type: "ready",
@@ -16537,7 +16398,6 @@ index 3764f9e3df..bbdde72c17 100644
 +				}
 +			: {}),
 +	};
-+	writeFrames(frameEncoder.encodeFrames(readyFrame));
 +	const cancelInteractiveRequest = (id: string, message: string): void => {
 +		if (pendingExtensionRequests.reject(id, message)) return;
 +		if (hostToolBridge?.rejectPending(id, message)) return;
@@ -16546,8 +16406,6 @@ index 3764f9e3df..bbdde72c17 100644
 +	const detachPrimaryTransport = (): void => {
 +		if (!ownerBridge || !primaryTransportAttached) return;
 +		primaryTransportAttached = false;
-+		for (const resolve of stdoutDrainWaiters) resolve();
-+		stdoutDrainWaiters.clear();
 +		ownerBridge.setPrimaryDetached(true);
 +		for (const [id, origin] of interactiveRequestOwners) {
 +			if (origin.leaseId !== undefined) continue;
@@ -16558,7 +16416,15 @@ index 3764f9e3df..bbdde72c17 100644
 +			);
 +		}
 +	};
++	if (ownerBridge) {
++		releaseOwnerStdioDisconnect = postmortem.registerStdioDisconnectHandling(() => {
++			detachPrimaryTransport();
++			return true;
++		});
++	}
 +	process.stdout.on("error", () => detachPrimaryTransport());
++	writeFrames(frameEncoder.encodeFrames(readyFrame));
++	onReady?.();
  	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
 -		outputWriter.write(frameEncoder.encodeFrames(obj));
 +		if (isRecord(obj) && typeof obj.id === "string" && ownerReadRequests.has(obj.id)) {
@@ -16728,7 +16594,7 @@ index 3764f9e3df..bbdde72c17 100644
  		if (isRecord(obj) && obj.type === "response" && obj.command === "negotiate_protocol" && obj.success === true)
  			frameEncoder.setProtocolVersion(2);
  	};
-@@ -812,19 +1508,472 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -812,19 +1507,472 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		return { id, type: "response", command, success: false, error: message, ...(code ? { code } : {}) };
  	};
  
@@ -17201,7 +17067,7 @@ index 3764f9e3df..bbdde72c17 100644
  	/**
  	 * Extension UI context that uses the RPC protocol.
  	 */
-@@ -875,8 +2024,23 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -875,8 +2023,23 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			);
  		}
  
@@ -17227,7 +17093,7 @@ index 3764f9e3df..bbdde72c17 100644
  			return () => {};
  		}
  
-@@ -907,6 +2071,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -907,6 +2070,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		setWidget(key: string, content: unknown, options?: ExtensionWidgetOptions): void {
@@ -17235,7 +17101,7 @@ index 3764f9e3df..bbdde72c17 100644
  			// Only support string arrays in RPC mode - factory functions are ignored
  			if (content === undefined || Array.isArray(content)) {
  				this.output({
-@@ -921,12 +2086,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -921,12 +2085,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			// Component factories are not supported in RPC mode - would need TUI access
  		}
  
@@ -17252,7 +17118,7 @@ index 3764f9e3df..bbdde72c17 100644
  		}
  
  		setTitle(title: string): void {
-@@ -940,9 +2105,19 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -940,9 +2104,19 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			} as RpcExtensionUIRequest);
  		}
  
@@ -17275,7 +17141,7 @@ index 3764f9e3df..bbdde72c17 100644
  		}
  
  		pasteToEditor(text: string): void {
-@@ -951,6 +2126,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -951,6 +2125,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		setEditorText(text: string): void {
@@ -17283,7 +17149,7 @@ index 3764f9e3df..bbdde72c17 100644
  			// Fire and forget - host can implement editor control
  			this.output({
  				type: "extension_ui_request",
-@@ -961,6 +2137,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -961,6 +2136,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		getEditorText(): string {
@@ -17291,7 +17157,7 @@ index 3764f9e3df..bbdde72c17 100644
  			// Synchronous method can't wait for RPC response
  			// Host should track editor state locally if needed
  			return "";
-@@ -984,29 +2161,30 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -984,29 +2160,30 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		getAllThemes(): Promise<{ name: string; path: string | undefined }[]> {
@@ -17334,7 +17200,7 @@ index 3764f9e3df..bbdde72c17 100644
  		}
  	}
  
-@@ -1018,8 +2196,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1018,8 +2195,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	const onPromptError = (id: string | undefined, command: string) => (promptError: Error) =>
  		output(error(id, command, promptError.message));
  
@@ -17349,7 +17215,7 @@ index 3764f9e3df..bbdde72c17 100644
  		mode: "rpc",
  		reportSendError: (action, err) => {
  			output(error(undefined, action, err.message));
-@@ -1038,7 +2220,33 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1038,7 +2219,33 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	});
  
  	// Output all agent events as JSON; prompt results follow the frame that settled them.
@@ -17383,7 +17249,7 @@ index 3764f9e3df..bbdde72c17 100644
  		sessionEvents.forward(event);
  		promptResults.observe(event);
  		settleWatcher.observe(event);
-@@ -1097,11 +2305,31 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1097,11 +2304,31 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		process.exit(0);
  	};
  
@@ -17418,7 +17284,7 @@ index 3764f9e3df..bbdde72c17 100644
  		await session.refreshSkillsAndCommands();
  		await emitAvailableCommandsUpdate();
  	};
-@@ -1111,11 +2339,43 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1111,11 +2338,43 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	session.subscribeCommandMetadataChanged(() => {
  		void emitAvailableCommandsUpdate();
  	});
@@ -17463,7 +17329,7 @@ index 3764f9e3df..bbdde72c17 100644
  
  		switch (command.type) {
  			case "negotiate_protocol": {
-@@ -1124,6 +2384,214 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1124,6 +2383,215 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				return success(id, "negotiate_protocol", { protocolVersion: 2 });
  			}
  
@@ -17503,6 +17369,7 @@ index 3764f9e3df..bbdde72c17 100644
 +						});
 +						virtualUi.start();
 +						const sharedUi = virtualUi;
++						const composer = new Composer({ terminal: sharedUi.terminal });
 +						rpcTuiMode = new InteractiveMode(
 +							session,
 +							"rpc",
@@ -17511,7 +17378,7 @@ index 3764f9e3df..bbdde72c17 100644
 +							undefined,
 +							mcpManager,
 +							undefined,
-+							undefined,
++							composer,
 +							subagentEventBus,
 +						);
 +						sharedUi.attachInteractiveSurface({
@@ -17875,7 +17742,7 @@ index 3764f9e3df..bbdde72c17 100644
  					const transcript = await readRpcSubagentTranscript(sessionFile, command.fromByte);
  					return success(id, "get_subagent_messages", transcript);
  				} catch (err) {
-@@ -1450,6 +3061,79 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1450,6 +3061,83 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				return success(id, "get_available_models", { models });
  			}
  
@@ -17898,7 +17765,11 @@ index 3764f9e3df..bbdde72c17 100644
 +			// the credential store; these commands expose its state and accept one
 +			// key, and no key or token ever travels back out.
 +			case "cedia_get_auth_providers": {
-+				return success(id, "cedia_get_auth_providers", cediaAuthProviders(cediaAuthStorageViewOf(session.modelRegistry.authStorage)));
++				return success(
++					id,
++					"cedia_get_auth_providers",
++					cediaAuthProviders(cediaAuthStorageViewOf(session.modelRegistry.authStorage)),
++				);
 +			}
 +
 +			case "cedia_set_api_key": {
@@ -17955,7 +17826,7 @@ index 3764f9e3df..bbdde72c17 100644
  			// =================================================================
  			// Thinking
  			// =================================================================
-@@ -1710,6 +3394,13 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1710,6 +3398,14 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			// the process exits. dispose() also emits `session_shutdown`, so we
  			// must NOT emit it separately here or the event fires twice. Skipping
  			// dispose left OMP-owned Chromium alive after RPC shutdown (#5643).
@@ -17964,12 +17835,13 @@ index 3764f9e3df..bbdde72c17 100644
 +			virtualUi = undefined;
 +			// The endpoint disappears with the owner: a client that connects after this finds no
 +			// record rather than a socket nobody answers.
++			releaseOwnerStdioDisconnectHandler();
 +			await ownerBridge?.close().catch(() => {});
 +			ownerBridge = undefined;
  			await disposeAndExit();
  		},
  	});
-@@ -1729,6 +3420,113 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1729,6 +3425,112 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		deps: dispatchFrameDeps,
  		afterSerialCommand: () => shutdownCoordinator.checkShutdownRequested(),
  	});
@@ -18064,10 +17936,9 @@ index 3764f9e3df..bbdde72c17 100644
 +						success: true,
 +					}),
 +				);
-+			await stdoutQueue;
 +			primaryTransportAttached = false;
-+			for (const resolve of stdoutDrainWaiters) resolve();
-+			stdoutDrainWaiters.clear();
++			await outputWriter.close().catch(() => {});
++			releaseOwnerStdioDisconnectHandler();
 +			await ownerBridge?.close().catch(() => {});
 +			ownerBridge = undefined;
 +			pendingExtensionRequests.rejectAll("Cedia owner is shutting down");
@@ -18083,7 +17954,7 @@ index 3764f9e3df..bbdde72c17 100644
  
  	// Keep the stdin reader moving: side-channel frames dispatch immediately,
  	// ordinary commands serialize through inputDispatcher, and bash remains
-@@ -1738,17 +3536,57 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1738,17 +3540,58 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	// the reader and killing the whole process (issue #5194).
  	await readRpcInputFrames(
  		input ?? Bun.stdin.stream(),
@@ -18136,6 +18007,7 @@ index 3764f9e3df..bbdde72c17 100644
 +	virtualUi?.close("rpc_client_disconnected");
 +	virtualUi = undefined;
 +	await ownerBridge?.close().catch(() => {});
++	releaseOwnerStdioDisconnectHandler();
 +	ownerBridge = undefined;
  	await inputDispatcher.drain();
  	await shutdownCoordinator.drain();
@@ -18144,7 +18016,7 @@ index 3764f9e3df..bbdde72c17 100644
  	subagentRegistry?.dispose();
  	// Dispose the main session before exiting so the browser reaper and other
  	// bounded teardown run on the stdin-EOF path too (#5643). Idempotent: a
-@@ -1756,5 +3594,6 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1756,5 +3599,6 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	// immediately. Returned rather than awaited: `runRpcMode` is typed
  	// `Promise<never>`, and only returning the `Promise<never>` keeps this end
  	// point unreachable for the compiler.
@@ -27836,10 +27708,10 @@ index 0000000000..04a9edb1a3
 +});
 diff --git a/packages/coding-agent/test/cedia-owner-bridge-controller.test.ts b/packages/coding-agent/test/cedia-owner-bridge-controller.test.ts
 new file mode 100644
-index 0000000000..072cb95148
+index 0000000000..7a044d7c45
 --- /dev/null
 +++ b/packages/coding-agent/test/cedia-owner-bridge-controller.test.ts
-@@ -0,0 +1,721 @@
+@@ -0,0 +1,742 @@
 +import { afterEach, describe, expect, test } from "bun:test";
 +import { execFileSync } from "node:child_process";
 +import * as fs from "node:fs/promises";
@@ -27914,8 +27786,13 @@ index 0000000000..072cb95148
 +		const start = execFileSync("/bin/ps", ["-p", String(process.pid), "-o", "lstart="], {
 +			encoding: "utf8",
 +			env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
-+		}).trim().replace(/\s+/g, " ");
-+		const record = JSON.parse(await fs.readFile(path.join(directory, "owner.json"), "utf8")) as Record<string, unknown>;
++		})
++			.trim()
++			.replace(/\s+/g, " ");
++		const record = JSON.parse(await fs.readFile(path.join(directory, "owner.json"), "utf8")) as Record<
++			string,
++			unknown
++		>;
 +
 +		expect(record.protocolVersion).toBe(3);
 +		expect(record.processStartIdentity).toBe(`darwin-ps-lstart:v1:${start}`);
@@ -27940,13 +27817,19 @@ index 0000000000..072cb95148
 +			processStartIdentity: bridge.record.processStartIdentity,
 +			ownerStartedAt: bridge.record.ownerStartedAt,
 +		};
-+		socket.write(`${JSON.stringify({ protocolVersion: 3, token: bridge.record.token, request: "identify", id: "identify-1" })}\n`);
++		socket.write(
++			`${JSON.stringify({ protocolVersion: 3, token: bridge.record.token, request: "identify", id: "identify-1" })}\n`,
++		);
 +		const identified = await readLine(socket);
-+		 expect(identified.identity).toMatchObject({ ...identity, mode: "inspect_only" });
-+		socket.write(`${JSON.stringify({ protocolVersion: 3, token: bridge.record.token, request: "status", id: "status-1" })}\n`);
++		expect(identified.identity).toMatchObject({ ...identity, mode: "inspect_only" });
++		socket.write(
++			`${JSON.stringify({ protocolVersion: 3, token: bridge.record.token, request: "status", id: "status-1" })}\n`,
++		);
 +		const status = await readLine(socket);
 +		expect(status.identity).toMatchObject({ ...identity, mode: "inspect_only" });
-+		socket.write(`${JSON.stringify({ protocolVersion: 3, token: bridge.record.token, request: "claim_controller", id: "claim-1", expectedIdentity: identity })}\n`);
++		socket.write(
++			`${JSON.stringify({ protocolVersion: 3, token: bridge.record.token, request: "claim_controller", id: "claim-1", expectedIdentity: identity })}\n`,
++		);
 +		expect((await readLine(socket)).error).toBe("inspect_only");
 +		socket.destroy();
 +	});
@@ -27961,19 +27844,21 @@ index 0000000000..072cb95148
 +		});
 +		bridges.push(bridge);
 +		const socket = await connect(bridge.record.socket);
-+		socket.write(`${JSON.stringify({
-+			protocolVersion: 3,
-+			token: bridge.record.token,
-+			request: "claim_controller",
-+			id: "claim-birth-mismatch",
-+			expectedIdentity: {
-+				sessionId: bridge.record.sessionId,
-+				incarnation: bridge.record.incarnation,
-+				pid: bridge.record.pid,
-+				processStartIdentity: "darwin-ps-lstart:v1:older-process",
-+				ownerStartedAt: bridge.record.ownerStartedAt,
-+			},
-+		})}\n`);
++		socket.write(
++			`${JSON.stringify({
++				protocolVersion: 3,
++				token: bridge.record.token,
++				request: "claim_controller",
++				id: "claim-birth-mismatch",
++				expectedIdentity: {
++					sessionId: bridge.record.sessionId,
++					incarnation: bridge.record.incarnation,
++					pid: bridge.record.pid,
++					processStartIdentity: "darwin-ps-lstart:v1:older-process",
++					ownerStartedAt: bridge.record.ownerStartedAt,
++				},
++			})}\n`,
++		);
 +
 +		expect((await readLine(socket)).error).toBe("identity_mismatch");
 +		expect(bridge.activeControllerLeaseId).toBeUndefined();
@@ -28155,51 +28040,48 @@ index 0000000000..072cb95148
 +		second.destroy();
 +	});
 +
-+	test("survives real rpc-ui stdin EOF and supports two sequential attachments to one session", async () => {
++	test("survives real rpc-ui stdout close and stdin EOF and supports two sequential attachments to one session", async () => {
 +		const directory = await fs.mkdtemp(path.join(tmpdir(), "cedia-owner-process-"));
 +		const profile = await fs.mkdtemp(path.join(tmpdir(), "cedia-owner-profile-"));
 +		const cliPath = path.resolve(import.meta.dir, "../src/cli.ts");
 +		const lockExtension = path.resolve(import.meta.dir, "./fixtures/cedia-runtime-lock-stub.ts");
++		const ownerArgs = [
++			"--mode",
++			"rpc-ui",
++			"--no-title",
++			"--no-extensions",
++			"--no-skills",
++			"--no-rules",
++			"--cwd",
++			directory,
++			"--session-dir",
++			directory,
++			"--no-session",
++			"--trusted-extension",
++			lockExtension,
++		];
++		const testBinary = Bun.env.CEDIA_TEST_OMP_BINARY;
 +		const spawnOwner = () =>
-+			Bun.spawn(
-+				[
-+					"bun",
-+					cliPath,
-+					"--mode",
-+					"rpc-ui",
-+					"--no-title",
-+					"--no-extensions",
-+					"--no-skills",
-+					"--no-rules",
-+					"--cwd",
-+					directory,
-+					"--session-dir",
-+					directory,
-+					"--no-session",
-+					"--trusted-extension",
-+					lockExtension,
-+				],
-+				{
-+					cwd: path.resolve(import.meta.dir, ".."),
-+					env: {
-+						...Bun.env,
-+						HOME: profile,
-+						PI_CODING_AGENT_DIR: profile,
-+						PI_NO_TITLE: "1",
-+						PI_NO_PTY: "1",
-+						CEDIA_RPC_OWNER_BRIDGE: "1",
-+						CEDIA_RPC_VIRTUAL_UI: "1",
-+						CEDIA_SESSION_LOCK: path.join(directory, "owner.sqlite"),
-+						CEDIA_SESSION_INCARNATION: "process-incarnation",
-+						CEDIA_POLICY_CREDIT_GUARD: "0",
-+					},
-+					stdin: "pipe",
-+					stdout: "pipe",
-+					stderr: "pipe",
++			Bun.spawn(testBinary ? [testBinary, ...ownerArgs] : ["bun", cliPath, ...ownerArgs], {
++				cwd: path.resolve(import.meta.dir, ".."),
++				env: {
++					...Bun.env,
++					HOME: profile,
++					PI_CODING_AGENT_DIR: profile,
++					PI_NO_TITLE: "1",
++					PI_NO_PTY: "1",
++					CEDIA_RPC_OWNER_BRIDGE: "1",
++					CEDIA_RPC_VIRTUAL_UI: "1",
++					CEDIA_SESSION_LOCK: path.join(directory, "owner.sqlite"),
++					CEDIA_SESSION_INCARNATION: "process-incarnation",
++					CEDIA_POLICY_CREDIT_GUARD: "0",
 +				},
-+			);
-+		let child = spawnOwner();
-+		let stderrPromise = new Response(child.stderr).text();
++				stdin: "pipe",
++				stdout: "pipe",
++				stderr: "pipe",
++			});
++		const child = spawnOwner();
++		const stderrPromise = new Response(child.stderr).text();
 +		const recordPath = path.join(directory, "owner.json");
 +		let record: Record<string, unknown> | undefined;
 +		try {
@@ -28214,8 +28096,13 @@ index 0000000000..072cb95148
 +			}
 +			if (!record) throw new Error(`owner did not publish endpoint: ${await stderrPromise}`);
 +			expect(record.pid).toBe(child.pid);
-+			child.stdin.end();
-+			await delay(100);
++			const primaryStdoutReader = child.stdout.getReader();
++			await primaryStdoutReader.read();
++			await primaryStdoutReader.cancel().catch(() => {});
++			primaryStdoutReader.releaseLock();
++			child.stdin.write(`${JSON.stringify({ type: "get_state", id: "closed-primary" })}\n`);
++			await child.stdin.flush();
++			await delay(200);
 +			const attachAndRead = async (suffix: string) => {
 +				const socket = await connect(String(record!.socket));
 +				const expectedIdentity = {
@@ -28248,10 +28135,16 @@ index 0000000000..072cb95148
 +				socket.write(
 +					`${JSON.stringify({ protocolVersion: 3, token: record!.token, request: "release_controller", leaseId: claim.leaseId, id: `release-${suffix}` })}\n`,
 +				);
-+				expect((await readLine(socket)).ok).toBe(true);
++				const releaseResponse = await readLine(socket);
++				if (releaseResponse.ok !== true)
++					throw new Error(`release ${suffix} response: ${JSON.stringify(releaseResponse)}`);
 +				socket.destroy();
 +			};
 +			await attachAndRead("one");
++			child.stdin.end();
++			await delay(100);
++			if (child.exitCode !== null)
++				throw new Error(`owner exited after primary stdin EOF (exit=${child.exitCode}): ${await stderrPromise}`);
 +			await attachAndRead("two");
 +			expect(process.kill(Number(record.pid), 0)).toBe(true);
 +		} finally {
@@ -30395,6 +30288,84 @@ index 8fffa4626a..b3cee120fd 100644
  	it("registers model selector and display reset actions separately", async () => {
  		const { InputController, ctx, editor, spies } = await createContext();
  		const controller = new InputController(ctx);
+diff --git a/packages/coding-agent/test/main-rpc-startup.test.ts b/packages/coding-agent/test/main-rpc-startup.test.ts
+new file mode 100644
+index 0000000000..17f59cf168
+--- /dev/null
++++ b/packages/coding-agent/test/main-rpc-startup.test.ts
+@@ -0,0 +1,72 @@
++import { afterEach, describe, expect, it, vi } from "bun:test";
++import { parseArgs } from "@oh-my-pi/pi-coding-agent/cli/args";
++import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
++import { runRootCommand } from "@oh-my-pi/pi-coding-agent/main";
++import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
++import { createInMemoryAuthStorage } from "./helpers/agent-session-setup";
++
++describe("RPC startup model refresh", () => {
++	afterEach(() => {
++		vi.restoreAllMocks();
++	});
++
++	it("does not start model discovery until the RPC ready callback", async () => {
++		const events: string[] = [];
++		const stop = new Error("stop after ready ordering probe");
++		const authStorage = createInMemoryAuthStorage();
++		const settings = Settings.isolated();
++		const fakeSession = {
++			model: { provider: "anthropic", id: "claude-sonnet-4-5" },
++			getAllToolNames: () => [],
++			isDisposed: false,
++			scopedModels: [],
++			addDisposer: () => undefined,
++		} as unknown as AgentSession;
++		const refresh = vi.spyOn(ModelRegistry.prototype, "refreshInBackground").mockImplementation(() => {
++			events.push("refresh");
++		});
++
++		try {
++			const parsed = parseArgs([
++				"--mode",
++				"rpc",
++				"--no-session",
++				"--no-extensions",
++				"--no-skills",
++				"--no-tools",
++				"--no-lsp",
++				"--provider",
++				"anthropic",
++				"--model",
++				"anthropic/claude-sonnet-4-5",
++			]);
++			await expect(
++				runRootCommand(parsed, [], {
++					discoverAuthStorage: async () => authStorage,
++					settings,
++					createAgentSession: async () => {
++						events.push("session-created");
++						return {
++							session: fakeSession,
++							setToolUIContext: () => undefined,
++						} as never;
++					},
++					runRpcMode: async (_session, options) => {
++						events.push("rpc-entered");
++						expect(events).toEqual(["session-created", "rpc-entered"]);
++						options?.onReady?.();
++						events.push("ready-callback");
++						throw stop;
++					},
++				}),
++			).rejects.toBe(stop);
++
++			expect(events).toEqual(["session-created", "rpc-entered", "refresh", "ready-callback"]);
++			expect(refresh).toHaveBeenCalledTimes(1);
++		} finally {
++			settings.stopWatching();
++			authStorage.close();
++		}
++	});
++});
 diff --git a/packages/coding-agent/test/model-registry-runtime-provider.test.ts b/packages/coding-agent/test/model-registry-runtime-provider.test.ts
 index 694bd02711..cff4f4ffea 100644
 --- a/packages/coding-agent/test/model-registry-runtime-provider.test.ts
@@ -30650,6 +30621,27 @@ index 0107d64213..4bc24eb092 100644
  	test("control frames resolve extension UI requests while an ordinary command is active", async () => {
  		const { deps, outputs } = makeDeps(async command => {
  			if (command.type !== "prompt") throw new Error(`unexpected command type: ${command.type}`);
+diff --git a/packages/coding-agent/test/rpc-output.test.ts b/packages/coding-agent/test/rpc-output.test.ts
+index e28ac756ff..f60d117745 100644
+--- a/packages/coding-agent/test/rpc-output.test.ts
++++ b/packages/coding-agent/test/rpc-output.test.ts
+@@ -10,7 +10,7 @@ afterEach(() => {
+ 	mock.restore();
+ });
+ 
+-it("drains RPC command responses after stdin EOF while the real stdout pipe is backpressured", async () => {
++it("drains RPC command responses without interleaving duplicate frames on a backpressured pipe", async () => {
+ 	const child = Bun.spawn(
+ 		[
+ 			process.execPath,
+@@ -60,6 +60,7 @@ it("drains RPC command responses after stdin EOF while the real stdout pipe is b
+ 		expect(replies.filter(reply => reply.type === "response").map(reply => reply.id.split(":")[0])).toEqual(
+ 			Array.from({ length: 128 }, (_, id) => String(id)),
+ 		);
++		expect(replies.filter(reply => reply.type === "ready")).toHaveLength(1);
+ 		expect(await child.exited).toBe(0);
+ 	} finally {
+ 		reader.releaseLock();
 diff --git a/packages/coding-agent/test/rpc-subagents.test.ts b/packages/coding-agent/test/rpc-subagents.test.ts
 index ef44efe36c..e8100f9180 100644
 --- a/packages/coding-agent/test/rpc-subagents.test.ts
@@ -30665,10 +30657,10 @@ index ef44efe36c..e8100f9180 100644
  
 diff --git a/packages/coding-agent/test/rpc-tui-slash.test.ts b/packages/coding-agent/test/rpc-tui-slash.test.ts
 new file mode 100644
-index 0000000000..09198cb79b
+index 0000000000..6a012d658f
 --- /dev/null
 +++ b/packages/coding-agent/test/rpc-tui-slash.test.ts
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,153 @@
 +import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 +import { Agent } from "@oh-my-pi/pi-agent-core";
 +import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -30723,7 +30715,8 @@ index 0000000000..09198cb79b
 +		});
 +		const ui = new RpcVirtualUi({ output: () => {}, columns: 80, rows: 24, externalRenderer: true });
 +		ui.start();
-+		const mode = new InteractiveMode(session, "rpc-test", undefined, () => {}, undefined, undefined, undefined);
++		const composer = new Composer({ terminal: ui.terminal });
++		const mode = new InteractiveMode(session, "rpc-test", undefined, () => {}, undefined, undefined, undefined, composer);
 +		ui.attachInteractiveSurface({
 +			custom: (factory, options) => mode.showRpcCustom(factory, options),
 +			setWidget: (key, content, options) => mode.setRpcWidget(key, content, options),
@@ -30818,6 +30811,189 @@ index 0000000000..09198cb79b
 +			expect(prompt).not.toHaveBeenCalled();
 +		} finally {
 +			await disposeHarness(harness);
++		}
++	});
++});
+diff --git a/packages/coding-agent/test/rpc-virtual-ui-start.test.ts b/packages/coding-agent/test/rpc-virtual-ui-start.test.ts
+new file mode 100644
+index 0000000000..13be986b52
+--- /dev/null
++++ b/packages/coding-agent/test/rpc-virtual-ui-start.test.ts
+@@ -0,0 +1,177 @@
++import { describe, expect, test } from "bun:test";
++import { mkdir } from "node:fs/promises";
++import * as path from "node:path";
++import { isRecord, readJsonl, TempDir } from "@oh-my-pi/pi-utils";
++
++type RpcFrame = Record<string, unknown>;
++
++function isFrame(value: unknown): value is RpcFrame {
++	return isRecord(value);
++}
++
++async function startRpcVirtualUiProbe(): Promise<{
++	frames: RpcFrame[];
++	request: (command: RpcFrame) => Promise<RpcFrame>;
++	providerRequests: () => number;
++	stop: () => Promise<void>;
++}> {
++	const profile = TempDir.createSync("@omp-rpc-virtual-ui-start-");
++	const cwd = profile.path();
++	const packageRoot = path.join(import.meta.dir, "..");
++	const agentDir = path.join(profile.path(), "agent");
++	await mkdir(agentDir, { recursive: true });
++	let providerRequestCount = 0;
++	const tripwire = Bun.serve({
++		hostname: "127.0.0.1",
++		port: 0,
++		fetch() {
++			providerRequestCount++;
++			return Response.json({ error: "provider tripwire" }, { status: 500 });
++		},
++	});
++	await Bun.write(
++		path.join(agentDir, "models.yml"),
++		JSON.stringify({
++			providers: {
++				"cedia-loopback": {
++					baseUrl: `http://127.0.0.1:${tripwire.port}/v1`,
++					api: "openai-completions",
++					auth: "none",
++					models: [
++						{
++							id: "cedia-virtual-ui-fixture",
++							name: "Cedia Virtual UI Fixture",
++							reasoning: false,
++							input: ["text"],
++							contextWindow: 8_192,
++							maxTokens: 1_024,
++						},
++					],
++				},
++			},
++		}),
++	);
++	const child = Bun.spawn(
++		[
++			process.execPath,
++			path.join(packageRoot, "src", "cli.ts"),
++			"--mode",
++			"rpc",
++			"--provider",
++			"cedia-loopback",
++			"--model",
++			"cedia-virtual-ui-fixture",
++			"--no-session",
++			"--no-extensions",
++			"--no-skills",
++			"--no-rules",
++			"--no-tools",
++			"--no-lsp",
++		],
++		{
++			cwd,
++			env: {
++				...Bun.env,
++				HOME: profile.path(),
++				XDG_CONFIG_HOME: profile.path(),
++				XDG_DATA_HOME: profile.path(),
++				PI_CODING_AGENT_DIR: agentDir,
++				CEDIA_RPC_VIRTUAL_UI: "1",
++				PI_NO_TITLE: "1",
++				NO_COLOR: "1",
++			},
++			stdin: "pipe",
++			stdout: "pipe",
++			stderr: "pipe",
++		},
++	);
++	const stderr = new Response(child.stderr).text();
++	const frames: RpcFrame[] = [];
++	const iterator = readJsonl<unknown>(child.stdout as ReadableStream<Uint8Array>)[Symbol.asyncIterator]();
++	const nextFrame = async (): Promise<RpcFrame> => {
++		const result = await Promise.race([
++			iterator.next(),
++			Bun.sleep(10_000).then(() => {
++				throw new Error("Timed out waiting for RPC frame");
++			}),
++		]);
++		if (result.done || !isFrame(result.value)) throw new Error("RPC output ended before the expected frame");
++		frames.push(result.value);
++		return result.value;
++	};
++	const waitFor = async (predicate: (frame: RpcFrame) => boolean): Promise<RpcFrame> => {
++		for (;;) {
++			const frame = await nextFrame();
++			if (predicate(frame)) return frame;
++		}
++	};
++	const stop = async (): Promise<void> => {
++		try {
++			child.stdin.end();
++		} catch {
++			// The child may already have exited after a startup failure.
++		}
++		child.kill();
++		await child.exited.catch(() => {});
++		await stderr;
++		await tripwire.stop(true);
++		profile.removeSync();
++	};
++	const request = async (command: RpcFrame): Promise<RpcFrame> => {
++		child.stdin.write(`${JSON.stringify(command)}\n`);
++		await child.stdin.flush();
++		return waitFor(frame => frame.type === "response" && frame.id === command.id);
++	};
++
++	try {
++		await waitFor(frame => frame.type === "ready");
++		return { frames, request, providerRequests: () => providerRequestCount, stop };
++	} catch (error) {
++		await stop();
++		throw error;
++	}
++}
++
++describe("RPC virtual UI startup", () => {
++	test("negotiates a shared virtual terminal without claiming process stdin", async () => {
++		const probe = await startRpcVirtualUiProbe();
++		try {
++			const negotiation = await probe.request({
++				type: "cedia_terminal_negotiate",
++				id: "virtual-ui-negotiate",
++				version: 1,
++				cols: 100,
++				rows: 30,
++			});
++
++			expect(negotiation).toMatchObject({
++				type: "response",
++				id: "virtual-ui-negotiate",
++				success: true,
++				command: "cedia_terminal_negotiate",
++			});
++			const terminalId = (negotiation.data as { terminalId?: unknown } | undefined)?.terminalId;
++			expect(typeof terminalId).toBe("string");
++			expect(probe.frames).toContainEqual(expect.objectContaining({ type: "cedia_terminal_open", terminalId }));
++			expect(
++				probe.frames.some(frame => frame.type === "cedia_terminal_output" && frame.terminalId === terminalId),
++			).toBe(true);
++			expect(probe.providerRequests()).toBe(0);
++
++			const input = await probe.request({
++				type: "cedia_terminal_input",
++				id: "virtual-ui-input",
++				terminalId,
++				data: "x",
++			});
++			expect(input).toMatchObject({
++				type: "response",
++				id: "virtual-ui-input",
++				success: true,
++				command: "cedia_terminal_input",
++			});
++		} finally {
++			await probe.stop();
 +		}
 +	});
 +});
@@ -31219,6 +31395,131 @@ index 0000000000..d851bbbeaa
 +		else process.env.CEDIA_COMPILED_RUNTIME = oldCompiled;
 +	}
 +});
+diff --git a/packages/utils/src/postmortem.ts b/packages/utils/src/postmortem.ts
+index 36ca92617e..64a599e034 100644
+--- a/packages/utils/src/postmortem.ts
++++ b/packages/utils/src/postmortem.ts
+@@ -116,6 +116,8 @@ export function exitProcess(code: number): never {
+ }
+ let cleanupPromise: Promise<void> | undefined;
+ let stdioDisconnectRegistrations = 0;
++type StdioDisconnectHandler = (error: Error) => boolean;
++const stdioDisconnectHandlers = new Map<StdioDisconnectHandler, number>();
+ 
+ /** User-facing command printed before fatal cleanup so interrupted work can be resumed. */
+ export interface FatalRecoveryHint {
+@@ -342,6 +344,13 @@ function faultWorkerIpcChannels(err: Error): void {
+  */
+ function onStdoutDisconnect(err: Error): void {
+ 	if (classifyBrokenPipe(err) !== "stdio-write") return;
++	for (const handler of stdioDisconnectHandlers.keys()) {
++		try {
++			if (handler(err)) return;
++		} catch (error) {
++			logger.warn("Stdout disconnect handler failed", { error: String(error) });
++		}
++	}
+ 	logger.warn("Stdout peer disconnected; shutting down gracefully", { err });
+ 	void runQuit(0, "native", { drainStdout: false });
+ }
+@@ -350,19 +359,28 @@ function onStdoutDisconnect(err: Error): void {
+  * Treat a closed stdout consumer as a graceful peer disconnect for the caller's
+  * active lifetime. Attaches one shared `process.stdout` `error` listener,
+  * ref-counted across registrants (the ACP protocol server, the one-shot CLI
+- * entry). The returned callback removes the registration; the listener detaches
+- * when the last registrant unregisters.
++ * entry). A handler may claim the disconnect by returning `true`; claimed
++ * errors skip the default process-wide graceful exit so a long-lived owner can
++ * detach its primary transport and keep its session available. The returned
++ * callback removes both the registration and optional handler; the listener
++ * detaches when the last registrant unregisters.
+  */
+-export function registerStdioDisconnectHandling(): () => void {
++export function registerStdioDisconnectHandling(handler?: StdioDisconnectHandler): () => void {
+ 	let registered = true;
+ 	if (Bun.isMainThread && stdioDisconnectRegistrations === 0) {
+ 		process.stdout.on("error", onStdoutDisconnect);
+ 	}
+ 	stdioDisconnectRegistrations++;
++	if (handler) stdioDisconnectHandlers.set(handler, (stdioDisconnectHandlers.get(handler) ?? 0) + 1);
+ 	return () => {
+ 		if (!registered) return;
+ 		registered = false;
+ 		stdioDisconnectRegistrations--;
++		if (handler) {
++			const count = stdioDisconnectHandlers.get(handler) ?? 0;
++			if (count <= 1) stdioDisconnectHandlers.delete(handler);
++			else stdioDisconnectHandlers.set(handler, count - 1);
++		}
+ 		if (Bun.isMainThread && stdioDisconnectRegistrations === 0) {
+ 			process.stdout.removeListener("error", onStdoutDisconnect);
+ 		}
+diff --git a/packages/utils/test/postmortem-epipe.test.ts b/packages/utils/test/postmortem-epipe.test.ts
+index 187ad5d465..c5c5f7c521 100644
+--- a/packages/utils/test/postmortem-epipe.test.ts
++++ b/packages/utils/test/postmortem-epipe.test.ts
+@@ -6,6 +6,7 @@ import { postmortem } from "@oh-my-pi/pi-utils";
+ 
+ const uncaughtIpcChildFlag = "--uncaught-ipc-epipe-child";
+ const stdoutDisconnectChildFlag = "--stdout-disconnect-child";
++const claimedStdoutDisconnectChildFlag = "--claimed-stdout-disconnect-child";
+ const attributionChildFlag = "--attribution-write-epipe-child";
+ const unrelatedUncaughtChildFlag = "--unrelated-uncaught-child";
+ const socketClosedChildFlag = "--socket-closed-child";
+@@ -14,6 +15,7 @@ const deferNonEpipeChildFlag = "--defer-non-epipe-stdout-child";
+ const CHILD_FLAGS = [
+ 	uncaughtIpcChildFlag,
+ 	stdoutDisconnectChildFlag,
++	claimedStdoutDisconnectChildFlag,
+ 	attributionChildFlag,
+ 	unrelatedUncaughtChildFlag,
+ 	socketClosedChildFlag,
+@@ -49,6 +51,17 @@ if (process.argv.includes(unrelatedUncaughtChildFlag)) {
+ 	// process.stdout's own `error` event, driving graceful runQuit(0) + cleanup.
+ 	for (let i = 0; i < 64; i++) process.stdout.write(`${"x".repeat(64 * 1024)}\n`);
+ 	await Promise.withResolvers<void>().promise;
++} else if (process.argv.includes(claimedStdoutDisconnectChildFlag)) {
++	const marker = process.argv[process.argv.indexOf(claimedStdoutDisconnectChildFlag) + 1];
++	if (!marker) throw new Error("Missing claim marker path");
++	postmortem.registerStdioDisconnectHandling(() => {
++		void Bun.write(marker, "claimed").then(() => process.exit(0));
++		return true;
++	});
++	// A scoped owner handler claims the broken pipe before the default process-wide
++	// graceful-exit path, so its session can detach the primary transport itself.
++	for (let i = 0; i < 64; i++) process.stdout.write(`${"x".repeat(64 * 1024)}\n`);
++	await Promise.withResolvers<void>().promise;
+ } else if (process.argv.includes(attributionChildFlag)) {
+ 	postmortem.registerStdioDisconnectHandling();
+ 	// A write EPIPE that did NOT come from stdout (a closed subprocess stdin or
+@@ -204,6 +217,27 @@ if (!CHILD_FLAGS.some(flag => process.argv.includes(flag))) {
+ 			},
+ 		);
+ 
++		it.skipIf(process.platform === "win32")(
++			"lets a scoped stdout disconnect handler claim the broken pipe",
++			async () => {
++				const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-postmortem-claimed-stdout-"));
++				const marker = path.join(tmpDir, "claimed");
++				try {
++					const script = `"${process.execPath}" run "${import.meta.path}" "${claimedStdoutDisconnectChildFlag}" "${marker}" | true; echo "\${PIPESTATUS[0]}"`;
++					const proc = Bun.spawn(["bash", "-c", script], {
++						stdout: "pipe",
++						stderr: "pipe",
++						stdin: "ignore",
++					});
++					const [, pipestatusText] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
++					expect(Number(pipestatusText.trim())).toBe(0);
++					expect(await fs.readFile(marker, "utf8")).toBe("claimed");
++				} finally {
++					await fs.rm(tmpDir, { recursive: true, force: true });
++				}
++			},
++		);
++
+ 		function makeSocketClosedErr(stack: string): Error {
+ 			const err = new Error("Socket is closed");
+ 			Object.assign(err, { code: "ERR_SOCKET_CLOSED" });
 diff --git a/packages/wire/src/index.ts b/packages/wire/src/index.ts
 index 148746b00b..cb7467cec7 100644
 --- a/packages/wire/src/index.ts
@@ -31232,6 +31533,3 @@ index 148746b00b..cb7467cec7 100644
  	/** Unix timestamp in milliseconds. */
  	timestamp: number;
  }
--- 
-2.50.1 (Apple Git-155)
-

@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "proof": "packaged-shared-draft-settings-cas-migration-restart",
+  "stagedAppPath": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-closeout-catalog.AoYx3DwMXD/Cedia.app",
+  "projectId": "ab72b390-36af-4c06-8295-49b7ad05b09b",
+  "sessionId": "21ba7fbd-ea5b-4cba-8bac-847b176f5d29",
+  "providerRequests": 0,
+  "draft": {
+    "finalText": "IDE window draft wins",
+    "finalRevision": 6,
+    "legacyConflictDraftId": "legacy-agent-ui-1f09ded6f9301ff9df7b55cf2fbda431a43491158ed26b8746d70ec751dbe4e1",
+    "legacyConflictSource": "agent-ui-import-conflict",
+    "cas": {
+      "clientReadRevision": 1,
+      "winnerRevision": 2,
+      "staleStatus": 409,
+      "staleCode": "draft_conflict"
+    }
+  },
+  "settings": {
+    "finalValues": {
+      "appTheme": "system",
+      "uiDensity": "spacious",
+      "chatWidth": "wide",
+      "chatFontSizePx": 12,
+      "composerEffortSlider": true,
+      "enableAssistantStreaming": true,
+      "sidebarThreadSortOrder": "updated_at",
+      "hiddenSidebarNavItems": []
+    },
+    "finalRevision": 3,
+    "cas": {
+      "initialRevision": 0,
+      "firstRevision": 1,
+      "staleStatus": 409,
+      "staleCode": "settings_conflict",
+      "retryRevision": 2
+    }
+  },
+  "nativeWindows": 2,
+  "nativeObservationReady": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/native-observation-ready.json",
+  "nativeObservations": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/native-observations.json",
+  "restartReadback": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/restart-readback.json",
+  "relaunchObservation": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/relaunch-observation.json",
+  "nativeRestartObservationReady": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/native-restart-observation-ready.json",
+  "nativeRestartObservations": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/native-restart-observations.json",
+  "loginItemShim": {
+    "path": "/Users/pond/cedia/dist/packaged-shared-state-proof/2026-09-30T02-26-09-001Z/login-item-shim.jsonl",
+    "simulatedLogin": false,
+    "writesIntercepted": 2
+  },
+  "rendererErrors": []
+}

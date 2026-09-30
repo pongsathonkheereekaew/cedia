@@ -23,8 +23,8 @@ const fixtureNode = process.env.CEDIA_FIXTURE_NODE
     ? "/Users/pond/.caret-tools/node-v24.18.0-darwin-arm64/bin/node"
     : process.execPath);
 const lockFixture = fileURLToPath(new URL("./fixtures/runtime-lock-holder.mjs", import.meta.url));
-const realOmp = process.env.CEDIA_OMP_BINARY ?? "/Users/pond/.local/bin/omp";
-const cediaOwnerOmp = process.env.CEDIA_OMP_BINARY ?? fileURLToPath(new URL("../../../dist/omp/omp", import.meta.url));
+const realOmp = process.env.CEDIA_OMP_BINARY ?? fileURLToPath(new URL("../../../dist/omp/omp", import.meta.url));
+const cediaOwnerOmp = realOmp;
 const currentProcessStartIdentity = readCediaProcessStartIdentity(process.pid)!;
 
 interface FixtureHost {

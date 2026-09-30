@@ -28,14 +28,14 @@ interface RouterFixture {
 const fixtures: RouterFixture[] = [];
 const directories: string[] = [];
 
-function makeFixture(withOmp = false, workspaceJudge?: WorkspaceJudge): RouterFixture {
+function makeFixture(withOmp = false, workspaceJudge?: WorkspaceJudge, ompMode = "normal"): RouterFixture {
   const directory = mkdtempSync(join(tmpdir(), "cedia-router-"));
   directories.push(directory);
   const projectPath = join(directory, "project");
   mkdirSync(projectPath, { recursive: true });
   const store = DurableStore.open({ stateDir: directory, recover: false });
   const auth = new DeviceAuth(join(directory, "devices"));
-  const host = new CediaHost({ store, stateDir: directory, ...(withOmp ? { ompExecutable: fixtureExecutable, ompEnv: { CEDIA_NODE: fixtureNode } } : {}), ...(workspaceJudge ? { workspaceJudge } : {}) });
+  const host = new CediaHost({ store, stateDir: directory, ...(withOmp ? { ompExecutable: fixtureExecutable, ompEnv: { CEDIA_NODE: fixtureNode, CEDIA_FAKE_HOST_MODE: ompMode } } : {}), ...(workspaceJudge ? { workspaceJudge } : {}) });
   const fixture = { directory, projectPath, store, host, auth, router: createRouter(host, auth, { git: createHostGit({ store }) }) };
   fixtures.push(fixture);
   return fixture;
@@ -105,7 +105,7 @@ describe("authenticated Cedia host router", () => {
 		expect(response).toEqual({ status: 200, body: { text: "transcribed:AQID" } });
 	});
 
-	it("creates sidechats through the fork route and exposes the source marker in session reads", async () => {
+  it("creates sidechats through the fork route and exposes the source marker in session reads", async () => {
     const fixture = makeFixture(true);
     const project = fixture.store.createProject({ path: fixture.projectPath, name: "Project" });
     const source = fixture.host.createSession(project.id, "Source");
@@ -118,6 +118,52 @@ describe("authenticated Cedia host router", () => {
     expect(all).toMatchObject({ status: 200, body: expect.arrayContaining([expect.objectContaining({ id: "router-sidechat", sidechatSourceThreadId: source.id })]) });
     const models = await request(fixture, "GET", "/v1/models");
     expect(models).toMatchObject({ status: 200, body: { source: "omp", models: expect.any(Array), cached: false } });
+  });
+
+  it("reports an unstarted task's live model catalog as unavailable without starting OMP", async () => {
+    const fixture = makeFixture();
+    const project = fixture.store.createProject({ path: fixture.projectPath, name: "Project" });
+    const session = fixture.host.createSession(project.id, "Unstarted");
+
+    const response = await request(fixture, "GET", `/v1/sessions/${session.id}/models`);
+
+    expect(response).toEqual({
+      status: 200,
+      body: {
+        state: "unavailable",
+        reason: expect.stringContaining("No OMP runtime is running"),
+      },
+    });
+    expect(fixture.store.getSession(session.id)?.status).toBe("idle");
+  });
+
+  it("lets a controller read the running owner's live model catalog", async () => {
+    const fixture = makeFixture(true, undefined, "session-models");
+    const project = fixture.store.createProject({ path: fixture.projectPath, name: "Project" });
+    const session = fixture.host.createSession(project.id, "Running");
+    await fixture.host.startSession(session.id);
+    const controller = fixture.auth.issue("Phone");
+
+    const response = await request(fixture, "GET", `/v1/sessions/${session.id}/models`, undefined, controller.token);
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: {
+        source: "omp",
+        models: expect.arrayContaining([expect.objectContaining({ slug: "fixture-live/ephemeral-model" })]),
+      },
+    });
+  });
+
+  it("does not turn a live owner catalog failure into the global catalog", async () => {
+    const fixture = makeFixture(true, undefined, "session-models-refuse");
+    const project = fixture.store.createProject({ path: fixture.projectPath, name: "Project" });
+    const session = fixture.host.createSession(project.id, "Running");
+    await fixture.host.startSession(session.id);
+
+    const response = await request(fixture, "GET", `/v1/sessions/${session.id}/models`);
+
+    expect(response).toMatchObject({ status: 400, body: { error: { code: "request_failed" } } });
   });
 
   it("serves workspace suggestions from the configured judge, and no opinion without one", async () => {
