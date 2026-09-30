@@ -82,6 +82,10 @@ interface ChatHeaderProps {
   activeThreadEntryPoint: ThreadPrimarySurface;
   activeProvider: ProviderKind;
   activeProjectName: string | undefined;
+  workspaceIdentityLabel?: {
+    label: string;
+    description: string;
+  } | null;
   threadBreadcrumbs: ReadonlyArray<{
     threadId: ThreadId;
     title: string;
@@ -163,6 +167,7 @@ export function ChatHeader({
   activeThreadEntryPoint,
   activeProvider,
   activeProjectName,
+  workspaceIdentityLabel,
   threadBreadcrumbs,
   className,
   hideSidebarControls: hideSidebarControlsProp,
@@ -417,6 +422,16 @@ export function ChatHeader({
                 >
                   {activeThreadTitle}
                 </h2>
+                {workspaceIdentityLabel ? (
+                  <span
+                    data-testid="shared-folder-label"
+                    aria-label={workspaceIdentityLabel.description}
+                    title={workspaceIdentityLabel.description}
+                    className="inline-flex shrink-0 items-center rounded-full border border-[color:var(--color-border-light)] px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                  >
+                    {workspaceIdentityLabel.label}
+                  </span>
+                ) : null}
                 {showSidechatTitleChip && onCloseThreadPane ? (
                   <IconButton
                     variant="chrome"

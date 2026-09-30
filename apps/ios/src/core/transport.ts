@@ -47,6 +47,7 @@ export function validateTransportUrl(value: string, allowLocalhostDevelopment = 
   } catch (error) {
     throw new InvalidTransportUrlError("Cedia transport URL is invalid");
   }
+  if (url.username || url.password || url.search || url.hash) throw new InvalidTransportUrlError("Cedia transport URL must not contain credentials or query state");
   if (url.protocol === "https:") return url;
   const localhost = url.protocol === "http:" && allowLocalhostDevelopment && ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
   if (!localhost) throw new InvalidTransportUrlError("Cedia remote transport must use HTTPS; HTTP is allowed only for explicit localhost development");

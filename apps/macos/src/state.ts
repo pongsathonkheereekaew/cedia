@@ -13,8 +13,11 @@ import type {
 	Project,
 	Session,
 	SessionEvent,
+	SessionEventSignal,
 } from "../../../packages/protocol/src/index.ts";
-import { isUiInteractiveMethod, parseUiSelectOptionDetails, unsupportedUiMethodMessage, type PendingUiRequest, type UiRequestParseResult } from "../../../packages/protocol/src/ui.ts";
+import { isCediaSessionEventSignal, type CediaSessionEventSignal } from "../../../packages/protocol/src/index.ts";
+import { isUiInteractiveMethod, isUiPresentationMethod, parseUiSelectOptionDetails, unsupportedUiMethodMessage, type PendingUiRequest, type UiRequestParseResult } from "../../../packages/protocol/src/ui.ts";
+import { isHeadlessHangSlashCommand } from "../../../packages/protocol/src/headless-slash.ts";
 import type { LoginProviderOption } from "../../../packages/protocol/src/models.ts";
 import { draftViewKey } from "./workbench-mode.ts";
 import { createWorkPanelState, reduceWorkPanel, type WorkPanelAction, type WorkPanelState } from "./work-panel.ts";
@@ -91,6 +94,16 @@ export interface PendingCommand {
 	readonly updatedAt: number;
 }
 
+/** How many recognised signals the state keeps; a session's older ones live in its journal. */
+const SESSION_SIGNAL_LIMIT = 20;
+
+/** What each recognised payload-free signal means, in the words the row shows. */
+const SESSION_SIGNAL_LABELS: Record<CediaSessionEventSignal, string> = {
+	config_warnings_changed: "Config warnings changed",
+	advisor_cost_changed: "Advisor cost changed",
+	advisor_yielded: "Advisor yielded",
+};
+
 export interface TaskState {
 	readonly connection: ConnectionStatus;
 	readonly lastError?: string;
@@ -122,6 +135,15 @@ export interface TaskState {
 	readonly messageStreams: Readonly<Record<string, string>>;
 	readonly activeToolIds: readonly string[];
 	readonly seenEventKeys: readonly string[];
+	/**
+	 * The payload-free session signals Cedia has recognised, oldest first and bounded.
+	 *
+	 * A signal says session state changed (config warnings, advisor cost, the advisor yielding)
+	 * and carries nothing else. Keeping the recognised ones in state is what makes "never
+	 * silently drop them" true rather than a claim: the row stays visible and a surface can
+	 * react to the kind by name.
+	 */
+	readonly sessionSignals: readonly SessionEventSignal[];
 }
 
 export type CediaEvent = SessionEvent | { readonly sequence?: number; readonly frame: Json };
@@ -163,6 +185,10 @@ export function normalizeSlashCommands(value: unknown): SlashCommandOption[] {
 		const record = item as Record<string, unknown>;
 		const name = typeof record.name === "string" ? record.name.trim() : "";
 		if (!name) return [];
+		// Commands the pinned runtime cannot run headless hang the turn instead of answering;
+		// keep them out of the composer menu (typed text still passes through). Single owner:
+		// packages/protocol/src/headless-slash.ts, shared with the coverage gate.
+		if (isHeadlessHangSlashCommand(name)) return [];
 		const commandSource = typeof record.source === "string" ? record.source.trim() : "";
 		return [{ name, ...(typeof record.description === "string" ? { description: record.description } : {}), ...(commandSource ? { source: commandSource } : {}) }];
 	});
@@ -193,6 +219,7 @@ export function createInitialTaskState(overrides: Partial<TaskState> = {}): Task
 		messageStreams: {},
 		activeToolIds: [],
 		seenEventKeys: [],
+		sessionSignals: [],
 		...overrides,
 	};
 }
@@ -633,6 +660,9 @@ function presentationFromEnvelope(value: unknown): UiPresentation | undefined {
 	const request = value.request;
 	const { id, method } = request;
 	if (!nonEmptyString(id) || !nonEmptyString(method)) return undefined;
+	// The declared class decides first, so the parser and the coverage gate read one list: a row
+	// whose method is not a presentation Cedia knows is refused by name rather than half-parsed.
+	if (!isUiPresentationMethod(method)) return undefined;
 	switch (method) {
 		case "notify": {
 			const message = request.message;
@@ -783,6 +813,24 @@ export function applyFrame(state: TaskState, frameValue: Json, sequence?: number
 	if (type === "tool_execution_start" || type === "tool_execution_update" || type === "tool_execution_end") {
 		const id = toolCallIdFromFrame(frame) ?? frameIdentity(frame, `tool:${sequence ?? next.transcript.length}`);
 		return addOrUpdateTool(next, id, frame, type === "tool_execution_start" ? "start" : type === "tool_execution_update" ? "update" : "end");
+	}
+	if (isCediaSessionEventSignal(type)) {
+		// Recognised by name (§8.2 O01). The signal becomes typed state a surface can act on, and
+		// it keeps its place in the transcript with its own label: a payload-free signal that is
+		// neither typed nor shown is exactly the silent drop the coverage gate refuses.
+		next = {
+			...next,
+			sessionSignals: [...next.sessionSignals, { kind: type, ...(sequence === undefined ? {} : { sequence }) }].slice(-SESSION_SIGNAL_LIMIT),
+		};
+		const signalEntry: TranscriptEntry = {
+			id: frameIdentity(frame, `event:${sequence ?? next.transcript.length}`),
+			kind: "event",
+			role: "system",
+			text: SESSION_SIGNAL_LABELS[type],
+			status: "completed",
+			rawFrames: [frame],
+		};
+		return { ...next, transcript: [...next.transcript, signalEntry] };
 	}
 	const id = frameIdentity(frame, `event:${sequence ?? next.transcript.length}`);
 	const entry: TranscriptEntry = {

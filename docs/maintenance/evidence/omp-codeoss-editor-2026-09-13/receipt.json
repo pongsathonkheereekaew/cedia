@@ -1,0 +1,24 @@
+{
+  "capturedAt": "2026-09-26T14:36:18.088Z",
+  "realNativeEditor": true,
+  "scriptedModelOnly": true,
+  "paidModelCalls": 0,
+  "modelRequests": 6,
+  "approvalMode": "native-ui",
+  "runtimeKind": "standalone-binary",
+  "sourceVerified": true,
+  "sourceRevision": "00085d4e7dfdcfbf302c122fa2682b410a0f43d1",
+  "sourceTree": "c4b66eb6fa1a9c19263382783aa7ee1feec1b639",
+  "executableSha256": "c0bc8f7a7dbb99221ff83f11873676084c1a1a2b88971f5d36613825327f3118",
+  "patchManifestSha256": "b3884e00ffe58601cc610889e59aec298fa49725fc88c544bd0bf077ab20a244",
+  "bunSha256": "35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5",
+  "nativeSha256": "05774ec09950a150b7c1cce63359bd26ed6d3eecc44a6261e09e9403371e7869",
+  "checks": [
+    "native-dirty-read",
+    "native-guarded-edit",
+    "native-read-after-edit",
+    "single-permission",
+    "disk-unchanged",
+    "native-undo-restores-dirty-text"
+  ]
+}

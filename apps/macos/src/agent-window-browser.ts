@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
+import { CdpTabEndpoint, type CdpEndpointTab, type CdpTabDebugger } from "./cdp-tab-endpoint.ts";
+
 /**
  * Browser state owned by the Agent Window.  The renderer only receives copies
  * of this state over the authenticated Cedia IPC channel; page contents never
@@ -51,8 +53,19 @@ interface BrowserEvent {
 
 type Listener = (...args: any[]) => void;
 
+interface ElectronDebugger {
+	isAttached(): boolean;
+	attach(protocolVersion?: string): Promise<void>;
+	detach(): Promise<void>;
+	sendCommand(method: string, commandParams?: unknown): Promise<unknown>;
+	on(event: "message", listener: (event: unknown, method: string, params: unknown) => void): void;
+	on(event: "detach", listener: (event: unknown, reason: string) => void): void;
+	removeListener(event: string, listener: (...args: any[]) => void): void;
+}
+
 interface BrowserWebContents {
 	readonly id: number;
+	readonly debugger?: ElectronDebugger;
 	readonly session?: {
 		setPermissionCheckHandler(handler: () => boolean): void;
 		setPermissionRequestHandler(handler: (contents: unknown, permission: string, callback: (allowed: boolean) => void) => void): void;
@@ -286,6 +299,15 @@ function currentUrl(runtime: BrowserRuntime): string {
 	try { return runtime.webContents.getURL?.() ?? ""; } catch { return ""; }
 }
 
+function currentTitle(runtime: BrowserRuntime): string | null {
+	try {
+		const title = runtime.webContents.getTitle?.().trim();
+		return title && title !== "New tab" ? title.slice(0, 512) : null;
+	} catch {
+		return null;
+	}
+}
+
 function copyableUrl(tab: AgentBrowserTab, runtime?: BrowserRuntime): string | null {
 	const live = runtime ? currentUrl(runtime) : "";
 	if (live && !isBlankUrl(live) && isBrowserWebUrl(live)) return live;
@@ -416,6 +438,7 @@ export function createAgentBrowserService(options: AgentBrowserServiceOptions): 
 	function releaseOwner(owner: BrowserWindow): void {
 		for (const [threadId, candidate] of owners) {
 			if (candidate !== owner) continue;
+			void agentDetach(threadId).catch(() => { /* window is gone */ });
 			for (const runtime of [...runtimes.values()]) {
 				if (runtime.owner === owner && runtime.threadId === threadId) removeRuntime(runtime);
 			}
@@ -465,6 +488,134 @@ export function createAgentBrowserService(options: AgentBrowserServiceOptions): 
 			return undefined;
 		}
 		return runtime;
+	}
+
+	interface AgentAttachedTab {
+		readonly debugger: CdpTabDebugger;
+	}
+
+	interface AgentEndpointRecord {
+		readonly endpoint: CdpTabEndpoint;
+		readonly attached: Map<string, AgentAttachedTab>;
+	}
+
+	const agentEndpoints = new Map<string, AgentEndpointRecord>();
+
+	const debuggerAdapters = new WeakMap<ElectronDebugger, CdpTabDebugger>();
+
+	function adaptDebugger(native: ElectronDebugger): CdpTabDebugger {
+		const known = debuggerAdapters.get(native);
+		if (known) return known;
+		const adapter: CdpTabDebugger = {
+			isAttached: () => {
+				try { return native.isAttached(); } catch { return false; }
+			},
+			attach: () => native.attach(),
+			detach: async () => {
+				try {
+					if (native.isAttached()) await native.detach();
+				} catch { /* already gone */ }
+			},
+			sendCommand: (method, params) => native.sendCommand(method, params),
+			on: (event, listener) => {
+				if (event === "message") native.on("message", (_event, method, params) => listener(method, params as Record<string, unknown> | undefined));
+				else native.on("detach", (_event, reason) => listener(reason));
+			},
+			removeListener: (event, listener) => {
+				// The adapter wraps native listeners, so removal by identity cannot
+				// reach the wrapped originals; endpoint teardown drops the whole
+				// debugger session instead, which is the actual invalidation.
+				void event; void listener;
+			},
+		};
+		debuggerAdapters.set(native, adapter);
+		return adapter;
+	}
+
+	function agentTabsResolver(threadId: string): () => readonly CdpEndpointTab[] {
+		return () => {
+			const record = agentEndpoints.get(threadId);
+			const state = states.get(threadId);
+			if (!record || !state) return [];
+			const out: CdpEndpointTab[] = [];
+			for (const [tabId, attached] of record.attached) {
+				const tab = state.tabs.find(candidate => candidate.id === tabId);
+				const runtime = runtimeFor(threadId, tabId);
+				if (!tab || !runtime || !attached.debugger.isAttached()) continue;
+				out.push({ tabId, url: currentUrl(runtime) || tab.url, title: tab.title, debugger: attached.debugger });
+			}
+			return out;
+		};
+	}
+
+	function agentThreadId(value: unknown): string {
+		if (typeof value !== "string" || value.trim().length === 0) throw new Error("Browser agent attach needs a thread");
+		return value;
+	}
+
+	async function agentAttach(owner: BrowserWindow, threadId: string, tabId: string): Promise<{ cdpUrl: string; tabId: string }> {
+		const thread = agentThreadId(threadId);
+		if (typeof tabId !== "string" || tabId.trim().length === 0) throw new Error("Browser agent attach needs a tab");
+		const state = getOrCreateState(thread);
+		const tab = state.tabs.find(candidate => candidate.id === tabId);
+		if (!tab) throw new Error("Unknown browser tab");
+		const runtime = ensureRuntime(owner, state, tab);
+		const native = runtime.webContents.debugger;
+		if (!native) throw new Error("Browser tab debugger is unavailable");
+		let record = agentEndpoints.get(thread);
+		const known = record?.attached.get(tabId);
+		if (known && known.debugger.isAttached()) {
+			const address = record!.endpoint.address ?? await record!.endpoint.listen();
+			return { cdpUrl: address.url, tabId };
+		}
+		let attached: boolean;
+		try { attached = native.isAttached(); } catch { attached = false; }
+		if (attached) throw new Error("Browser tab debugger is already attached");
+		await native.attach();
+		const adapter = adaptDebugger(native);
+		if (!record) {
+			record = { endpoint: new CdpTabEndpoint(agentTabsResolver(thread)), attached: new Map() };
+			agentEndpoints.set(thread, record);
+		}
+		record.attached.set(tabId, { debugger: adapter });
+		const address = await record.endpoint.listen();
+		return { cdpUrl: address.url, tabId };
+	}
+
+	async function agentDetach(threadId: string, tabId?: string): Promise<{ attached: boolean; cdpUrl?: string }> {
+		const thread = agentThreadId(threadId);
+		const record = agentEndpoints.get(thread);
+		if (!record) return { attached: false };
+		const ids = tabId === undefined ? [...record.attached.keys()] : [tabId];
+		for (const id of ids) {
+			const attached = record.attached.get(id);
+			record.attached.delete(id);
+			if (attached) {
+				try { await attached.debugger.detach(); } catch { /* already gone */ }
+			}
+		}
+		if (record.attached.size === 0) {
+			try { await record.endpoint.close(); } catch { /* already closed */ }
+			agentEndpoints.delete(thread);
+			return { attached: false };
+		}
+		const address = record.endpoint.address;
+		return address ? { attached: true, cdpUrl: address.url } : { attached: true };
+	}
+
+	function agentEndpoint(threadId: string): { attached: boolean; cdpUrl?: string; tabs: { tabId: string; url: string; title: string }[] } {
+		const thread = agentThreadId(threadId);
+		const record = agentEndpoints.get(thread);
+		if (!record) return { attached: false, tabs: [] };
+		const state = states.get(thread);
+		const tabs = [...record.attached.keys()].flatMap(tabId => {
+			const tab = state?.tabs.find(candidate => candidate.id === tabId);
+			const runtime = runtimeFor(thread, tabId);
+			if (!tab || !runtime) return [];
+			return [{ tabId, url: currentUrl(runtime) || tab.url, title: tab.title }];
+		});
+		const address = record.endpoint.address;
+		return address ? { attached: true, cdpUrl: address.url, tabs } : { attached: tabs.length > 0, tabs };
 	}
 
 	function attachActiveRuntime(owner: BrowserWindow, state: AgentBrowserState): BrowserRuntime | null {
@@ -541,7 +692,7 @@ export function createAgentBrowserService(options: AgentBrowserServiceOptions): 
 			if (isBrowserWebUrl(url)) {
 				tab.url = url;
 				tab.lastCommittedUrl = isBlankUrl(url) ? null : url;
-				tab.title = titleForUrl(url);
+				tab.title = currentTitle(runtime) ?? tab.title;
 			}
 			tab.canGoBack = canGoBack(webContents);
 			tab.canGoForward = canGoForward(webContents);
@@ -718,6 +869,7 @@ export function createAgentBrowserService(options: AgentBrowserServiceOptions): 
 		switch (method) {
 			case "open": return open(owner, input);
 			case "close": {
+				try { await agentDetach(input.threadId); } catch { /* already detached */ }
 				for (const runtime of [...runtimes.values()]) if (runtime.threadId === input.threadId) removeRuntime(runtime);
 				state.open = false; state.tabs = []; state.activeTabId = null; state.lastError = null;
 				bump(state); owners.delete(input.threadId); return cloneState(state);
@@ -770,8 +922,19 @@ export function createAgentBrowserService(options: AgentBrowserServiceOptions): 
 				if (!isBlankUrl(url)) void loadTab(runtime, next, url);
 				return cloneState(state);
 			}
+			case "agentAttach": {
+				if (typeof input.tabId !== "string") throw new Error("Browser agent attach needs a tab");
+				return agentAttach(owner, input.threadId, input.tabId);
+			}
+			case "agentDetach": {
+				return agentDetach(input.threadId, input.tabId);
+			}
+			case "agentEndpoint": {
+				return agentEndpoint(input.threadId);
+			}
 			case "closeTab": {
 				const target = tab();
+				try { await agentDetach(input.threadId, target.id); } catch { /* already detached */ }
 				const wasActive = state.activeTabId === target.id;
 				const runtime = runtimeFor(input.threadId, target.id); if (runtime) removeRuntime(runtime);
 				state.tabs = state.tabs.filter((candidate) => candidate.id !== target.id);

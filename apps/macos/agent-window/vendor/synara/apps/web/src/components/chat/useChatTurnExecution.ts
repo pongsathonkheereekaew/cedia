@@ -76,6 +76,7 @@ interface PreparedChatTurn {
   messageIdForSend: MessageId;
   providerOptionsForDispatchForSend: ProviderStartOptions | undefined;
   outgoingMessageText: string;
+  cediaSelectedSlashCommand?: string;
   mentionedSkillsForSend: ProviderSkillReference[];
   mentionedPluginMentionsForSend: ProviderMentionReference[];
   dispatchMode: "queue" | "steer";
@@ -227,6 +228,7 @@ export function useChatTurnExecution({
         messageIdForSend,
         providerOptionsForDispatchForSend,
         outgoingMessageText,
+        cediaSelectedSlashCommand,
         mentionedSkillsForSend,
         mentionedPluginMentionsForSend,
         dispatchMode,
@@ -413,28 +415,39 @@ export function useChatTurnExecution({
             threadNotes,
             projectInstructions: inheritedProjectInstructions,
           });
-          await promoteThreadCreate(
-            {
-              type: "thread.create",
-              commandId: newCommandId(),
-              threadId: threadIdForSend,
-              projectId: targetProjectIdForSend,
-              title,
-              modelSelection: threadCreateModelSelection,
-              runtimeMode: nextRuntimeModeForSend,
-              interactionMode: interactionModeForSend,
-              envMode: nextThreadEnvMode,
-              branch: nextThreadBranch,
-              worktreePath: nextThreadWorktreePath,
-              workingDirectory: nextThreadWorkingDirectory,
-              associatedWorktreePath: nextAssociatedWorktreePath,
-              associatedWorktreeBranch: nextAssociatedWorktreeBranch,
-              associatedWorktreeRef: nextAssociatedWorktreeRef,
-              lastKnownPr: activeThread.lastKnownPr ?? null,
-              createdAt: activeThread.createdAt,
-            },
-            api,
-          );
+          // The host resolves the selected base ref to an immutable commit before creating the
+          // worktree. Keep it on the promotion envelope only for a first worktree send; local
+          // tasks must never carry a meaningless base revision.
+          const threadCreateCommand = {
+            type: "thread.create" as const,
+            commandId: newCommandId(),
+            threadId: threadIdForSend,
+            projectId: targetProjectIdForSend,
+            title,
+            modelSelection: threadCreateModelSelection,
+            runtimeMode: nextRuntimeModeForSend,
+            interactionMode: interactionModeForSend,
+            envMode: nextThreadEnvMode,
+            branch: nextThreadBranch,
+            worktreePath: nextThreadWorktreePath,
+            workingDirectory: nextThreadWorkingDirectory,
+            associatedWorktreePath: nextAssociatedWorktreePath,
+            associatedWorktreeBranch: nextAssociatedWorktreeBranch,
+            associatedWorktreeRef: nextAssociatedWorktreeRef,
+            ...(nextThreadEnvMode === "worktree" && baseBranchForWorktree
+              ? { baseRef: baseBranchForWorktree }
+              : {}),
+            // The dirty-file pick lives on the draft workspace beside the base branch and only
+            // applies to a first worktree send; the host carries exactly those paths (or none for
+            // []) and refuses a malformed list before creating anything. Untouched means the host
+            // default (carry the checkout's changes), so nothing is sent.
+            ...(nextThreadEnvMode === "worktree" && baseBranchForWorktree && activeThread.dirtyFiles
+              ? { dirtyFiles: [...activeThread.dirtyFiles] }
+              : {}),
+            lastKnownPr: activeThread.lastKnownPr ?? null,
+            createdAt: activeThread.createdAt,
+          };
+          await promoteThreadCreate(threadCreateCommand, api);
           // `thread.create` does not carry notes, so seed the freshly created
           // server thread's notepad with the inherited project instructions via a
           // dedicated meta update. Best-effort: a failure here must not abort the turn.
@@ -598,6 +611,7 @@ export function useChatTurnExecution({
                   ? { mentions: mentionedPluginMentionsForSend }
                   : {}),
               },
+              ...(cediaSelectedSlashCommand ? { cediaSelectedSlashCommand } : {}),
               modelSelection: selectedModelSelectionForSend,
               ...(providerOptionsForDispatchForSend
                 ? { providerOptions: providerOptionsForDispatchForSend }
@@ -618,7 +632,7 @@ export function useChatTurnExecution({
               ) {
                 throw error;
               }
-            });
+          });
         });
         turnStartSucceeded = true;
         if (

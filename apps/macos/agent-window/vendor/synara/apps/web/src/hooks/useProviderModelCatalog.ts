@@ -9,7 +9,7 @@ import type {
   ProviderKind,
   ProviderModelDescriptor,
 } from "@synara/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 
 import { getAppModelOptions, getCustomModelsByProvider, useAppSettings } from "../appSettings";
@@ -21,6 +21,7 @@ import {
   providerAgentsQueryOptions,
   providerDiscoveryQueryKeys,
   providerModelsQueryOptions,
+  refetchActiveOmpModelCatalog,
 } from "../lib/providerDiscoveryReactQuery";
 import { mergeDynamicModelOptions, type ProviderModelOption } from "../providerModelOptions";
 
@@ -90,6 +91,7 @@ export function useProviderModelCatalog(input: {
   const agentDiscoveryPolicy = input.agentDiscoveryPolicy ?? "selected";
   const discoveryCwd = input.cwd ?? null;
   const { settings, serverSettings } = useAppSettings();
+  const queryClient = useQueryClient();
   const customModelsByProvider = useMemo(() => getCustomModelsByProvider(settings), [settings]);
   const hiddenProviderSet = useMemo(
     () => new Set<ProviderKind>(settings.hiddenProviders),
@@ -192,6 +194,7 @@ export function useProviderModelCatalog(input: {
     omp: providerModelsQueryOptions({
       provider: "omp",
       enabled: ompModelDiscoveryEnabled,
+      refreshWhileObserved: discoveryEnabled,
     }),
   } as const;
 
@@ -205,6 +208,11 @@ export function useProviderModelCatalog(input: {
   const piDynamicModelsQuery = useQuery(modelQueryOptionsByProvider.pi);
   const devinDynamicModelsQuery = useQuery(modelQueryOptionsByProvider.devin);
   const ompDynamicModelsQuery = useQuery(modelQueryOptionsByProvider.omp);
+
+  useEffect(() => {
+    if (!discoveryEnabled || !ompModelDiscoveryEnabled) return;
+    void refetchActiveOmpModelCatalog(queryClient);
+  }, [discoveryEnabled, ompModelDiscoveryEnabled, queryClient]);
 
   const [, , modelProvider, modelBinaryPath, modelApiEndpoint, modelAgentDir, modelCwd] =
     modelQueryOptionsByProvider[selectedProvider].queryKey;
@@ -446,15 +454,19 @@ export function useProviderModelCatalog(input: {
     ],
   );
 
-  const selectedRuntimeModel = useMemo(
-    () =>
-      resolveRuntimeModelDescriptor({
-        provider: selectedProvider,
-        model: modelHintByProvider?.[selectedProvider] ?? null,
-        runtimeModels: runtimeModelsByProvider[selectedProvider],
-      }),
-    [modelHintByProvider, runtimeModelsByProvider, selectedProvider],
-  );
+  const selectedRuntimeModel = useMemo(() => {
+    const hinted = resolveRuntimeModelDescriptor({
+      provider: selectedProvider,
+      model: modelHintByProvider?.[selectedProvider] ?? null,
+      runtimeModels: runtimeModelsByProvider[selectedProvider],
+    });
+    if (hinted) return hinted;
+    // The footer trigger and trait rows resolve against the committed selection, but the
+    // catalog hint still names the pre-pick model until the commit lands: fall back to any
+    // single discovered descriptor so the effort ladder follows the picked row.
+    const discovered = runtimeModelsByProvider[selectedProvider];
+    return discovered.length === 1 ? discovered[0] : undefined;
+  }, [modelHintByProvider, runtimeModelsByProvider, selectedProvider]);
 
   const selectedDynamicAgents =
     selectedProvider === "claudeAgent"

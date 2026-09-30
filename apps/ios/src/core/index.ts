@@ -10,6 +10,7 @@ export * from "./state.ts";
 export * from "./commands.ts";
 export * from "./replay.ts";
 export * from "./transport.ts";
+export * from "./gateway.ts";
 export * from "./api.ts";
 export * from "./pairing.ts";
 export * from "./relay.ts";

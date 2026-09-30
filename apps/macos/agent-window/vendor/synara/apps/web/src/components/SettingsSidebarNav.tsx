@@ -14,8 +14,10 @@ import { SidebarLeadingIcon } from "./SidebarLeadingIcon";
 import {
   SETTINGS_NAV_GROUPS,
   SETTINGS_NAV_ITEMS,
+  settingsSectionVisible,
   type SettingsSectionId,
 } from "../settingsNavigation";
+import type { HostCapability } from "../capabilityGate";
 import {
   rankSettingsSearchEntries,
   settingsSearchEntryTarget,
@@ -87,12 +89,14 @@ export function SettingsSidebarNav(props: {
   activeSection: SettingsSectionId;
   onBack: () => void;
   onSelectSection: (section: SettingsSectionId, options?: { target?: string }) => void;
+  /** The host's capability snapshot, so a destination it reports as missing is not offered. */
+  capabilities?: readonly HostCapability[];
 }) {
   const { onSelectSection } = props;
   const [query, setQuery] = useState("");
   const trimmedQuery = query.trim();
   const isSearching = trimmedQuery.length > 0;
-  const results = rankSettingsSearchEntries(trimmedQuery, SETTINGS_SEARCH_RESULTS_LIMIT);
+  const results = rankSettingsSearchEntries(trimmedQuery, SETTINGS_SEARCH_RESULTS_LIMIT, props.capabilities);
 
   const handleSelectResult = (entry: SettingsSearchEntry) => {
     const target = settingsSearchEntryTarget(entry);
@@ -162,7 +166,9 @@ export function SettingsSidebarNav(props: {
       ) : (
         <nav aria-label="Settings sections" className="flex flex-col">
           {SETTINGS_NAV_GROUPS.map((group) => {
-            const items = SETTINGS_NAV_ITEMS.filter((item) => item.group === group.id);
+            const items = SETTINGS_NAV_ITEMS.filter(
+              (item) => item.group === group.id && settingsSectionVisible(item.id, props.capabilities),
+            );
             if (items.length === 0) {
               return null;
             }

@@ -1,0 +1,3 @@
+# Generated patches reproduce upstream files byte for byte, tabs and all. Whitespace
+# policing belongs to the hand-written tree, not to a diff of someone else's source.
+patches/**/*.patch -whitespace

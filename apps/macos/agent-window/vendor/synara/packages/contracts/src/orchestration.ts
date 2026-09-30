@@ -599,6 +599,62 @@ export const OrchestrationSessionStatus = Schema.Literals([
 ]);
 export type OrchestrationSessionStatus = typeof OrchestrationSessionStatus.Type;
 
+/**
+ * A model/effort change a task is holding for its next turn (CEDIA-PLAN §2.4).
+ *
+ * Cedia adds this to the session projection so a surface can say "awaiting OMP" instead of
+ * drawing a requested model as the one in effect. OMP owns the revision and the echo.
+ */
+export const OrchestrationSessionPendingModel = Schema.Struct({
+  revision: NonNegativeInt,
+  state: Schema.Literals(["awaiting", "in-effect", "refused"]),
+  requested: Schema.Struct({
+    provider: Schema.optional(TrimmedNonEmptyString),
+    modelId: Schema.optional(TrimmedNonEmptyString),
+    thinkingLevel: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  }),
+  acceptedAt: IsoDateTime,
+  applied: Schema.optional(
+    Schema.Struct({
+      model: Schema.optional(TrimmedNonEmptyString),
+      thinkingLevel: Schema.optional(TrimmedNonEmptyString),
+      at: IsoDateTime,
+      via: Schema.optional(Schema.Literals(["turn-boundary", "immediate"])),
+    }),
+  ),
+  error: Schema.optional(TrimmedNonEmptyString),
+});
+export type OrchestrationSessionPendingModel = typeof OrchestrationSessionPendingModel.Type;
+
+/**
+ * What an archive kept, and how Continue put a task back (CEDIA-PLAN §2.6).
+ *
+ * Cedia records this on the task when it archives; the window shows the host's own decision rather
+ * than inferring that a restore brought files back.
+ */
+export const OrchestrationSessionRestoration = Schema.Struct({
+  at: IsoDateTime,
+  worktree: TrimmedNonEmptyString,
+  branch: TrimmedNonEmptyString,
+  reattached: Schema.Boolean,
+  reason: TrimmedNonEmptyString,
+});
+export type OrchestrationSessionRestoration = typeof OrchestrationSessionRestoration.Type;
+
+export const OrchestrationSessionArchive = Schema.Struct({
+  state: Schema.Literals(["retained", "prepared", "removed", "restored"]),
+  ref: Schema.optional(TrimmedNonEmptyString),
+  commit: Schema.optional(TrimmedNonEmptyString),
+  branch: Schema.optional(TrimmedNonEmptyString),
+  worktree: Schema.optional(TrimmedNonEmptyString),
+  dirty: Schema.Boolean,
+  ignored: Schema.Boolean,
+  recordedAt: IsoDateTime,
+  reason: TrimmedNonEmptyString,
+  restored: Schema.optional(OrchestrationSessionRestoration),
+});
+export type OrchestrationSessionArchive = typeof OrchestrationSessionArchive.Type;
+
 export const OrchestrationSession = Schema.Struct({
   threadId: ThreadId,
   status: OrchestrationSessionStatus,
@@ -607,6 +663,33 @@ export const OrchestrationSession = Schema.Struct({
   activeTurnId: Schema.NullOr(TurnId),
   lastError: Schema.NullOr(TrimmedNonEmptyString),
   updatedAt: IsoDateTime,
+  pendingModel: Schema.optional(Schema.NullOr(OrchestrationSessionPendingModel)),
+  archive: Schema.optional(Schema.NullOr(OrchestrationSessionArchive)),
+  /**
+   * Cedia's bounded turn projection (plan §2.4/O01): what the host recorded about the turns it
+   * submitted, so a surface can say how much work OMP is holding. It carries no device identity or
+   * payload hash - only what a control may draw.
+   */
+  turns: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        turnIntentId: TrimmedNonEmptyString,
+        state: Schema.Literals([
+          "prepared",
+          "queued",
+          "running",
+          "completed",
+          "failed",
+          "cancelled",
+          "needs_continue",
+          "outcome_unknown",
+        ]),
+        queuePosition: Schema.optional(NonNegativeInt),
+        model: Schema.optional(TrimmedNonEmptyString),
+        reason: Schema.optional(TrimmedNonEmptyString),
+      }),
+    ),
+  ),
 });
 export type OrchestrationSession = typeof OrchestrationSession.Type;
 
@@ -812,6 +895,7 @@ export const OrchestrationThread = Schema.Struct({
   envMode: Schema.optional(ThreadEnvironmentMode).pipe(Schema.withDecodingDefault(() => "local")),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  dirtyFiles: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
   workingDirectory: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
@@ -886,6 +970,12 @@ export const OrchestrationThread = Schema.Struct({
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(Schema.withDecodingDefault(() => [])),
   activities: Schema.Array(OrchestrationThreadActivity),
   pendingInteractions: Schema.optional(Schema.Array(OrchestrationPendingInteraction)),
+  /** Cedia task-runtime metadata used to invalidate the live provider command catalog. */
+  cediaSlashCommands: Schema.optional(Schema.Array(Schema.Struct({
+    name: TrimmedNonEmptyString,
+    description: Schema.optional(Schema.String),
+    source: Schema.optional(Schema.String),
+  }))),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
 });
@@ -1351,6 +1441,8 @@ export const ThreadTurnStartCommand = Schema.Struct({
     skills: Schema.optional(Schema.Array(ProviderSkillReference)),
     mentions: Schema.optional(Schema.Array(ProviderMentionReference)),
   }).check(TurnMessageContentCheck),
+  /** Set only when the user selected an OMP command from the live composer catalog. */
+  cediaSelectedSlashCommand: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
   providerOptions: Schema.optional(ProviderStartOptions),
   reviewTarget: Schema.optional(ProviderReviewTarget),
@@ -1393,6 +1485,8 @@ const ClientThreadTurnStartCommand = Schema.Struct({
     skills: Schema.optional(Schema.Array(ProviderSkillReference)),
     mentions: Schema.optional(Schema.Array(ProviderMentionReference)),
   }).check(TurnMessageContentCheck),
+  /** Selected command intent from the composer; plain slash-prefixed text omits this. */
+  cediaSelectedSlashCommand: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
   providerOptions: Schema.optional(ProviderStartOptions),
   reviewTarget: Schema.optional(ProviderReviewTarget),

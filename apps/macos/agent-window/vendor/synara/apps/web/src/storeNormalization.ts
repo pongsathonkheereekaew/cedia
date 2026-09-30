@@ -1484,6 +1484,28 @@ export function normalizeThreadSession(
     createdAt: incoming.updatedAt,
     updatedAt: incoming.updatedAt,
     ...(nextLastError ? { lastError: nextLastError } : {}),
+    // Cedia: the model/effort change this task is holding for its next turn (§2.4). It is the
+    // difference between "this is the model" and "this is what was asked for", so it is carried
+    // rather than dropped, and a change to it alone still repaints the row.
+    ...(incoming.pendingModel === undefined
+      ? previous?.pendingModel === undefined
+        ? {}
+        : { pendingModel: null }
+      : { pendingModel: incoming.pendingModel }),
+    // §2.6: the archive receipt travels with the task for the same reason - it is what tells a
+    // restored row where it resumed, and it must survive normalization to reach a surface.
+    ...(incoming.archive === undefined
+      ? previous?.archive === undefined
+        ? {}
+        : { archive: null }
+      : { archive: incoming.archive }),
+    // §2.4/O01: the turn projection is what lets a surface say how much work OMP is holding, so it
+    // is carried and compared like the other Cedia records rather than dropped.
+    ...(incoming.turns === undefined
+      ? previous?.turns === undefined
+        ? {}
+        : { turns: [] }
+      : { turns: incoming.turns }),
   } satisfies NonNullable<Thread["session"]>;
   if (
     previous &&
@@ -1493,7 +1515,10 @@ export function normalizeThreadSession(
     previous.activeTurnId === nextSession.activeTurnId &&
     previous.createdAt === nextSession.createdAt &&
     previous.updatedAt === nextSession.updatedAt &&
-    previous.lastError === nextSession.lastError
+    previous.lastError === nextSession.lastError &&
+    JSON.stringify(previous.pendingModel ?? null) === JSON.stringify(nextSession.pendingModel ?? null) &&
+    JSON.stringify(previous.archive ?? null) === JSON.stringify(nextSession.archive ?? null) &&
+    JSON.stringify(previous.turns ?? []) === JSON.stringify(nextSession.turns ?? [])
   ) {
     return previous;
   }

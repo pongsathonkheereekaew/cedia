@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join, normalize, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, normalize, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const desktop = join(root, "desktop");
@@ -22,6 +23,57 @@ const manifestDigest = createHash("sha256").update(JSON.stringify([
   manifest.baseRevision,
   manifest.patches.map((patch: { file: string; sha256: string }) => [patch.file, patch.sha256]),
 ])).digest("hex");
+
+/** Every path a patch touches, read from its `diff --git` headers. */
+function filesOfPatch(file: string): string[] {
+	return [...readFileSync(join(root, "patches/desktop", file), "utf8").matchAll(/^diff --git a\/(\S+) b\//gm)].map(match => match[1]!);
+}
+
+/**
+ * True when the checkout is exactly the pinned base plus this patch set.
+ *
+ * Copying only the touched files keeps the proof cheap. Undoing the set in reverse
+ * manifest order can only succeed when every hunk sits where the patches left it,
+ * which is the same property `apps/macos/test/desktop-patch-set.test.ts` asserts
+ * forward; the removals are checked directly.
+ */
+function patchSetReversesFromCheckout(): boolean {
+	const work = mkdtempSync(join(tmpdir(), "cedia-patch-verify-"));
+	try {
+		for (const entry of (manifest.removals ?? []) as string[]) {
+			if (existsSync(join(desktop, entry))) return false;
+		}
+		const touched = new Set((manifest.patches as { file: string }[]).flatMap(patch => filesOfPatch(patch.file)));
+		for (const file of touched) {
+			const source = join(desktop, file);
+			if (!existsSync(source)) return false;
+			mkdirSync(dirname(join(work, file)), { recursive: true });
+			copyFileSync(source, join(work, file));
+		}
+		for (const patch of [...(manifest.patches as { file: string }[])].reverse()) {
+			execFileSync("git", ["apply", "--reverse", join(root, "patches/desktop", patch.file)], { cwd: work, stdio: "pipe" });
+		}
+		// Undoing the set is only enough when what is left is the pinned base byte for
+		// byte; otherwise the checkout carries content no patch explains.
+		for (const file of touched) {
+			let expected: string | undefined;
+			try {
+				expected = execFileSync("git", ["show", `${manifest.baseRevision}:${file}`], { cwd: desktop, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+			} catch {
+				expected = undefined;
+			}
+			const reversed = join(work, file);
+			if (!existsSync(reversed)) return expected === undefined;
+			if (expected === undefined || readFileSync(reversed, "utf8") !== expected) return false;
+		}
+		return true;
+	} catch {
+		return false;
+	} finally {
+		rmSync(work, { recursive: true, force: true });
+	}
+}
+
 const stampPath = join(desktop, ".prepared.json");
 try {
   const stamp = JSON.parse(readFileSync(stampPath, "utf8")) as { manifestDigest?: string };
@@ -39,8 +91,18 @@ for (const entry of manifest.patches as { file: string; sha256: string }[]) {
     execFileSync("git", ["apply", "--reverse", "--check", patch], { cwd: desktop, stdio: "pipe" });
     continue; // Already applied; a re-run must not fail or double-apply.
   } catch {
-    execFileSync("git", ["apply", "--check", patch], { cwd: desktop, stdio: "inherit" });
-    execFileSync("git", ["apply", patch], { cwd: desktop, stdio: "inherit" });
+    try {
+      execFileSync("git", ["apply", "--check", patch], { cwd: desktop, stdio: "pipe" });
+      execFileSync("git", ["apply", patch], { cwd: desktop, stdio: "inherit" });
+    } catch {
+      // Neither direction applies on its own: a later patch rewrote lines this one
+      // added, so the per-patch reverse-check cannot decide. Prove the whole set is
+      // already applied by undoing it, in reverse manifest order, from a mirror of
+      // the checkout's touched files; fail loudly when that proof does not hold.
+      if (!patchSetReversesFromCheckout()) {
+        throw new Error(`Cedia desktop patch ${entry.file} applies in neither direction, and the checkout is not the pinned base plus this patch set`);
+      }
+    }
   }
 }
 

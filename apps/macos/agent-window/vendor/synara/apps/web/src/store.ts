@@ -194,6 +194,7 @@ export function setThreadWorkspace(
       nextBranch: patch.branch !== undefined ? patch.branch : t.branch,
     });
     const nextWorktreePath = patch.worktreePath !== undefined ? patch.worktreePath : t.worktreePath;
+    const nextDirtyFiles = patch.dirtyFiles !== undefined ? patch.dirtyFiles : (t.dirtyFiles ?? null);
     const nextWorkingDirectory =
       patch.workingDirectory !== undefined ? patch.workingDirectory : (t.workingDirectory ?? null);
     const nextAssociatedWorktreePath =
@@ -226,6 +227,7 @@ export function setThreadWorkspace(
       t.envMode === nextEnvMode &&
       t.branch === nextBranch &&
       t.worktreePath === nextWorktreePath &&
+      (t.dirtyFiles ?? null) === nextDirtyFiles &&
       (t.workingDirectory ?? null) === nextWorkingDirectory &&
       (t.associatedWorktreePath ?? null) === nextAssociatedWorktreePath &&
       (t.associatedWorktreeBranch ?? null) === nextAssociatedWorktreeBranch &&
@@ -241,6 +243,7 @@ export function setThreadWorkspace(
       envMode: nextEnvMode,
       branch: nextBranch,
       worktreePath: nextWorktreePath,
+      dirtyFiles: nextDirtyFiles,
       workingDirectory: nextWorkingDirectory,
       associatedWorktreePath: nextAssociatedWorktreePath,
       associatedWorktreeBranch: nextAssociatedWorktreeBranch,

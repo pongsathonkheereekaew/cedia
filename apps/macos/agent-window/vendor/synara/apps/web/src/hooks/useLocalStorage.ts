@@ -53,7 +53,7 @@ export const removeLocalStorageItem = (key: string) => {
   isomorphicLocalStorage.removeItem(key);
 };
 
-const LOCAL_STORAGE_CHANGE_EVENT = "synara:local_storage_change";
+export const LOCAL_STORAGE_CHANGE_EVENT = "synara:local_storage_change";
 
 interface LocalStorageChangeDetail {
   key: string;
@@ -66,6 +66,16 @@ function dispatchLocalStorageChange(key: string) {
       detail: { key },
     }),
   );
+}
+
+/**
+ * Tell every mounted `useLocalStorage` for `key` that the value changed outside a hook.
+ *
+ * Cedia's host-owned preference sync writes the same storage keys (it owns the value; the workbench
+ * file is the projection), so it has to raise the same in-document signal the hook's own writes do.
+ */
+export function notifyLocalStorageChange(key: string): void {
+  dispatchLocalStorageChange(key);
 }
 
 /**

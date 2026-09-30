@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "runtimeVersion": "omp/18.1.18",
+  "appGenerations": [
+    "packaged-owner-first-a46ee115-473a-4f33-a49e-119c817879d1",
+    "packaged-owner-second-fee22351-e16e-4554-b67e-bab94f31c4fb"
+  ],
+  "appProcessIds": [
+    12142,
+    12430
+  ],
+  "hostPid": 12150,
+  "hostGeneration": "24eea6f4-3dcc-4fb2-a6b3-102b88b86a9a",
+  "hostAppGeneration": "packaged-owner-first-a46ee115-473a-4f33-a49e-119c817879d1",
+  "bundledHost": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-current-source-proof.47usIL/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/host/cli.js",
+  "projectId": "1a987025-042e-4056-8e8f-7c23cf22f1e1",
+  "taskId": "59cde9cb-683a-4f5e-b655-2c4fbda48fc8",
+  "incarnation": "aa2c6216-1d03-4083-956b-bf3cb26883a3",
+  "ompOwnerPid": 12188,
+  "ownerSummary": "available",
+  "draftRevision": 1,
+  "draftText": "unsent restart draft 33ba8e3a-b1ff-427d-a02f-529e8b00e3db",
+  "localDraftCacheRemovedBeforeRelaunch": true,
+  "providerRequests": 1,
+  "activeTurnCrashProof": {
+    "commandId": "3e038f2c-6cb7-4a65-876d-ed3f2f3f4f92",
+    "firstAppPid": 12257,
+    "relaunchedAppPid": 12430,
+    "hostPid": 12150,
+    "ompOwnerPid": 12188,
+    "hostStatusWhileAppClosed": "running",
+    "hostStatusAfterRelaunch": "running",
+    "promptCountAfterRelaunch": 1,
+    "settledIntentAfterAbort": "cancelled",
+    "loopbackProviderRequests": 1
+  },
+  "loginItemInterceptions": 3,
+  "sourceHostSha256": "208d92846782bcac5b6992d9d6b41c3e26b99d3f007054e61699020266f5a24b",
+  "sourceOmpSha256": "29847d53cb4c1249a12e913b15678f13592e5fd33f6b911b84edda64f7bfc313",
+  "sourceAgentWindowMainSha256": "4f645de219ac2e8b1f4e41517172e4dc7a39ca3734c58ca579bafcfb70400e61",
+  "sourceExtensionJsSha256": "a8eef2db5982f2153d984799a2aac85ce1777d362eb659bb2cde74a6719cf88e"
+}

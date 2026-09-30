@@ -41,9 +41,12 @@ import {
   summarizeOmpCatalog,
   type OmpCatalogModel,
 } from "./OmpProviderSettingsPanel.logic";
+import { CediaRuntimeProviderState } from "./CediaRuntimeProviderState";
 
 export type OmpProviderSettingsPanelProps = {
   readonly active: boolean;
+  /** Active Cedia session whose runtime account and tier state should be shown. */
+  readonly sessionId?: string | null;
 };
 
 /** Server errors are shown verbatim: the host authors them for this surface. */
@@ -436,7 +439,7 @@ function formatEnvironment(environment: OmpEnvironment | undefined): string {
   return details || "Cedia host";
 }
 
-export function OmpProviderSettingsPanel({ active }: OmpProviderSettingsPanelProps) {
+export function OmpProviderSettingsPanel({ active, sessionId }: OmpProviderSettingsPanelProps) {
   const configQuery = useQuery({
     ...serverConfigQueryOptions(),
     enabled: active,
@@ -507,6 +510,8 @@ export function OmpProviderSettingsPanel({ active }: OmpProviderSettingsPanelPro
         active={active}
         catalogueProviderIds={catalogueProviderIds}
       />
+
+      <CediaRuntimeProviderState active={active} sessionId={sessionId} />
 
       <SettingsSectionShell
         title="Upstream provider catalog"

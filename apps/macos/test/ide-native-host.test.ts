@@ -39,6 +39,7 @@ let server: StartedHostServer;
 let client: CediaHostClient;
 let projectId = "";
 let projectName = "";
+let sharedDraftSessionId = "";
 
 beforeAll(async () => {
 	server = await startHostServer({ stateDir });
@@ -63,6 +64,7 @@ stubState.config.set("cedia.hostNodePath", "");
 stubState.config.set("cedia.hostScriptPath", "");
 
 const extension: any = await import("../src/extension.ts");
+const { CediaIdeAgentProvider } = await import("../src/agent-ide-webview.ts");
 
 function context(): any {
 	return {
@@ -79,17 +81,20 @@ function context(): any {
 
 interface WebviewHarness {
 	view: any;
+	posted: unknown[];
 	receive(message: unknown): Promise<unknown>;
 }
 
 function createWebviewHarness(): WebviewHarness {
 	let receiver: ((message: unknown) => unknown) | undefined;
+	const posted: unknown[] = [];
 	const webview = {
 		html: "",
 		options: {},
 		cspSource: "",
 		asWebviewUri: (uri: unknown) => uri,
 		postMessage: async (message: unknown) => {
+			posted.push(message);
 			stubState.posted.push(message);
 			return true;
 		},
@@ -105,6 +110,7 @@ function createWebviewHarness(): WebviewHarness {
 			onDidChangeVisibility: () => ({ dispose() {} }),
 			show() {},
 		},
+		posted,
 		receive: async (message: unknown) => receiver?.(message),
 	};
 }
@@ -168,6 +174,7 @@ describe("ide-native surface with a live host", () => {
 
 	it("lists a task the host really stores", async () => {
 		const created = await client.createSession({ projectId, title: "Retry the sync client" });
+		sharedDraftSessionId = created.id;
 		const sessions = await ideRequest({ kind: "request", method: "GET", path: `/v1/sessions?projectId=${encodeURIComponent(projectId)}` }) as readonly { id?: string; title?: string }[];
 		const titles = sessions.map(session => session.title);
 		expect(titles).toContain("Retry the sync client");
@@ -175,6 +182,61 @@ describe("ide-native surface with a live host", () => {
 		const listed = await client.listSessions(projectId);
 		expect(listed.map(session => session.id)).toContain(created.id);
 	});
+
+	it("forwards another window's committed draft into the IDE webview", async () => {
+		const provider = new CediaIdeAgentProvider(context(), stateDir, async () => client, async () => {});
+		const bridge = createWebviewHarness();
+		await provider.resolveWebviewView(bridge.view);
+		try {
+			await bridge.receive({ type: "cedia-agent-ready" });
+			await bridge.receive({
+				type: "cedia-agent-request",
+				channel: "vscode:cediaAgent",
+				id: "draft-test-active-session",
+				input: { kind: "activeSession", sessionId: sharedDraftSessionId },
+			});
+			const payload = { draft: { prompt: "typed in Agents" }, draftThread: null, projectMappings: {} };
+			await client.requestApplication("PATCH", `/drafts/${encodeURIComponent(sharedDraftSessionId)}`, {
+				expectedRevision: 0,
+				text: "typed in Agents",
+				content: payload,
+			});
+
+			const deadline = Date.now() + 3_000;
+			let update: any;
+			while (Date.now() < deadline) {
+				update = bridge.posted.find((message: any) => message.type === "cedia-agent-event"
+					&& message.channel === "vscode:cedia-draft-updated"
+					&& message.payload?.threadId === sharedDraftSessionId);
+				if (update) break;
+				await new Promise(resolve => setTimeout(resolve, 25));
+			}
+			expect(update).toMatchObject({
+				type: "cedia-agent-event",
+				channel: "vscode:cedia-draft-updated",
+				payload: { status: "written", threadId: sharedDraftSessionId, revision: 1, payload },
+			});
+
+			await client.requestApplication("POST", `/drafts/${encodeURIComponent(sharedDraftSessionId)}/clear`, { expectedRevision: 1 });
+			const deliveryDeadline = Date.now() + 3_000;
+			let delivered: any;
+			while (Date.now() < deliveryDeadline) {
+				delivered = bridge.posted.find((message: any) => message.type === "cedia-agent-event"
+					&& message.channel === "vscode:cedia-draft-updated"
+					&& message.payload?.status === "delivered"
+					&& message.payload?.threadId === sharedDraftSessionId);
+				if (delivered) break;
+				await new Promise(resolve => setTimeout(resolve, 25));
+			}
+			expect(delivered).toMatchObject({
+				type: "cedia-agent-event",
+				channel: "vscode:cedia-draft-updated",
+				payload: { status: "delivered", threadId: sharedDraftSessionId },
+			});
+		} finally {
+			provider.dispose();
+		}
+	}, 15_000);
 
 	it("pairs a device through the host and shows a real QR code", async () => {
 		vscodeApi.window.showInputBox = async () => "Test iPhone";

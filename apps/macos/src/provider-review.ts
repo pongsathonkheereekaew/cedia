@@ -57,7 +57,7 @@ import { layoutBoxes, layoutSashes, setSplitRatio } from "./layout-geometry.ts";
 import { buildPaneViews, rememberPaneTranscript, type PaneTranscriptCache, type PaneView } from "./pane-views.ts";
 import { announceSummary, motionTokens } from "./ui-a11y.ts";
 import { redactedDiagnostics } from "./diagnostics.ts";
-import { AGENTS_WINDOW_WORKSPACE, allThemeProvidingExtensionIds, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, type IdeLayoutSnapshot, type NativeDestination, type RetentionSnapshot } from "./workbench-mode.ts";
+import { AGENTS_WINDOW_WORKSPACE, themeProvidingExtensionIds, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, type IdeLayoutSnapshot, type NativeDestination, type RetentionSnapshot } from "./workbench-mode.ts";
 import { availabilityFromLists, routeErrorPage, validateRoute, type RouteErrorPage } from "./route-error.ts";
 import { applySettingsSection, beginSettingsDraft, previewResetOverride, settingsSourcePath, type ResetOverridePreview, type SettingsSectionDraft } from "./settings-revision.ts";
 import { OLDER_PAGES_NOTE } from "./history-page.ts";
@@ -334,7 +334,7 @@ export const reviewConcern: Partial<CediaTaskViewProviderApi> = {
 					this.state = reduceTaskState(this.state, { type: "draft", draft: "" });
 					this.captureActivePaneDraft();
 					try {
-						await this.context.globalState.update("cedia.drafts", this.state.drafts);
+						await this.persistLegacyDrafts();
 						this.draftPersistOk = true;
 					} catch {
 						this.draftPersistOk = false;

@@ -774,6 +774,7 @@ export function buildLocalDraftThread(
     branch: draftThread.branch,
     worktreePath: draftThread.worktreePath,
     workingDirectory: draftThread.workingDirectory ?? null,
+    dirtyFiles: draftThread.dirtyFiles ?? null,
     lastKnownPr: draftThread.lastKnownPr ?? null,
     handoff: null,
     turnDiffSummaries: [],
@@ -935,8 +936,12 @@ export function deriveComposerVoiceState(input: {
   canStartVoiceNotes: boolean;
   showVoiceNotesControl: boolean;
 } {
-  const canRenderVoiceNotes = input.authStatus !== "unauthenticated";
-  const canStartVoiceNotes = canRenderVoiceNotes && input.voiceTranscriptionAvailable !== false;
+  // The mic renders only when speech-to-text is positively advertised. A pending
+  // (undefined) or deferred (false) transcription capability keeps the control
+  // hidden instead of offering a recording that cannot be transcribed.
+  const canRenderVoiceNotes =
+    input.authStatus !== "unauthenticated" && input.voiceTranscriptionAvailable === true;
+  const canStartVoiceNotes = canRenderVoiceNotes;
 
   return {
     canRenderVoiceNotes,

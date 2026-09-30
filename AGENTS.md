@@ -2,9 +2,12 @@
 
 This folder is the git checkout. Run repository commands here. The documentation map is [docs/README.md](docs/README.md).
 
-- The authoritative plan and spec is [docs/maintenance/CEDIA-PLAN.md](docs/maintenance/CEDIA-PLAN.md): product definition (owned Agentic-IDE forked from Code-OSS, OMP harness), architecture, workspace surface contract, measured values, SSOT rules, steps S1-S5, landed work with receipts, and the open work list. Read it before planning screen, architecture or host work. Section 10 is the only authoritative list of unfinished work.
+- This file is the project entry point and authority for agent working rules. Read the canonical [shared preferences](.agents/AGENTS.md) as well; the home-directory link is a convenience, not a separate policy copy. Keep product requirements in the plan linked below, and runtime claims in dated evidence.
+
+- The authoritative plan and spec is [docs/maintenance/CEDIA-PLAN.md](docs/maintenance/CEDIA-PLAN.md): product definition (owned Agentic-IDE forked from Code-OSS, OMP harness), architecture, workspace surface contract, measured values, SSOT/settings rules, R1–R8 integration sequence, landed work with receipts, and the open work list. Read it before planning screen, architecture or host work. Section 10 is the only authoritative list of unfinished work.
 - **All documentation is written in English.** Never add a `.th.md` file or a mixed-language section; a Thai filename is a defect. User-facing product copy may still be localized.
 - **Never create a second plan or spec.** Superseded documents are deleted, not archived: git history is the archive. A live tree with two owners of truth is the failure this rule prevents.
+- For implementation, follow the plan’s opening reading contract, §8 dependencies and §10 item 70. Item 69 records completed planning; Wayfinder tickets and dated receipts are supporting history. An explicit owner instruction to implement the final baseline does not require repeating design approval. Reconcile material new decisions into the same plan and affected documentation.
 - Layout is one repo: `apps/{host,macos,ios}` and `packages/{protocol,omp-adapter,relay}`. Those folders are module boundaries, not remotes. Leave `desktop/`, `upstream/`, `dist/`, and packaged apps where they are.
 - For retained workspace identifiers, use [backlog/requirement-graph.json](backlog/requirement-graph.json) and the `*-evidence.md` files it cites. That baseline does not expand a bounded task into the entire backlog, and it does not declare old acceptance gates passed.
 - Use OMP as the sole agent execution and transcript owner (the only harness). CEDIA owns the application host/transport; Code-OSS supplies the Mac IDE base.

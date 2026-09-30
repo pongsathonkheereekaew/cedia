@@ -681,6 +681,33 @@ label:has(> select#reasoning-effort) select {
   height: 100%;
 }
 
+/* GitHub `> [!NOTE]` alerts (tagged by remarkGithubAlerts). Ported from upstream #1273. */
+.chat-markdown blockquote[data-github-alert] {
+  --github-alert-color: var(--info);
+  border-left-width: 3px;
+  border-left-color: var(--github-alert-color);
+  color: var(--foreground);
+}
+.chat-markdown blockquote[data-github-alert="tip"] {
+  --github-alert-color: var(--success);
+}
+.chat-markdown blockquote[data-github-alert="important"] {
+  --github-alert-color: var(--status-merged);
+}
+.chat-markdown blockquote[data-github-alert="warning"] {
+  --github-alert-color: var(--warning);
+}
+.chat-markdown blockquote[data-github-alert="caution"] {
+  --github-alert-color: var(--destructive);
+}
+.chat-markdown .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--github-alert-color);
+  font-weight: 500;
+}
+
 /* Chat markdown rendering */
 .chat-markdown {
   min-width: 0;
@@ -2651,6 +2678,21 @@ diffs-container {
 .chat-composer-stacked-top[data-composer-stacked-attached="true"] {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+
+/* Cedia rail above the composer: a panel that directly follows another stacked
+   panel drops its top radius so the 13 optional surfaces read as one continuous
+   surface instead of colliding rounded cards. Same semantics as
+   attachedToPrevious, applied structurally so no prop threading is needed;
+   surfaces that render null leave no DOM node, so sibling adjacency is exact. */
+.cedia-surface-stack .chat-composer-stacked-top + .chat-composer-stacked-top {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.cedia-surface-stack {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
 }
 
 /* Composer glass — the same material as the floating menus/pickers

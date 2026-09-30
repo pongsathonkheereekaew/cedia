@@ -1,18 +1,20 @@
 {
-  "capturedAt": "2026-09-20T10:07:45.021Z",
-  "app": "/Users/pond/caret/VSCode-darwin-arm64/Cedia.app",
-  "binary": "/Users/pond/caret/VSCode-darwin-arm64/Cedia.app/Contents/MacOS/Cedia",
+  "capturedAt": "2026-09-26T13:43:21.043Z",
+  "app": "/Users/pond/cedia/VSCode-darwin-arm64/Cedia.app",
+  "binary": "/Users/pond/cedia/VSCode-darwin-arm64/Cedia.app/Contents/MacOS/Cedia",
   "passwordStore": "basic",
   "inmemorySecretStorage": true,
-  "ompSha256": "2067fd9148b9cf4dce6a0c8250a347d5c9884bfa19b3c1bd39bfd4e793b63072",
-  "hostSha256": "76f03280e16f84b0b958ba20f9de6c46951810afade96bcf6b2f7bf87fed17bd",
+  "ompSha256": "c0bc8f7a7dbb99221ff83f11873676084c1a1a2b88971f5d36613825327f3118",
+  "hostSha256": "acf041d440124d540d0746b492699b2abaf81e4f4eab5fd2d8256f1f13c3f9ce",
+  "remoteWebSha256": "bb0e4870e01231d6a8415687229cdec0a252a776260132ae334b5151a2abcd80",
   "checks": [
     "cedia-binary-present",
     "adhoc-codesign-verify",
     "argv-password-store-basic",
     "argv-inmemory-secretstorage",
     "bundled-standalone-omp",
-    "bundled-host"
+    "bundled-host",
+    "bundled-remote-web-client"
   ],
   "uiVerified": false,
   "ios": "deferred"

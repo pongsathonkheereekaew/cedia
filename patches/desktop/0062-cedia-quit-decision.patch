@@ -1,0 +1,118 @@
+diff --git a/src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts b/src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts
+index f039180c9d1..cd0dbf3e147 100644
+--- a/src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts
++++ b/src/vs/platform/lifecycle/electron-main/lifecycleMainService.ts
+@@ -7,7 +7,7 @@ import electron from 'electron';
+ import { validatedIpcMain } from '../../../base/parts/ipc/electron-main/ipcMain.js';
+ import { Barrier, Promises, timeout } from '../../../base/common/async.js';
+ import { Emitter, Event } from '../../../base/common/event.js';
+-import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
++import { Disposable, DisposableStore, IDisposable } from '../../../base/common/lifecycle.js';
+ import { isMacintosh, isWindows } from '../../../base/common/platform.js';
+ import { cwd } from '../../../base/common/process.js';
+ import { assertReturnsDefined } from '../../../base/common/types.js';
+@@ -109,6 +109,16 @@ export interface ILifecycleMainService {
+ 	 */
+ 	readonly onBeforeShutdown: Event<void>;
+ 
++	/**
++	 * CEDIA (patch `0062`): register the application's quit-decision owner.
++	 *
++	 * The decider runs before the quit is treated as requested and before
++	 * `onBeforeShutdown` fires, so a decider that answers `false` leaves the
++	 * lifecycle exactly as it was: no window closes, no shutdown starts and a
++	 * later quit asks again. Resolving `true` lets the same quit continue.
++	 */
++	registerQuitDecider?(decider: () => Promise<boolean>): IDisposable;
++
+ 	/**
+ 	 * An event that fires after the onBeforeShutdown event has been fired and after no window has
+ 	 * vetoed the shutdown sequence. At this point listeners are ensured that the application will
+@@ -231,6 +241,24 @@ export class LifecycleMainService extends Disposable implements ILifecycleMainSe
+ 	private _quitRequested = false;
+ 	get quitRequested(): boolean { return this._quitRequested; }
+ 
++	/**
++	 * CEDIA (patch `0062`): see `ILifecycleMainService.registerQuitDecider`.
++	 */
++	private quitDecider: (() => Promise<boolean>) | undefined = undefined;
++	private quitDecided = false;
++	private pendingQuitDecision: Promise<void> | undefined = undefined;
++
++	registerQuitDecider(decider: () => Promise<boolean>): IDisposable {
++		this.quitDecider = decider;
++		return {
++			dispose: () => {
++				if (this.quitDecider === decider) {
++					this.quitDecider = undefined;
++				}
++			}
++		};
++	}
++
+ 	private _wasRestarted = false;
+ 	get wasRestarted(): boolean { return this._wasRestarted; }
+ 
+@@ -276,11 +304,45 @@ export class LifecycleMainService extends Disposable implements ILifecycleMainSe
+ 
+ 		// before-quit: an event that is fired if application quit was
+ 		// requested but before any window was closed.
+-		const beforeQuitListener = () => {
++		const beforeQuitListener = (event: electron.Event) => {
+ 			if (this._quitRequested) {
+ 				return;
+ 			}
+ 
++			// CEDIA (patch `0062`): the application asks its own quit-decision owner
++			// first. `preventDefault()` here is what makes "Cancel" a real cancel -
++			// the quit has not been recorded and no window is asked to close yet.
++			if (this.quitDecider && !this.quitDecided) {
++				event.preventDefault();
++				if (this.pendingQuitDecision) {
++					return;
++				}
++
++				this.trace('Lifecycle#quit decider: waiting for the application decision');
++				this.pendingQuitDecision = this.quitDecider().then(allow => {
++					this.pendingQuitDecision = undefined;
++
++					if (!allow) {
++						this.trace('Lifecycle#quit decider: the application cancelled this quit');
++						// The caller that asked to quit is still waiting on
++						// `pendingQuitPromise`. Resolving it with a veto is what makes
++						// a cancel final: without this the promise stays pending, and
++						// the next quit request finds it and returns without ever
++						// reaching this listener again.
++						this.resolvePendingQuitPromise(true /* veto */);
++						return;
++					}
++
++					this.quitDecided = true;
++					electron.app.quit();
++				}, error => {
++					this.pendingQuitDecision = undefined;
++					this.trace(`Lifecycle#quit decider failed: ${error instanceof Error ? error.message : String(error)}`);
++					this.logService.error('Cedia quit decision failed', error);
++				});
++				return;
++			}
++
+ 			this.trace('Lifecycle#app.on(before-quit)');
+ 			this._quitRequested = true;
+ 
+diff --git a/src/vs/code/electron-main/app.ts b/src/vs/code/electron-main/app.ts
+--- a/src/vs/code/electron-main/app.ts
++++ b/src/vs/code/electron-main/app.ts
+@@ -211,7 +211,11 @@ type CediaAgentWindowModule = {
+ 	installCediaMainProcessLifecycle?(options: {
+ 		readonly appRoot: string;
+ 		readonly parentPid: number;
+ 		readonly stateDir?: string;
+-		readonly lifecycleMainService: { onWillShutdown(listener: (event: { join(id: string, promise: Promise<void>): void }) => void): unknown };
++		readonly lifecycleMainService: {
++			onWillShutdown(listener: (event: { join(id: string, promise: Promise<void>): void }) => void): unknown;
++			/** Patch `0062`: the application's cancellable pre-quit decision. */
++			registerQuitDecider?(decider: () => Promise<boolean>): unknown;
++		};
+ 		readonly log?: (message: string) => void;
+ 	}): { readonly shouldOpenFirstWindow: (hasOpenableArguments: boolean) => boolean } | undefined;

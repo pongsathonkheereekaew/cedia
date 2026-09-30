@@ -44,6 +44,7 @@ frame({
 	supportedProtocolVersions: [1, 2],
 	maxFrameBytes: 1024 * 1024,
 	maxReassembledFrameBytes: 64 * 1024 * 1024,
+	...(mode === "plan" ? { cediaPlanVersion: 1 } : {}),
 	fixture: "cedia-g0",
 });
 if (mode === "stubborn") frame({ type: "fixture_pid", pid: process.pid });
@@ -73,6 +74,19 @@ const handle = command => {
 				process.stdin.pause();
 				setTimeout(() => process.stdin.resume(), 250);
 			});
+		return;
+	}
+	if (mode === "plan" && command.type === "cedia_plan") {
+		const data = {
+			plan: { enabled: true, paused: false, planFilePath: "/tmp/plan.md", workflow: "iterative", reentry: false },
+			vibe: { enabled: false },
+			review: null,
+			changed: false,
+		};
+		response(command.type, command.id, data);
+		frame({ type: "cedia_plan_state", payload: { plan: data.plan, vibe: data.vibe } });
+		frame({ type: "cedia_plan_review", payload: { reviewId: 1, title: "Fixture plan", planFilePath: data.plan.planFilePath, planContent: "# Plan", truncated: false, createdAt: 1 } });
+		frame({ type: "cedia_plan_review_closed", payload: { reviewId: 1, decision: "cancel" } });
 		return;
 	}
 	if (mode === "timeout" && command.type === "bash") return;

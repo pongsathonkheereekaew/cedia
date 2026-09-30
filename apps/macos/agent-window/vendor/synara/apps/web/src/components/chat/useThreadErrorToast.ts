@@ -8,6 +8,7 @@ import { isProviderDeliveryBlockDetail } from "@synara/shared/providerDeliveryBl
 import { useEffect, useRef, type RefObject } from "react";
 
 import { toastManager } from "../ui/toast";
+import { workspaceErrorToastCopy } from "../../lib/threadWorkspacePolicy";
 
 type ThreadErrorToastOptions = Parameters<typeof toastManager.add>[0];
 
@@ -25,10 +26,12 @@ export function buildThreadErrorToastOptions(input: {
   unblocking: boolean;
 }): ThreadErrorToastOptions {
   const canUnblock = isProviderDeliveryBlockDetail(input.error);
+  const workspaceCopy = workspaceErrorToastCopy(input.error);
   return {
     id: threadErrorToastId(input.threadId),
     type: "error",
-    title: input.error,
+    title: workspaceCopy?.title ?? input.error,
+    description: workspaceCopy?.description,
     timeout: 0,
     priority: "high",
     onClose: input.onClose,

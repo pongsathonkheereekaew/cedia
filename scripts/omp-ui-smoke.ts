@@ -196,7 +196,7 @@ export default function(api) {
   checks.push("zero-model-turns");
   await client.close();
   checks.push("bounded-close");
-  const receipt = { date: new Date().toISOString(), hostRuntime: { name: process.versions.bun ? "bun" : "node", version: process.versions.bun ?? process.versions.node }, version, binarySha256, implementationSourceHashes, sourceReference: "00085d4e7dfdcfbf302c122fa2682b410a0f43d1", mode: "rpc-ui", checks, eventCounts, toolNames, uiMethods, presentations, serverCancellations, limitations: "Local extension UI protocol only; not rendered Mac/iPhone UI, custom TUI components, tool-policy enforcement or full OMP conformance. open_url covered by unit fixture only." };
+  const receipt = { date: new Date().toISOString(), hostRuntime: { name: process.versions.bun ? "bun" : "node", version: process.versions.bun ?? process.versions.node }, version, binarySha256, implementationSourceHashes, sourceReference: "fc671eba383f2a7208500836673b485c0dc7073d", mode: "rpc-ui", checks, eventCounts, toolNames, uiMethods, presentations, serverCancellations, limitations: "Local extension UI protocol only; not rendered Mac/iPhone UI, custom TUI components, tool-policy enforcement or full OMP conformance. open_url covered by unit fixture only." };
   if (process.env.CEDIA_SMOKE_RECEIPT) {
     const output = resolve(process.env.CEDIA_SMOKE_RECEIPT);
     await mkdir(dirname(output), { recursive: true });

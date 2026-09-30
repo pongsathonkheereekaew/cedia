@@ -114,14 +114,6 @@ export function resolveSnapshotThemeName(choice: SnapshotThemeChoice): string | 
 	return pick(choice.colorTheme);
 }
 
-/** Every installed extension that contributes a Code-OSS theme. */
-export function allThemeProvidingExtensionIds(extensions: readonly ThemeProvidingExtension[]): string[] {
-	return extensions
-		.filter(extension => Array.isArray(extension.packageJSON?.contributes?.themes) && extension.packageJSON.contributes.themes.length > 0)
-		.map(extension => extension.id.toLowerCase())
-		.sort();
-}
-
 /**
  * Merge the theme and the extensions that paint it into the Agents window's workspace settings.
  *

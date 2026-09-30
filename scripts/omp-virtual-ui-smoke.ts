@@ -24,7 +24,7 @@ const root = resolve(import.meta.dir, "..");
 const requestedBinary = process.env.CEDIA_OMP_BINARY ?? join(root, "dist/omp/omp");
 const executable = resolve(requestedBinary);
 const fixture = join(root, "packages/omp-adapter/test/fixtures/cedia-virtual-ui-extension.ts");
-const sourceReference = "00085d4e7dfdcfbf302c122fa2682b410a0f43d1";
+const sourceReference = "fc671eba383f2a7208500836673b485c0dc7073d";
 
 function check(value: unknown, message: string): asserts value {
 	if (!value) throw new Error(message);

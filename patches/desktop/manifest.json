@@ -60,6 +60,22 @@
     {
       "file": "0059-cedia-single-ide-agent.patch",
       "sha256": "430e1dcde6978c0f46d3d4cd0c36acb07d8f8fa1185319a782909b2b572f6fe0"
+    },
+    {
+      "file": "0060-cedia-app-lifecycle.patch",
+      "sha256": "6d0f6341c463c914738952ced669cda8ff918e7d892b8963c737bd82e49af300"
+    },
+    {
+      "file": "0061-cedia-chat-action-returns.patch",
+      "sha256": "c4a22864fd0acab58876d672f809d453ed582b038a4fe33661295573fe945f75"
+    },
+    {
+      "file": "0062-cedia-quit-decision.patch",
+      "sha256": "a43d6374c418743937a95fd7145c5c05d21cbb00e0d91d310d22deed153f66a1"
+    },
+    {
+      "file": "0063-cedia-dirty-editor-count.patch",
+      "sha256": "28c0ebca4dce028e068b047978290688e89b985398ad949dd332d242f75f7d9d"
     }
   ],
   "removals": [

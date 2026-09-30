@@ -1,5 +1,6 @@
 import "../../index.css";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ServerProviderStatus } from "@synara/contracts";
 import { page } from "vitest/browser";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -92,6 +93,15 @@ const props = {
   resetEpoch: 0,
 };
 
+async function renderPanel() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <ProvidersSettingsPanel {...props} />
+    </QueryClientProvider>,
+  );
+}
+
 beforeEach(() => {
   harness.config = {
     providers: [
@@ -110,7 +120,7 @@ beforeEach(() => {
 });
 
 it("shows the OMP runtime boundary and upstream catalog without generic CLI controls", async () => {
-  await render(<ProvidersSettingsPanel {...props} />);
+  await renderPanel();
 
   expect(page.getByText("OMP execution", { exact: true }).element()).toBeTruthy();
   expect(page.getByText("Managed by OMP").element()).toBeTruthy();
@@ -122,7 +132,7 @@ it("shows the OMP runtime boundary and upstream catalog without generic CLI cont
 });
 
 it("refreshes the live OMP catalog from the settings action", async () => {
-  await render(<ProvidersSettingsPanel {...props} />);
+  await renderPanel();
   await page.getByRole("button", { name: "Refresh OMP model catalog", exact: true }).click();
   expect(harness.refresh).toHaveBeenCalledOnce();
 });

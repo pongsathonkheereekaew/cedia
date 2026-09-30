@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "baselineDate": "2026-09-12",
-  "ompVersion": "18.1.18",
+  "ompVersion": "18.4.3",
   "sources": [
     {
       "name": "omp",
       "repository": "https://github.com/can1357/oh-my-pi",
-      "revision": "00085d4e7dfdcfbf302c122fa2682b410a0f43d1",
+      "revision": "fc671eba383f2a7208500836673b485c0dc7073d",
       "license": "MIT",
       "licensePath": "LICENSE",
       "retainedNotice": "docs/upstream-notices/omp-LICENSE.txt",

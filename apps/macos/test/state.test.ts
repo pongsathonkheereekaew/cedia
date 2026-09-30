@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { applyEvent, applyEventPage, applyFrame, createInitialTaskState, normalizeSlashCommands, parseCediaUiRequest, reduceTaskState } from "../src/state.ts";
-import type { Json } from "../../../packages/protocol/src/index.ts";
+import type { Json, SessionEvent } from "../../../packages/protocol/src/index.ts";
 
 describe("Cedia task reducer", () => {
 	it("keeps a terminal panel's frames out of the transcript", () => {
 		// A turn emits one virtual-terminal screen update per TUI repaint - ~140 for
 		// the turn that exposed this - each carrying raw escape sequences. They are
 		// the terminal panels' transport, not conversation.
-		const events = [
+		const events: SessionEvent[] = [
 			{ sessionId: "s", incarnation: "i", sequence: 1, timestamp: "t", frame: { type: "cedia_terminal_open", terminalId: "tty-1", cols: 80, rows: 24 } },
 			{ sessionId: "s", incarnation: "i", sequence: 2, timestamp: "t", frame: { type: "cedia_terminal_output", terminalId: "tty-1", sequence: 0, data: "\u001b[31mred\u001b[0m" } },
 			{ sessionId: "s", incarnation: "i", sequence: 3, timestamp: "t", frame: { type: "cedia_terminal_close", terminalId: "tty-1" } },
@@ -267,6 +267,43 @@ describe("Cedia task reducer", () => {
 		state = reduceTaskState(state, { type: "command_status", commandId: "cmd-1", status: "sent" });
 		state = reduceTaskState(state, { type: "connection", status: "offline", error: "host closed" });
 		expect(state.pendingCommands["cmd-1"]).toMatchObject({ status: "unknown", replayable: false });
+	});
+
+	it("applies the runtime's command-metadata push to the composer menu", () => {
+		// rpc-mode subscribes to the session's own command metadata changes and emits
+		// `available_commands_update`; Cedia applies that frame to `slashCommands` instead
+		// of polling `get_available_commands` (plan §8.2 O06, `subscribeCommandMetadataChanged`).
+		const next = applyFrame(createInitialTaskState(), {
+			type: "available_commands_update",
+			commands: [
+				{ name: "plan", description: "Plan mode", source: "builtin" },
+				{ name: "my-skill", description: "A skill", source: "skill" },
+				{ name: "", description: "a nameless row" },
+			],
+		});
+		expect(next.slashCommands).toEqual([
+			{ name: "plan", description: "Plan mode", source: "builtin" },
+			{ name: "my-skill", description: "A skill", source: "skill" },
+		]);
+		expect(next.transcript).toEqual([]);
+	});
+
+	it("keeps commands the pinned runtime cannot run headless out of the composer menu", () => {
+		// The fence emptied when the pinned runtime learned to answer bare `/move`
+		// headless (see evidence/o02-move-headless-answered-2026-09-25/): with no proven
+		// hang left, the funnel keeps every advertised row. The mechanism stays wired
+		// for the next proven hang.
+		const next = applyFrame(createInitialTaskState(), {
+			type: "available_commands_update",
+			commands: [
+				{ name: "move", description: "Relocate the session", source: "builtin" },
+				{ name: "mcp", description: "Manage MCP servers", source: "builtin" },
+			],
+		});
+		expect(next.slashCommands).toEqual([
+			{ name: "move", description: "Relocate the session", source: "builtin" },
+			{ name: "mcp", description: "Manage MCP servers", source: "builtin" },
+		]);
 	});
 });
 

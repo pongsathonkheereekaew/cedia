@@ -265,6 +265,7 @@ type PersistedComposerPromptHistorySavedDraft =
 const PersistedComposerThreadDraftState = Schema.Struct({
   pendingUserInputDrafts: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
   prompt: Schema.String,
+  selectedSlashCommand: Schema.optionalKey(Schema.String),
   // Set only while composer prompt-history browsing is active: the user's real
   // draft snapshot, kept safe while `prompt` temporarily holds a recalled history entry.
   promptHistorySavedDraft: Schema.optionalKey(PersistedComposerPromptHistorySavedDraft),
@@ -997,6 +998,15 @@ function normalizePersistedDraftsByThreadId(
       promptCandidate,
       terminalContexts.length,
     );
+    const selectedCandidate =
+      typeof draftCandidate.selectedSlashCommand === "string"
+        ? draftCandidate.selectedSlashCommand
+        : null;
+    const promptCommandToken = prompt.trimStart().match(/^\/([^\s]+)/)?.[1] ?? null;
+    const selectedSlashCommand =
+      selectedCandidate !== null && selectedCandidate === promptCommandToken
+        ? selectedCandidate
+        : null;
     // If the draft already has the v3 shape, use it directly
     const legacyDraftCandidate = draftValue as LegacyPersistedComposerThreadDraftState;
     let modelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>> = {};
@@ -1056,6 +1066,7 @@ function normalizePersistedDraftsByThreadId(
     if (
       Object.keys(pendingUserInputDrafts).length === 0 &&
       promptCandidate.length === 0 &&
+      selectedSlashCommand === null &&
       promptHistorySavedDraft === null &&
       attachments.length === 0 &&
       terminalContexts.length === 0 &&
@@ -1076,6 +1087,7 @@ function normalizePersistedDraftsByThreadId(
     nextDraftsByThreadId[threadId as ThreadId] = {
       ...(Object.keys(pendingUserInputDrafts).length > 0 ? { pendingUserInputDrafts } : {}),
       prompt,
+      ...(selectedSlashCommand !== null ? { selectedSlashCommand } : {}),
       ...(promptHistorySavedDraft !== null ? { promptHistorySavedDraft } : {}),
       attachments,
       ...(assistantSelections.length > 0 ? { assistantSelections } : {}),
@@ -1225,6 +1237,7 @@ export function partializeComposerDraftStoreState(
     if (
       Object.keys(draft.pendingUserInputDrafts ?? {}).length === 0 &&
       draft.prompt.length === 0 &&
+      draft.selectedSlashCommand === null &&
       draft.promptHistorySavedDraft === null &&
       draft.persistedAttachments.length === 0 &&
       draft.assistantSelections.length === 0 &&
@@ -1247,6 +1260,9 @@ export function partializeComposerDraftStoreState(
         ? { pendingUserInputDrafts: draft.pendingUserInputDrafts }
         : {}),
       prompt: draft.prompt,
+      ...(draft.selectedSlashCommand !== null
+        ? { selectedSlashCommand: draft.selectedSlashCommand }
+        : {}),
       ...(draft.promptHistorySavedDraft !== null
         ? {
             promptHistorySavedDraft: {
@@ -1551,6 +1567,7 @@ export function toHydratedThreadDraft(
         }
       : {}),
     prompt: persistedDraft.prompt,
+    selectedSlashCommand: persistedDraft.selectedSlashCommand ?? null,
     promptHistorySavedDraft: hydratePromptHistorySavedDraft(persistedDraft.promptHistorySavedDraft),
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
     files: [],

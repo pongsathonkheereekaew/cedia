@@ -4,6 +4,7 @@
 
 import {
   PROVIDER_DISPLAY_NAMES,
+  ThreadId,
   type ProviderKind,
   type ServerProviderStatus,
   type ServerSettings,
@@ -27,7 +28,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type MouseEvent, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type { AppSettings, AppSettingsBinding } from "~/appSettings";
 import { useProviderStatusesForLocalConfig } from "~/hooks/useProviderStatusesForLocalConfig";
@@ -62,6 +71,14 @@ import {
 } from "~/settingsPanelStyles";
 import { ELEVATED_HOVER_SURFACE_RAISED_TEXT_CLASS_NAME } from "~/surfaceStyles";
 
+import { readSidebarUiState, subscribeSidebarUiState } from "../Sidebar.uiState";
+import {
+  resolveSplitViewFocusedThreadId,
+  selectSplitView,
+  useSplitViewStore,
+} from "../../splitViewStore";
+import { useStore } from "../../store";
+import { createThreadSelector } from "../../storeSelectors";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
@@ -69,6 +86,7 @@ import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { ProviderIcon } from "../ProviderIcon";
 import { DebouncedSettingTextInput } from "./DebouncedSettingTextInput";
+import { resolveCediaRuntimeSessionId } from "./CediaRuntimeProviderState";
 import { OmpProviderSettingsPanel } from "./OmpProviderSettingsPanel";
 import { SettingResetButton, useSettingsRestoreSignal } from "./SettingControls";
 import { SettingsListRow, SettingsRow, SettingsSection } from "./SettingsPanelPrimitives";
@@ -786,10 +804,54 @@ function ProviderToolRow(props: {
   );
 }
 
+const EMPTY_SETTINGS_THREAD_ROUTE_KEY = "";
+const SETTINGS_THREAD_ROUTE_SEPARATOR = "\u0000";
+
+/**
+ * The settings route has no `:threadId` of its own. The shell remembers the
+ * last task route while navigating away from chat, so provider settings can
+ * keep reading the same task runtime that the composer just used. A compact
+ * string snapshot keeps `useSyncExternalStore` stable even though the storage
+ * reader returns a fresh object on every call.
+ */
+function readSettingsThreadRouteKey(): string {
+  const route = readSidebarUiState().lastThreadRoute;
+  if (!route) return EMPTY_SETTINGS_THREAD_ROUTE_KEY;
+  return [route.threadId, route.splitViewId ?? ""].join(SETTINGS_THREAD_ROUTE_SEPARATOR);
+}
+
+function useSettingsRuntimeSessionId(explicitSessionId: string | null | undefined): string | null {
+  const rememberedRouteKey = useSyncExternalStore(
+    (listener) => subscribeSidebarUiState(() => listener()),
+    readSettingsThreadRouteKey,
+    () => EMPTY_SETTINGS_THREAD_ROUTE_KEY,
+  );
+  const [rememberedThreadId, rememberedSplitViewId] = useMemo(() => {
+    if (rememberedRouteKey.length === 0) {
+      return [null, null] as const;
+    }
+    const [threadId, splitViewId] = rememberedRouteKey.split(SETTINGS_THREAD_ROUTE_SEPARATOR);
+    return [threadId ? ThreadId.makeUnsafe(threadId) : null, splitViewId || null] as const;
+  }, [rememberedRouteKey]);
+  const rememberedSplitView = useSplitViewStore(
+    useMemo(() => selectSplitView(rememberedSplitViewId), [rememberedSplitViewId]),
+  );
+  const taskId = rememberedSplitView
+    ? (resolveSplitViewFocusedThreadId(rememberedSplitView) ?? rememberedThreadId)
+    : rememberedThreadId;
+  const rememberedThread = useStore(
+    useMemo(() => createThreadSelector(taskId), [taskId]),
+  );
+
+  return resolveCediaRuntimeSessionId(explicitSessionId, rememberedThread);
+}
+
 export type ProvidersSettingsPanelProps = AppSettingsBinding & {
   readonly active: boolean;
   readonly resetEpoch: number;
   readonly updateSettingsAndWait: (patch: Partial<AppSettings>) => Promise<void>;
+  /** Optional explicit runtime session, primarily for embedded settings callers. */
+  readonly sessionId?: string | null;
 };
 
 function GenericProvidersSettingsPanel({
@@ -1288,8 +1350,9 @@ function GenericProvidersSettingsPanel({
  * queries and refresh effects are never started in the shipped build.
  */
 export function ProvidersSettingsPanel(props: ProvidersSettingsPanelProps) {
+  const runtimeSessionId = useSettingsRuntimeSessionId(props.sessionId);
   if (PROVIDER_DESCRIPTORS.length === 1 && PROVIDER_DESCRIPTORS[0]?.kind === "omp") {
-    return <OmpProviderSettingsPanel active={props.active} />;
+    return <OmpProviderSettingsPanel active={props.active} sessionId={runtimeSessionId} />;
   }
   return <GenericProvidersSettingsPanel {...props} />;
 }

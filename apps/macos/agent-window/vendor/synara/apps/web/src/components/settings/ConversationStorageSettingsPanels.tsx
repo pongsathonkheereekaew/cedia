@@ -25,6 +25,8 @@ import { createThreadShellsSelector } from "~/storeSelectors";
 import { formatWorktreePathForDisplay } from "~/worktreeCleanup";
 import { toastManager } from "../ui/toast";
 import { SettingsEmptyState, SettingsListRow, SettingsSection } from "./SettingsPanelPrimitives";
+// Cedia addition, §2.6: the archived row says what the host kept and where Continue resumed.
+import { archiveRetentionReason, describeArchiveRetention, describeRestoration } from "~/lib/threadRetention";
 
 type WorktreeAssociation = {
   worktreePath?: string | null | undefined;
@@ -276,6 +278,9 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
   );
   const threadShells = useStore(useMemo(() => createThreadShellsSelector(), []));
   const projects = useStore((store) => store.projects);
+  // §2.6: the retention receipt lives on the thread's session, which the store keeps beside the
+  // shell rather than on it.
+  const sessionsByThreadId = useStore((store) => store.threadSessionById);
   const archivedGroups = useMemo(() => {
     // Represent each archived subtree once. Normally that is a top-level thread;
     // a child whose parent is still active/missing is also a root and must remain
@@ -478,7 +483,14 @@ export function ArchivedSettingsPanel({ active }: { readonly active: boolean }) 
             <SettingsListRow
               key={thread.id}
               title={thread.title}
-              description={`Archived ${formatRelativeTime(thread.archivedAt ?? thread.createdAt)}`}
+              description={[
+                `Archived ${formatRelativeTime(thread.archivedAt ?? thread.createdAt)}`,
+                describeArchiveRetention(sessionsByThreadId?.[thread.id]?.archive),
+                describeRestoration(sessionsByThreadId?.[thread.id]?.archive?.restored),
+                archiveRetentionReason(sessionsByThreadId?.[thread.id]?.archive),
+              ]
+                .filter((part): part is string => typeof part === "string" && part.length > 0)
+                .join(" — ")}
               onContextMenu={(event) => {
                 event.preventDefault();
                 void handleContextMenu(thread.id, thread.title, {

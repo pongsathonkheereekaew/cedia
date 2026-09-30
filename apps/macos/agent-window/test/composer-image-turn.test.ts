@@ -73,7 +73,10 @@ function fakeBridge() {
 	};
 	const bridge = {
 		invoke: async (_channel: string, request: RecordedRequest) => {
-			calls.push(request);
+			// The adapter also asks the bridge for the shared draft before a send; that row has
+			// no path, so it stays out of this list.
+			const requestKind = (request as RecordedRequest & { kind?: string }).kind;
+			if (requestKind !== "uiDraft") calls.push(request);
 			if (request.path === `/v1/sessions/${SESSION.id}`) return host;
 			if (request.path === `/v1/models`) return { source: "omp", models: [] };
 			if (request.path.endsWith("/commands") && request.method === "POST") {

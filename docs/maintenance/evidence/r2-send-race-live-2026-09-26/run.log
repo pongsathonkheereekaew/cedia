@@ -1,0 +1,87 @@
+OK   OMP runtime is present at /Users/pond/cedia/dist/omp/omp
+OK   the runtime is the pinned 18.1.18 or later (omp/18.1.18)
+OK   fixture listener bound
+OK   the session is idle against the pinned runtime (agent_start owns running)
+OK   round 1 starts at draft revision 1
+OK   both windows dispatched the one bound command (A: ["race-a1"], B: ["race-a1"])
+OK   the command journal lists rows
+OK   the runtime was asked for exactly one prompt in round 1
+OK   the first release delivered the draft and the second was a revision-gated no-op
+OK   the session row carries its turn projection
+OK   turn intent turn-race-a1 is projected
+OK   the session row carries its turn projection
+OK   turn intent turn-race-a1 is projected
+OK   the shared turn runs on the fixture model, not a provider ("cedia-race-fixture/cedia-race-fixture-model")
+OK   the delivered draft is gone for both windows
+OK   the delivery was broadcast to the other window
+OK   the session row carries its turn projection
+OK   turn intent turn-race-a1 is projected
+OK   round-1 turn settled after abort (cancelled)
+OK   round 2 starts at draft revision 1
+OK   the conflicting send stops with a user-facing error (This draft was already sent with different text from another window. Review the task before sending again.)
+OK   the refused window dispatched zero commands
+OK   the winner's text is intact; the refused text never landed
+OK   the session row carries its turn projection
+OK   turn intent turn-race-a2 is projected
+OK   the round-2 turn runs on the fixture model ("cedia-race-fixture/cedia-race-fixture-model")
+OK   the command journal lists rows
+OK   the journal holds exactly the two winning prompts and no loser row
+OK   the session row carries its turn projection
+OK   turn intent turn-race-a2 is projected
+OK   round-2 turn settled after abort (cancelled)
+OK   both turns really reached the fixture model endpoint (2 loopback hits, zero external)
+OK   the journal reads after reopen
+OK   the command journal survives the restart unchanged
+OK   the session identity survives the restart
+OK   the delivered draft stays delivered across the restart
+{
+  "ok": true,
+  "version": "omp/18.1.18",
+  "rounds": {
+    "sameText": {
+      "postsA": [
+        "race-a1",
+        "race-a2"
+      ],
+      "postsB": [
+        "race-a1"
+      ],
+      "prompts": [
+        "race-a1"
+      ],
+      "abortSettled": "cancelled"
+    },
+    "differentText": {
+      "refused": "This draft was already sent with different text from another window. Review the task before sending again.",
+      "prompts": [
+        "race-a2",
+        "race-a1"
+      ],
+      "abortSettled": "cancelled"
+    }
+  },
+  "clears": [
+    {
+      "window": "B",
+      "revision": 1,
+      "cleared": true
+    },
+    {
+      "window": "A",
+      "revision": 1,
+      "cleared": false
+    },
+    {
+      "window": "A",
+      "revision": 1,
+      "cleared": true
+    }
+  ],
+  "modelHits": 2,
+  "journalAfterRestart": [
+    "race-abort-2:completed",
+    "race-a2:completed",
+    "race-abort-1:completed",
+    "race-a1:completed"
+  ]
+}

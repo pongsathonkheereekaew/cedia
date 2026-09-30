@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { AGENTS_EDITOR_SHOW_TABS, AGENTS_WINDOW_SUPPORT_SETTING, allThemeProvidingExtensionIds, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, isCediaAgentsWindow, isCopilotAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, themeProvidingExtensionIds } from "../src/workbench-mode.ts";
+import { AGENTS_EDITOR_SHOW_TABS, AGENTS_WINDOW_SUPPORT_SETTING, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, isCediaAgentsWindow, isCopilotAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, themeProvidingExtensionIds } from "../src/workbench-mode.ts";
 import { createInitialTaskState, reduceTaskState } from "../src/state.ts";
 import type { Project, Session } from "../../../packages/protocol/src/index.ts";
 
@@ -52,6 +52,18 @@ describe("Agent ↔ IDE workbench mode", () => {
 		expect(state.draft).toBe("hello from A");
 		expect(state.session?.id).toBe("task-a");
 		expect(state.drafts[draftViewKey("proj-1", "task-b")]).toBe("notes on B");
+	});
+
+	it("uses window-local task selection while keeping each durable runtime identity distinct", () => {
+		const a = session("task-a", "proj-1");
+		const b = { ...session("task-b", "proj-1"), incarnation: "inc-b" };
+		let state = createInitialTaskState({ project: project("proj-1"), session: a });
+		state = reduceTaskState(state, { type: "reset", project: project("proj-1"), session: b });
+		expect(state.session?.id).toBe("task-b");
+		expect(state.session?.incarnation).toBe("inc-b");
+		state = reduceTaskState(state, { type: "reset", project: project("proj-1"), session: a });
+		expect(state.session?.id).toBe("task-a");
+		expect(state.session?.incarnation).toBe("inc-1");
 	});
 
 	it("treats workbench mode as view state that survives task reset", () => {
@@ -239,14 +251,6 @@ describe("Agent ↔ IDE workbench mode", () => {
 			mode: "light",
 		})).toBe("Catppuccin Frapp\u00e9");
 		expect(resolveSnapshotThemeName({ mode: "dark" })).toBeUndefined();
-	});
-
-	it("keeps every installed theme provider available in the Agents window", () => {
-		expect(allThemeProvidingExtensionIds([
-			{ id: "Catppuccin.catppuccin-vsc", packageJSON: { contributes: { themes: [{ id: "catppuccin-mocha" }] } } },
-			{ id: "foo.commands-only", packageJSON: { contributes: { commands: [{ command: "foo.open" }] } } },
-			{ id: "bar.theme-pack", packageJSON: { contributes: { themes: [{ id: "bar-dark" }, { id: "bar-light" }] } } },
-		])).toEqual(["bar.theme-pack", "catppuccin.catppuccin-vsc"]);
 	});
 
 	it("merges the theme into the Agents window's own workspace file", () => {

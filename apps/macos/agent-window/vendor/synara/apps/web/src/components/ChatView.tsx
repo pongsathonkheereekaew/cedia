@@ -62,6 +62,7 @@ import {
 } from "~/lib/gitReactQuery";
 import {
   ArchiveIcon,
+  ChevronDownIcon,
   ClockIcon,
   CopyIcon,
   ExternalLinkIcon,
@@ -191,6 +192,7 @@ import {
 } from "../splitViewStore";
 import { useStore } from "../store";
 import {
+  createAllThreadsSelector,
   createComposerThreadMentionSourcesSelector,
   createProjectSelector,
   createSidechatSummariesForSourceSelector,
@@ -208,6 +210,10 @@ import {
 } from "../types";
 import { useWorkflowRunUiStore } from "../workflowRunUiStore";
 import { useWorkspacePathsStore } from "../workspacePathsStore";
+import {
+  hasBusyGitProjectTask,
+  resolveWorkspaceIdentityLabel,
+} from "../lib/threadWorkspacePolicy";
 import BranchToolbar, { RuntimeUsageControls } from "./BranchToolbar";
 import {
   ACTIVE_TURN_LAYOUT_SETTLE_DELAY_MS,
@@ -260,6 +266,21 @@ import { ComposerExpiredUserInputNotice } from "./chat/ComposerExpiredUserInputN
 import { ComposerExtrasPanel } from "./chat/ComposerExtrasPanel";
 import { ComposerExtrasTrigger } from "./chat/ComposerExtrasTrigger";
 import { ComposerGoalHeader } from "./chat/ComposerGoalHeader";
+import { CediaAdvisorSurface } from "./chat/CediaAdvisorSurface";
+import { CediaAgentsSurface } from "./chat/CediaAgentsSurface";
+import { CediaContextSurface } from "./chat/CediaContextSurface";
+import { CediaUsageSurface } from "./chat/CediaUsageSurface";
+import { CediaPlanSurface } from "./chat/CediaPlanSurface";
+import { CediaProgressSurface } from "./chat/CediaProgressSurface";
+import { CediaQueueSurface } from "./chat/CediaQueueSurface";
+import { CediaBtwSurface } from "./chat/CediaBtwSurface";
+import { CediaCleanseSurface } from "./chat/CediaCleanseSurface";
+import { CediaOmfgSurface } from "./chat/CediaOmfgSurface";
+import { CediaShellSurface } from "./chat/CediaShellSurface";
+import { CediaRunPauseControl } from "./chat/CediaRunPauseControl";
+import { CediaTreeSurface } from "./chat/CediaTreeSurface";
+import { CediaToolCatalogSurface } from "./chat/CediaToolCatalogSurface";
+import { CediaOwnerSurface } from "./chat/CediaOwnerSurface";
 import { ComposerInputBanners } from "./chat/ComposerInputBanners";
 import { ComposerLiveChangesHeader } from "./chat/ComposerLiveChangesHeader";
 import {
@@ -270,6 +291,8 @@ import {
   ComposerModelPicker,
   type ComposerModelSelectionOptions,
 } from "./chat/ComposerModelPicker";
+import { PrewalkArmedChip } from "./chat/PrewalkArmedChip";
+import { LoopModeChip } from "./chat/LoopModeChip";
 import { ComposerPendingApprovalPanel } from "./chat/ComposerPendingApprovalPanel";
 import {
   ComposerClaudeCacheReviewPanel,
@@ -312,7 +335,6 @@ import {
   CHAT_SURFACE_HEADER_ROW_CLASS_NAME,
 } from "./chat/chatHeaderControls";
 import type { LateComposerSendHandlers } from "./chat/chatSendTypes";
-import { composerTranscriptBottomInsetPx, useComposerOverlayHeight } from "./chat/composerOverlay";
 import {
   CHAT_BACKGROUND_CLASS_NAME,
   CHAT_COLUMN_FRAME_CLASS_NAME,
@@ -424,6 +446,15 @@ function getRateLimitBannerDismissalKey(
 
 const VOICE_RECORDER_ACTION_ARM_DELAY_MS = 250;
 
+/**
+ * How long an empty server thread may show "Loading conversation" before the
+ * view admits the detail never arrived and offers a retry. Slow first opens
+ * (large histories hydrate over many round trips) must not trip it, so this
+ * sits well above a cold hydration; threads that already render entries never
+ * reach the timeout because their hydration is "ready", not "loading".
+ */
+const THREAD_DETAIL_SYNC_WATCHDOG_MS = 45_000;
+
 function warnVoiceGuard(event: string, details?: Record<string, unknown>) {
   if (!import.meta.env.DEV) {
     return;
@@ -526,14 +557,7 @@ export default function ChatView({
     (store) => store.setModelSelectionAndSticky,
   );
   const timestampFormat = settings.timestampFormat;
-  // The composer floats over the transcript; its measured height becomes the
-  // transcript's bottom content inset (see composerOverlay.ts).
-  const {
-    overlayRef: composerOverlayRef,
-    overlayHeightPx: composerOverlayHeightPx,
-    overlayBottomClearancePx: composerOverlayBottomClearancePx,
-  } = useComposerOverlayHeight();
-  const composerTranscriptInsetPx = composerTranscriptBottomInsetPx(composerOverlayHeightPx);
+  const composerTranscriptInsetPx = 0;
   const navigate = useNavigate();
   const { handleNewThread } = useHandleNewThread();
   const { handleNewChat } = useHandleNewChat();
@@ -545,6 +569,35 @@ export default function ChatView({
   const removeThreadFromSplitViews = useSplitViewStore((store) => store.removeThreadFromSplitViews);
   const { resolvedTheme } = useTheme();
   const queryClient = useQueryClient();
+  const seenOmpCommandCatalogRef = useRef<Map<string, string>>(new Map());
+  const invalidateOmpCommandDiscovery = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["provider-discovery", "commands", "omp"] });
+  }, [queryClient]);
+  useEffect(() => {
+    const api = readNativeApi();
+    return api?.orchestration.onThreadEvent((event) => {
+      if (!event || typeof event !== "object") return;
+      const row = event as { kind?: unknown; snapshot?: unknown };
+      if (row.kind !== "snapshot" || !row.snapshot || typeof row.snapshot !== "object") return;
+      const thread = (row.snapshot as { thread?: unknown }).thread;
+      if (!thread || typeof thread !== "object") return;
+      const threadId = (thread as { id?: unknown }).id;
+      if (typeof threadId !== "string") return;
+      const slashCommands = (thread as { cediaSlashCommands?: unknown }).cediaSlashCommands;
+      if (!Array.isArray(slashCommands)) return;
+      const revision = JSON.stringify(slashCommands);
+      const priorRevision = seenOmpCommandCatalogRef.current.get(threadId);
+      if (priorRevision === undefined) {
+        seenOmpCommandCatalogRef.current.set(threadId, revision);
+        invalidateOmpCommandDiscovery();
+        return;
+      }
+      if (priorRevision !== revision) {
+        seenOmpCommandCatalogRef.current.set(threadId, revision);
+        invalidateOmpCommandDiscovery();
+      }
+    });
+  }, [invalidateOmpCommandDiscovery]);
   const createWorktreeMutation = useMutation(
     gitCreateDetachedWorktreeMutationOptions({ queryClient }),
   );
@@ -636,6 +689,7 @@ export default function ChatView({
   const markWorkflowRunPaused = useWorkflowRunUiStore((store) => store.markPaused);
   const markWorkflowRunDismissed = useWorkflowRunUiStore((store) => store.markDismissed);
   const serverThread = useStore(useMemo(() => createThreadSelector(threadId), [threadId]));
+  const allThreads = useStore(useMemo(() => createAllThreadsSelector(), []));
   const sourceThreadSidechats = useStore(
     useMemo(() => createSidechatSummariesForSourceSelector(threadId), [threadId]),
   );
@@ -797,6 +851,7 @@ export default function ChatView({
   const composerFormHeightRef = useRef(0);
 
   const composerSelectLockRef = useRef(false);
+  const selectedSlashCommandRef = useRef<{ readonly threadId: ThreadId; readonly name: string } | null>(null);
   const composerMenuOpenRef = useRef(false);
   const composerMenuItemsRef = useRef<ComposerCommandItem[]>([]);
 
@@ -808,6 +863,10 @@ export default function ChatView({
   const dragDepthRef = useRef(0);
   const terminalOpenByThreadRef = useRef<Record<string, boolean>>({});
   const activatedThreadIdRef = useRef<ThreadId | null>(null);
+  // Busy-Git is a default applied once when the draft first learns about another task. A user
+  // who switches back to Local keeps that explicit choice instead of being re-routed on every
+  // store refresh.
+  const busyGitDefaultAppliedThreadIdsRef = useRef(new Set<ThreadId>());
 
   const localDraftError = serverThread ? null : (localDraftErrorsByThreadId[threadId] ?? null);
   const localDraftThread = useMemo(
@@ -1724,6 +1783,20 @@ export default function ChatView({
       .subscribeThread(buildThreadSubscribeInput(threadId))
       .catch(() => undefined);
   }, [threadId]);
+  // A subscription that never delivers must not spin forever: the Cedia polling
+  // adapter reports no stream failure, so without this the "failed" transcript
+  // state is unreachable and an empty thread poses as loading indefinitely.
+  // Timing out surfaces the existing didn't-load state with its retry, and a
+  // late snapshot still heals the thread back to synced.
+  useEffect(() => {
+    if (threadDetailHydration !== "loading") return;
+    const timer = setTimeout(() => {
+      if (useStore.getState().threadDetailSyncById?.[threadId] == null) {
+        useStore.getState().markThreadDetailSyncFailed(threadId);
+      }
+    }, THREAD_DETAIL_SYNC_WATCHDOG_MS);
+    return () => clearTimeout(timer);
+  }, [threadId, threadDetailHydration]);
   // Stable identity: this element is forwarded to the memoized MessagesTimeline, so
   // building it inline in JSX would defeat its `memo()` on every keystroke.
   const transcriptEmptyStateContent = useMemo((): ReactNode => {
@@ -2178,6 +2251,46 @@ export default function ChatView({
   // Repository discovery can lag the first render: an unanswered query keeps the Git UI
   // visible instead of flickering it away.
   const isGitRepo = branchesQuery.data?.isRepo ?? true;
+  const gitRepositoryKnown = branchesQuery.data !== undefined;
+  const busyGitProject = Boolean(
+    gitRepositoryKnown &&
+      isGitRepo &&
+      activeProject?.kind === "project" &&
+      hasBusyGitProjectTask({
+        projectId: activeProject.id,
+        currentThreadId: threadId,
+        threads: allThreads,
+      }),
+  );
+  useEffect(() => {
+    if (
+      !isLocalDraftThread ||
+      !activeProject ||
+      !busyGitProject ||
+      draftThread?.envMode === "worktree" ||
+      draftThread?.worktreePath != null ||
+      busyGitDefaultAppliedThreadIdsRef.current.has(threadId)
+    ) {
+      return;
+    }
+    busyGitDefaultAppliedThreadIdsRef.current.add(threadId);
+    setDraftThreadContext(threadId, { envMode: "worktree" });
+  }, [
+    activeProject,
+    busyGitProject,
+    draftThread?.envMode,
+    draftThread?.worktreePath,
+    isLocalDraftThread,
+    setDraftThreadContext,
+    threadId,
+  ]);
+  const workspaceIdentityLabel = resolveWorkspaceIdentityLabel({
+    isGitRepo,
+    envMode: resolvedThreadEnvMode ?? (resolvedThreadWorktreePath ? "worktree" : "local"),
+    worktreePath: resolvedThreadWorktreePath ?? null,
+    isBusyGitProject: busyGitProject,
+    isDraft: isLocalDraftThread,
+  });
   // Git actions appear for a project thread, or for a container/chat thread only once it has a
   // concrete worktree to act on.
   const showGitActions = !isHomeChatContainer || Boolean(resolvedThreadWorktreePath);
@@ -2330,6 +2443,7 @@ export default function ChatView({
     threadId: secondaryChromeThreadId,
     ready: true,
   }));
+
   const secondaryChromeReady =
     !shouldDeferSecondaryChrome ||
     (secondaryChromeState.threadId === secondaryChromeThreadId && secondaryChromeState.ready);
@@ -3781,6 +3895,7 @@ export default function ChatView({
 
   const { onSend } = useChatTurnSubmission({
     threadId,
+    selectedSlashCommandRef,
     hasLiveTurn,
     lateComposerSendHandlersRef,
     activeThread,
@@ -4073,35 +4188,40 @@ export default function ChatView({
       <ComposerControlSkeleton widthClassName={composerModelEffortPickerWidthClassName} />
     )
   ) : (
-    <ComposerModelPicker
-      hideModelLabel={!composerFooterControlsPlan.showModelLabel}
-      hideStatusLabel={!composerFooterControlsPlan.showTraitsLabel}
-      effortControl={settings.composerEffortSlider ? "slider" : "menu"}
-      provider={selectedProvider}
-      model={selectedModelForPickerWithCustomFallback}
-      lockedProvider={lockedProvider}
-      providers={providerStatuses}
-      modelOptionsByProvider={modelOptionsByProvider}
-      loadingModelProviders={loadingModelProviders}
-      discoveryErrorsByProvider={discoveryErrorsByProvider}
-      hiddenProviders={settings.hiddenProviders}
-      providerOrder={settings.providerOrder}
-      onProviderOrderChange={(providerOrder) => updateSettings({ providerOrder })}
-      threadId={threadId}
-      runtimeModel={selectedRuntimeModel}
-      runtimeModelsByProvider={runtimeModelsByProvider}
-      runtimeAgents={dynamicAgents}
-      modelOptions={selectedProviderModelOptions}
-      prompt={prompt}
-      onPromptChange={setPromptFromTraits}
-      onProviderModelChange={onProviderModelSelect}
-      onSelectionCommitted={scheduleComposerFocus}
-      open={isComposerModelEffortPickerOpen}
-      onOpenChange={handleComposerModelEffortPickerOpenChange}
-      shortcutLabel={modelPickerShortcutLabel}
-    />
-  );
-  const toggleFastMode = useCallback(() => {
+    <>
+      <ComposerModelPicker
+        hideModelLabel={!composerFooterControlsPlan.showModelLabel}
+        hideStatusLabel={!composerFooterControlsPlan.showTraitsLabel}
+        effortControl={settings.composerEffortSlider ? "slider" : "menu"}
+        provider={selectedProvider}
+        model={selectedModelForPickerWithCustomFallback}
+        lockedProvider={lockedProvider}
+        providers={providerStatuses}
+        modelOptionsByProvider={modelOptionsByProvider}
+        loadingModelProviders={loadingModelProviders}
+        discoveryErrorsByProvider={discoveryErrorsByProvider}
+        hiddenProviders={settings.hiddenProviders}
+        providerOrder={settings.providerOrder}
+        onProviderOrderChange={(providerOrder) => updateSettings({ providerOrder })}
+        threadId={threadId}
+        runtimeSessionId={activeThread?.session ? String(activeThread.id) : undefined}
+        runtimeModel={selectedRuntimeModel}
+        runtimeModelsByProvider={runtimeModelsByProvider}
+        runtimeAgents={dynamicAgents}
+        modelOptions={selectedProviderModelOptions}
+        prompt={prompt}
+        onPromptChange={setPromptFromTraits}
+        onProviderModelChange={onProviderModelSelect}
+        onSelectionCommitted={scheduleComposerFocus}
+        open={isComposerModelEffortPickerOpen}
+        onOpenChange={handleComposerModelEffortPickerOpenChange}
+        shortcutLabel={modelPickerShortcutLabel}
+      />
+      <PrewalkArmedChip sessionId={activeThread?.session ? String(activeThread.id) : undefined} />
+      <LoopModeChip sessionId={activeThread?.session ? String(activeThread.id) : undefined} />
+    </>
+    );
+    const toggleFastMode = useCallback(() => {
     if (!composerTraitSelection.caps.supportsFastMode) {
       scheduleComposerFocus();
       return;
@@ -4310,6 +4430,7 @@ export default function ChatView({
     onComposerCommandKey,
   } = useChatComposerCommands({
     threadId,
+    selectedSlashCommandRef,
     composerSelectLockRef,
     setComposerCommandPicker,
     setComposerHighlightedItemId,
@@ -4866,6 +4987,16 @@ export default function ChatView({
       ) : (
         emptyLandingProjectChip
       )}
+      {workspaceIdentityLabel ? (
+        <span
+          data-testid={workspaceIdentityLabel.testId}
+          aria-label={workspaceIdentityLabel.description}
+          title={workspaceIdentityLabel.description}
+          className="inline-flex shrink-0 items-center rounded-full px-2 py-1 text-[11px] text-muted-foreground"
+        >
+          {workspaceIdentityLabel.label}
+        </span>
+      ) : null}
       {/* Reserve the Local/branch slot so project selection fades controls in without resizing. */}
       <div
         aria-hidden={showEmptyLandingBranchToolbar ? undefined : true}
@@ -5053,7 +5184,31 @@ export default function ChatView({
           <ComposerColumnFrame>
             {/* A bare wrapper keeps the normal-flow panels' -mb-px seam onto the input shell
                 via margin collapse. */}
-            <div>
+            {isServerThread ? (
+              <details className="group/cedia-runtime mb-2 min-w-0">
+                <summary className="flex cursor-pointer list-none items-center justify-between border-b border-border/60 px-3 py-2 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                  Task controls
+                  <ChevronDownIcon className="size-3 transition-transform group-open/cedia-runtime:rotate-180" />
+                </summary>
+                <div className={cn("cedia-surface-stack min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-5 [scrollbar-gutter:stable]", isIdeEmbeddedRuntime() ? "max-h-40" : "max-h-80")}>
+                  <CediaOwnerSurface sessionId={threadId} />
+                  <CediaPlanSurface sessionId={threadId} />
+                  <CediaProgressSurface sessionId={threadId} />
+                  <CediaAdvisorSurface sessionId={threadId} />
+                  <CediaAgentsSurface sessionId={threadId} />
+                  <CediaQueueSurface sessionId={threadId} />
+                  <CediaBtwSurface sessionId={threadId} />
+                  <CediaCleanseSurface sessionId={threadId} />
+                  <CediaOmfgSurface sessionId={threadId} />
+                  <CediaShellSurface sessionId={threadId} />
+                  <CediaTreeSurface sessionId={threadId} />
+                  <CediaToolCatalogSurface sessionId={threadId} />
+                  <CediaContextSurface sessionId={threadId} />
+                  <CediaUsageSurface sessionId={threadId} />
+                </div>
+              </details>
+            ) : null}
+            <div className="min-w-0">
               {isSidechatExpired ? (
                 <ExpiredSidechatNotice onStartNew={startReplacementSidechat} />
               ) : null}
@@ -5114,6 +5269,7 @@ export default function ChatView({
               />
               {showComposerGoalHeader && activeThread ? (
                 <ComposerGoalHeader
+                  threadId={activeThread.id as ThreadId}
                   goal={activeThreadGoalText}
                   goalStartedAt={activeThread.goalStartedAt}
                   goalPausedAt={activeThread.goalPausedAt}
@@ -5451,6 +5607,14 @@ export default function ChatView({
                           }
                         : null
                     }
+                    runPauseControls={
+                      isServerThread ? (
+                        <CediaRunPauseControl
+                          sessionId={threadId}
+                          running={phase === "running" || phase === "connecting"}
+                        />
+                      ) : null
+                    }
                     submission={{
                       phase,
                       busy: isSendBusy,
@@ -5525,6 +5689,7 @@ export default function ChatView({
           activeThreadEntryPoint={terminalState.entryPoint}
           activeProvider={activeThread.session?.provider ?? activeThread.modelSelection.provider}
           activeProjectName={activeProjectDisplayName}
+          workspaceIdentityLabel={workspaceIdentityLabel}
           threadBreadcrumbs={threadBreadcrumbs}
 
           isSidechat={Boolean(activeThread.sidechatSourceThreadId)}
@@ -5825,19 +5990,15 @@ export default function ChatView({
                         : undefined
                     }
                     contentInsetBottomPx={composerTranscriptInsetPx}
-                    contentInsetBottomClearancePx={composerOverlayBottomClearancePx}
                   />
                 </div>
 
-                {/* Trailing block below the transcript: the composer floats on top of it
-                    (`bottom-full`), so the transcript's scroll viewport — and therefore every
-                    row scrolling behind the frosted composer — is clipped at the composer's
-                    bottom edge. Nothing ever shows through this gutter or the BranchToolbar row. */}
+                {/* Keep the composer below the transcript so neither transcript rows nor
+                    runtime controls can appear behind its input surface. */}
                 <div className="relative z-10 w-full shrink-0">
                   <div
-                    ref={composerOverlayRef}
                     className={cn(
-                      "pointer-events-none absolute inset-x-0 bottom-full w-full overflow-visible",
+                      "w-full overflow-visible",
                       ENVIRONMENT_CONTENT_INSET_MOTION_CLASS,
                       CHAT_COLUMN_GUTTER_CLASS_NAME,
                     )}
@@ -5849,7 +6010,7 @@ export default function ChatView({
                         : undefined
                     }
                   >
-                    <div className="pointer-events-auto">{composerSection}</div>
+                    {composerSection}
                   </div>
                   {/* A trailing BranchToolbar only renders for legacy git threads; otherwise the
                       composer is the last element, so give it a comfortable bottom margin. */}

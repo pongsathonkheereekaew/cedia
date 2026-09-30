@@ -355,6 +355,15 @@ describe("ide-native workbench surface", () => {
 		expect(action!.text).toContain("src/greet.ts#L1-L2");
 		expect(action!.text).toContain('return "hi " + name;');
 	});
+	it("maps public Agent UI assets through the allowed IDE webview resource root", async () => {
+		await activateAndSettle();
+		const ide = await resolveIdeView();
+		const assetRoot = join(tempRoot, "extension", "agent-ui");
+		const options = ide.view.webview.options as { localResourceRoots?: Array<{ fsPath?: string }> };
+
+		expect(options.localResourceRoots?.map(uri => uri.fsPath)).toEqual([assetRoot]);
+		expect(ide.view.webview.html).toContain(`name="cedia-public-asset-base" content="file://${assetRoot}/"`);
+	});
 	it("registers a real handler for every command the manifest declares", async () => {
 		await activateAndSettle();
 		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {

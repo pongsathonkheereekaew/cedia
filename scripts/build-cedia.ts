@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
+import { chmodSync, existsSync, statSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve, join } from "node:path";
 import { applyDarwinAppIcon, removeDevBundle } from "./lib/app-icon.ts";
@@ -32,6 +32,29 @@ function newestPatchFile(root: string, manifest: PatchSetManifest): string | und
 /** The host's headless terminal engine (libghostty-vt). Native addon: external + shipped beside the bundle. */
 const HOST_TERMINAL_ENGINE = "@coder/libghostty-vt-node";
 const portable = process.argv.includes("--portable") || process.argv.includes("--package");
+
+/**
+ * Stage the packaged remote web client (§6.5).
+ *
+ * The client is the existing `apps/ios` Expo export, not a second web app, so this build copies
+ * that output to `dist/remote-web` and packages it under `runtime/remote-web`. The export stays a
+ * separate, deliberate command: a build without one fails by name instead of shipping a gateway
+ * that has nothing to serve.
+ */
+async function stageRemoteWeb(): Promise<string> {
+  const source = join(root, "apps/ios/dist");
+  const entry = join(source, "index.html");
+  if (!existsSync(entry)) {
+    throw new Error(`The remote web client export is missing (${entry}); run \`bun run --cwd apps/ios export:web\` first`);
+  }
+  const target = join(root, "dist/remote-web");
+  await rm(target, { recursive: true, force: true });
+  await mkdir(target, { recursive: true });
+  await cp(source, target, { recursive: true });
+  return target;
+}
+
+const remoteWeb = await stageRemoteWeb();
 if (portable) execFileSync(process.execPath, [join(root, "scripts/prepare-omp-runtime.ts"), "--standalone"], { cwd: root, stdio: "inherit" });
 if (process.argv.includes("--runtime")) execFileSync(process.execPath, [join(root, "scripts/prepare-omp-runtime.ts")], { cwd: root, stdio: "inherit" });
 /**
@@ -172,11 +195,33 @@ if (portable) {
   await mkdir(join(runtime, "omp"), { recursive: true });
   await cp(join(dist, "omp-standalone/omp"), join(runtime, "omp/omp"));
   await cp(join(root, "upstream/omp/LICENSE"), join(runtime, "omp/LICENSE"));
+  // The packaged web client sits beside `host/`, which is where the host resolves it at startup
+  // (`apps/host/src/remote-web-assets.ts`), so the gateway starts in a packaged app and does not
+  // start in a build that carries no export.
+  await cp(remoteWeb, join(runtime, "remote-web"), { recursive: true });
+  // Cedia's qualified launcher ships beside the runtime it owns (§8.2 O08). It is bundled for the
+  // packaged Node so a user can run `cedia-omp` instead of the bare binary: the launcher is what
+  // respects a live owner endpoint, and without it the packaged CLI would be uninstrumented.
+  // ESM, not CJS: the launcher awaits its own exit code at the top level, which a CommonJS bundle
+  // cannot express, and the `.mjs` extension is what tells the packaged Node to run it as ESM.
+  const launcher = await Bun.build({
+    entrypoints: [join(root, "scripts/cedia-omp.ts")],
+    outdir: join(runtime, "omp"),
+    target: "node",
+    format: "esm",
+    naming: "cedia-omp.mjs",
+    minify: false,
+    sourcemap: "none",
+  });
+  if (!launcher.success) throw new Error(`Cedia CLI launcher build failed: ${launcher.logs.map(log => log.message).join("; ")}`);
+  const launcherShim = join(runtime, "omp", "cedia-omp");
+  await writeFile(launcherShim, `#!/bin/sh\n# Cedia's qualified launcher for the bundled OMP runtime (§8.2 O08).\nexec \"$(dirname \"$0\")/../node/bin/node\" \"$(dirname \"$0\")/cedia-omp.mjs\" \"$@\"\n`);
+  await chmodSync(launcherShim, 0o755);
   // Build evidence is kept outside the runnable payload: it contains source paths.
   await cp(join(root, "docs/upstream-notices"), join(runtime, "notices"), { recursive: true });
 }
 // Code-OSS Electron packaging and the DMG builder both consume this icon.
-const brandIcon = join(root, "assets/brand/insert-v1/cedia.icns");
+const brandIcon = join(root, "assets/brand/cedia-terminal-d-v1/cedia.icns");
 await mkdir(join(dist, "brand"), { recursive: true });
 await cp(brandIcon, join(dist, "brand/cedia.icns"));
 if (process.argv.includes("--desktop")) {

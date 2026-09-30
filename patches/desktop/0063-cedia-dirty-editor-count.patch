@@ -1,0 +1,124 @@
+diff --git a/src/vs/code/electron-main/app.ts b/src/vs/code/electron-main/app.ts
+--- a/src/vs/code/electron-main/app.ts
++++ b/src/vs/code/electron-main/app.ts
+@@ -213,6 +213,8 @@
+ 	 * in the background. Optional, so a checkout without the bundle still starts.
+ 	 */
+ 	installCediaMainProcessLifecycle?(options: {
++		/** Patch `0063`: the Code-OSS sender-validated IPC surface. */
++		readonly ipcMain: typeof validatedIpcMain;
+ 		readonly appRoot: string;
+ 		readonly parentPid: number;
+ 		readonly stateDir?: string;
+@@ -221,6 +223,8 @@
+ 			/** Patch `0062`: the application's cancellable pre-quit decision. */
+ 			registerQuitDecider?(decider: () => Promise<boolean>): unknown;
+ 		};
++		/** Patch `0063`: only a registered IDE main frame may publish dirty state. */
++		readonly isTrustedWorkbenchSender: (event: unknown) => boolean;
+ 		readonly log?: (message: string) => void;
+ 	}): { readonly shouldOpenFirstWindow: (hasOpenableArguments: boolean) => boolean } | undefined;
+ 	registerCediaAgentWindowBridge(options: {
+@@ -758,25 +762,7 @@
+ 			this.isCediaAgentBrowserWebContents = module.isCediaAgentBrowserWebContents;
+ 			const dialogMainService = accessor.get(IDialogMainService);
+ 			const configurationService = accessor.get(IConfigurationService);
+-
+-			// Cedia owns the application quit boundary (patch `0060`). Code-OSS waits
+-			// for the shutdown join this installs, so the host stops and the running
+-			// tasks pause before the process exits instead of leaving a detached
+-			// execution daemon behind. It also registers the packaged login item and
+-			// answers whether a background login launch opens a work window.
+-			try {
+-				this.cediaShouldOpenFirstWindow = module.installCediaMainProcessLifecycle?.({
+-					appRoot: this.environmentMainService.appRoot,
+-					parentPid: process.pid,
+-					stateDir: process.env.CEDIA_STATE_DIR || configurationService.getValue<string | undefined>('cedia.hostStateDir'),
+-					lifecycleMainService: this.lifecycleMainService,
+-					log: message => this.logService.info(message),
+-				})?.shouldOpenFirstWindow;
+-			} catch (error) {
+-				this.logService.error('Cedia main-process lifecycle was not installed', error);
+-			}
+-
+-			const windowForEvent = (event: unknown): ICodeWindow | undefined => {
++			const windowForEvent = (event: unknown, sessionsWindow = true): ICodeWindow | undefined => {
+ 				if (!event || typeof event !== 'object' || !('sender' in event)) {
+ 					return undefined;
+ 				}
+@@ -787,7 +773,7 @@
+ 				}
+ 
+ 				const window = windowsMainService.getWindowByWebContents(sender as Electron.WebContents);
+-				if (!window?.config?.isSessionsWindow) {
++				if (!window || (window.config?.isSessionsWindow === true) !== sessionsWindow) {
+ 					return undefined;
+ 				}
+ 
+@@ -798,6 +784,25 @@
+ 
+ 				return window;
+ 			};
++
++			// Cedia owns the application quit boundary (patch `0060`). Code-OSS waits
++			// for the shutdown join this installs, so the host stops and the running
++			// tasks pause before the process exits instead of leaving a detached
++			// execution daemon behind. It also registers the packaged login item and
++			// answers whether a background login launch opens a work window.
++			try {
++				this.cediaShouldOpenFirstWindow = module.installCediaMainProcessLifecycle?.({
++					ipcMain: validatedIpcMain,
++					appRoot: this.environmentMainService.appRoot,
++					parentPid: process.pid,
++					stateDir: process.env.CEDIA_STATE_DIR || configurationService.getValue<string | undefined>('cedia.hostStateDir'),
++					lifecycleMainService: this.lifecycleMainService,
++					isTrustedWorkbenchSender: event => !!windowForEvent(event, false),
++					log: message => this.logService.info(message),
++				})?.shouldOpenFirstWindow;
++			} catch (error) {
++				this.logService.error('Cedia main-process lifecycle was not installed', error);
++			}
+ 
+ 			const bridge = module.registerCediaAgentWindowBridge({
+ 				ipcMain: validatedIpcMain,
+diff --git a/src/vs/workbench/electron-browser/window.ts b/src/vs/workbench/electron-browser/window.ts
+--- a/src/vs/workbench/electron-browser/window.ts
++++ b/src/vs/workbench/electron-browser/window.ts
+@@ -80,6 +80,8 @@
+ import { nativeHoverDelegate } from '../../platform/hover/browser/hover.js';
+ import { WINDOW_ACTIVE_BORDER, WINDOW_INACTIVE_BORDER } from '../common/theme.js';
+ import { IContextMenuService } from '../../platform/contextview/browser/contextView.js';
++
++const CEDIA_DIRTY_EDITORS_CHANNEL = 'vscode:cedia-dirty-editors';
+ 
+ export class NativeWindow extends BaseWindow {
+ 
+@@ -411,6 +413,7 @@
+ 
+ 		// Document edited: indicate for dirty working copies
+ 		this._register(this.workingCopyService.onDidChangeDirty(workingCopy => {
++			this.publishCediaDirtyEditorCount();
+ 			const gotDirty = workingCopy.isDirty();
+ 			if (gotDirty && !(workingCopy.capabilities & WorkingCopyCapabilities.Untitled) && this.filesConfigurationService.hasShortAutoSaveDelay(workingCopy.resource)) {
+ 				return; // do not indicate dirty of working copies that are auto saved after short delay
+@@ -420,6 +423,7 @@
+ 		}));
+ 
+ 		this.updateDocumentEdited(undefined);
++		this.publishCediaDirtyEditorCount();
+ 
+ 		// Detect minimize / maximize
+ 		this._register(Event.any(
+@@ -605,6 +609,11 @@
+ 		}
+ 	}
+ 
++	/** Publish only the count; filenames and editor contents stay in the renderer. */
++	private publishCediaDirtyEditorCount(): void {
++		ipcRenderer.send(CEDIA_DIRTY_EDITORS_CHANNEL, this.workingCopyService.dirtyWorkingCopies.length);
++	}
++
+ 	private getWindowMinimumWidth(panelPosition: Position = this.layoutService.getPanelPosition()): number {
+ 
+ 		// if panel is on the side, then return the larger minwidth
+

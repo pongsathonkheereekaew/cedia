@@ -91,6 +91,7 @@ try {
 		get_available_models: {},
 		set_thinking_level: { level: "off" },
 		cycle_thinking_level: {},
+		get_available_thinking_levels: {},
 		set_steering_mode: { mode: "all" },
 		set_follow_up_mode: { mode: "all" },
 		set_interrupt_mode: { mode: "immediate" },
@@ -110,10 +111,14 @@ try {
 		handoff: {},
 		get_messages: {},
 		get_messages_page: { limit: 5 },
+		get_entries: {},
+		get_tree: {},
+		open_session: { sessionDir: sessionFile },
+		set_event_filter: { events: null },
 		get_login_providers: {},
 		login: { providerId: "must-not-send" },
 	};
-	check(Object.keys(payloads).length === 42, "Payload map drifted from the 42-command inventory");
+	check(Object.keys(payloads).length === 47, "Payload map drifted from the 47-command inventory");
 	const queries = [
 		"get_state",
 		"get_available_commands",

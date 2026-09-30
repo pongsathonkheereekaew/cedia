@@ -6,9 +6,40 @@ import { ThreadId } from "../agent-window/vendor/synara/packages/contracts/src/i
 
 type Listener = (...args: any[]) => void;
 
+class FakeDebugger {
+	attached = false;
+	readonly messageListeners = new Set<(method: string, params?: Record<string, unknown>) => void>();
+	readonly detachListeners = new Set<(reason: string) => void>();
+
+	isAttached(): boolean { return this.attached; }
+	async attach(): Promise<void> {
+		if (this.attached) throw new Error("Already attached");
+		this.attached = true;
+	}
+	async detach(): Promise<void> {
+		this.attached = false;
+		for (const listener of [...this.detachListeners]) listener("test-detach");
+	}
+	async sendCommand(method: string, params?: unknown): Promise<unknown> {
+		if (!this.attached) throw new Error("Not attached");
+		return { method, params: params ?? {} };
+	}
+	on(event: "message", listener: (method: string, params?: Record<string, unknown>) => void): void;
+	on(event: "detach", listener: (reason: string) => void): void;
+	on(event: string, listener: (...args: any[]) => void): void {
+		if (event === "message") this.messageListeners.add(listener as (method: string, params?: Record<string, unknown>) => void);
+		else this.detachListeners.add(listener as (reason: string) => void);
+	}
+	removeListener(): void {}
+	emitMessage(method: string, params?: Record<string, unknown>): void {
+		for (const listener of [...this.messageListeners]) listener(method, params);
+	}
+}
+
 class FakeWebContents {
 
 	readonly id: number;
+	readonly debugger = new FakeDebugger();
 	private readonly listeners = new Map<string, Set<Listener>>();
 	private url = "about:blank";
 	private title = "New tab";
@@ -204,6 +235,28 @@ describe("Cedia Agent native browser bridge", () => {
 		service.dispose();
 	});
 
+	it("keeps the loaded page title after loading stops", async () => {
+		const electron = fakeElectron();
+		const owner = electron._session.browserWindow.webContents;
+		const service = createAgentBrowserService({ appRoot: "/tmp/cedia", electron });
+		const opened = await service.handle({ sender: owner }, "open", {
+			threadId: "title-thread",
+			initialUrl: "https://example.com/article",
+		}) as any;
+		const page = electron._session.browserWindow.contentView.children[0]!.webContents;
+		const beforeTitle = await service.handle({ sender: owner }, "getState", { threadId: "title-thread" }) as any;
+		expect(beforeTitle.tabs[0].title).toBe("example.com");
+		page.setTitle("  Fixture article  ");
+		page.emit("page-title-updated", {}, "  Fixture article  ");
+		page.emit("did-stop-loading");
+
+		const state = await service.handle({ sender: owner }, "getState", { threadId: "title-thread" }) as any;
+		expect(state.tabs[0].id).toBe(opened.tabs[0].id);
+		expect(state.tabs[0].url).toBe("https://example.com/article");
+		expect(state.tabs[0].title).toBe("Fixture article");
+		service.dispose();
+	});
+
 	it("loads new-tab URLs and reattaches the active native view across tab switches and close", async () => {
 		const electron = fakeElectron();
 		const owner = electron._session.browserWindow.webContents;
@@ -341,5 +394,66 @@ describe("Cedia Agent native browser bridge", () => {
 		expect(electron._session.browserWindow.contentView.children).toHaveLength(0);
 		await expect(service.handle({ sender: owner }, "getState", { threadId: "thread-4" })).rejects.toThrow();
 		service.dispose();
+	});
+});
+
+describe("Cedia agent tab attach for OMP driving", () => {
+	async function opened() {
+		const electron = fakeElectron();
+		const owner = electron._session.browserWindow.webContents;
+		(owner as any).send = () => {};
+		const service = createAgentBrowserService({ appRoot: "/tmp/cedia", electron });
+		const state = await service.handle({ sender: owner }, "open", { threadId: "thread-agent" }) as { tabs: { id: string }[] };
+		const tabId = state.tabs[0]!.id;
+		const view = electron._session.browserWindow.contentView.children[0]!;
+	 return { electron, owner, service, tabId, debugger: view.webContents.debugger as FakeDebugger };
+	}
+
+	it("refuses unknown tabs and foreign-attached debuggers", async () => {
+		const f = await opened();
+		try {
+			await expect(f.service.handle({ sender: f.owner }, "agentAttach", { threadId: "thread-agent", tabId: "nope" })).rejects.toThrow("Unknown browser tab");
+			f.debugger.attached = true;
+			await expect(f.service.handle({ sender: f.owner }, "agentAttach", { threadId: "thread-agent", tabId: f.tabId })).rejects.toThrow("already attached");
+		} finally {
+			f.service.dispose();
+		}
+	});
+
+	it("serves the attached tab on a loopback endpoint and tears it down on detach", async () => {
+		const f = await opened();
+		try {
+			const attached = await f.service.handle({ sender: f.owner }, "agentAttach", { threadId: "thread-agent", tabId: f.tabId }) as { cdpUrl: string; tabId: string };
+			expect(attached.tabId).toBe(f.tabId);
+			expect(attached.cdpUrl.startsWith("http://127.0.0.1:")).toBe(true);
+			expect(f.debugger.attached).toBe(true);
+			const again = await f.service.handle({ sender: f.owner }, "agentAttach", { threadId: "thread-agent", tabId: f.tabId }) as { cdpUrl: string };
+			expect(again.cdpUrl).toBe(attached.cdpUrl);
+			const status = await f.service.handle({ sender: f.owner }, "agentEndpoint", { threadId: "thread-agent" }) as { attached: boolean; cdpUrl?: string; tabs: { tabId: string }[] };
+			expect(status).toMatchObject({ attached: true, cdpUrl: attached.cdpUrl, tabs: [{ tabId: f.tabId }] });
+			const list = (await (await fetch(`${attached.cdpUrl}/json/list`)).json()) as { id: string; webSocketDebuggerUrl: string }[];
+			expect(list.map(entry => entry.id)).toEqual([f.tabId]);
+			expect(list[0]?.webSocketDebuggerUrl.startsWith("ws://127.0.0.1:")).toBe(true);
+			const detached = await f.service.handle({ sender: f.owner }, "agentDetach", { threadId: "thread-agent", tabId: f.tabId }) as { attached: boolean };
+			expect(detached).toEqual({ attached: false });
+			expect(f.debugger.attached).toBe(false);
+			await expect(fetch(`${attached.cdpUrl}/json/list`)).rejects.toThrow();
+			const after = await f.service.handle({ sender: f.owner }, "agentEndpoint", { threadId: "thread-agent" }) as { attached: boolean };
+			expect(after.attached).toBe(false);
+		} finally {
+			f.service.dispose();
+		}
+	});
+
+	it("detaches the debugger when its tab closes", async () => {
+		const f = await opened();
+		try {
+			const attached = await f.service.handle({ sender: f.owner }, "agentAttach", { threadId: "thread-agent", tabId: f.tabId }) as { cdpUrl: string };
+			await f.service.handle({ sender: f.owner }, "closeTab", { threadId: "thread-agent", tabId: f.tabId });
+			expect(f.debugger.attached).toBe(false);
+			await expect(fetch(`${attached.cdpUrl}/json/list`)).rejects.toThrow();
+		} finally {
+			f.service.dispose();
+		}
 	});
 });

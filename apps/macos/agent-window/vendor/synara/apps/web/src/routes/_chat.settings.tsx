@@ -7,6 +7,7 @@ import { PROVIDER_DISPLAY_NAMES, type ProviderKind } from "@synara/contracts";
 import { PROVIDER_DESCRIPTORS } from "@synara/shared/providerMetadata";
 import { sameAppSnapShortcut } from "@synara/shared/appSnapShortcut";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   type AppSettings,
@@ -36,6 +37,9 @@ import {
 import { ProviderOptionLabel } from "../components/ProviderIcon";
 import { ProfileSettingsPanel } from "../components/settings/ProfileSettingsPanel";
 import { KeyboardShortcutsSettingsPanel } from "../components/settings/KeyboardShortcutsSettingsPanel";
+import { CapabilityStatusPanel } from "../components/CapabilityStatusPanel";
+import { OmpSettingsPanel } from "../components/settings/OmpSettingsPanel";
+import { RemoteDevicesPanel } from "../components/settings/RemoteDevicesPanel";
 import {
   SettingResetButton,
   SettingsSegmentedControl,
@@ -78,12 +82,13 @@ import { cn, getNavigatorPlatform, isMacPlatform } from "../lib/utils";
 import { ensureNativeApi, readNativeApi } from "../nativeApi";
 import { sameProviderOrder } from "../providerOrdering";
 import {
-  normalizeSettingsSection,
+  resolveSettingsSection,
   SETTINGS_NAV_ITEMS,
   SETTINGS_TARGETS,
   settingRowAnchorId,
 } from "../settingsNavigation";
 import { SETTINGS_PAGE_BACKGROUND_CLASS_NAME } from "../settingsPanelStyles";
+import { serverCapabilitiesQueryOptions } from "../lib/serverReactQuery";
 
 // ── Settings taxonomy ──────────────────────────────────────────────────────
 const UI_DENSITY_OPTIONS = [
@@ -172,9 +177,12 @@ type BooleanSettingKey = {
 
 function SettingsRouteView() {
   const routeSearch = useSearch({ strict: false }) as Record<string, unknown>;
-  const activeSection = normalizeSettingsSection(routeSearch.section);
+  const capabilitiesQuery = useQuery(serverCapabilitiesQueryOptions());
+  // A stored deep link must not reopen a destination the host reports as not implemented (§3.B):
+  // the id still normalizes, and the capability rule then falls back to the first backed section.
+  const activeSection = resolveSettingsSection(routeSearch.section, capabilitiesQuery.data);
   const settingsTarget = typeof routeSearch.target === "string" ? routeSearch.target : null;
-  const activeSectionItem = SETTINGS_NAV_ITEMS.find((item) => item.id === activeSection)!;
+  const activeSectionItem = SETTINGS_NAV_ITEMS.find((item) => item.id === activeSection) ?? SETTINGS_NAV_ITEMS[0]!;
 
   const {
     systemUiFont,
@@ -1040,6 +1048,12 @@ function SettingsRouteView() {
         return <KeyboardShortcutsSettingsPanel />;
       case "profile":
         return <ProfileSettingsPanel />;
+      case "status":
+        return <CapabilityStatusPanel />;
+      case "omp":
+        return <OmpSettingsPanel active />;
+      case "remote":
+        return <RemoteDevicesPanel active />;
       default:
         return null;
     }

@@ -13,6 +13,7 @@ import { collapseExpandedComposerCursor, detectComposerTrigger } from "../../com
 import {
   captureComposerPromptHistorySavedDraft,
   type QueuedComposerChatTurn,
+  useComposerDraftStore,
 } from "../../composerDraftStore";
 import { useComposerSlashCommands } from "../../hooks/useComposerSlashCommands";
 import { extractChatAutomationInvocation } from "../../lib/automationIntent";
@@ -34,6 +35,7 @@ import { useComposerReferences } from "./useComposerReferences";
 
 interface ChatComposerCommandsInput {
   threadId: ThreadId;
+  selectedSlashCommandRef: RefObject<{ readonly threadId: ThreadId; readonly name: string } | null>;
   composerSelectLockRef: RefObject<boolean>;
   setComposerCommandPicker: Dispatch<SetStateAction<"fork-target" | "review-target" | null>>;
   setComposerHighlightedItemId: Dispatch<SetStateAction<string | null>>;
@@ -124,6 +126,7 @@ interface ChatComposerCommandsInput {
 
 export function useChatComposerCommands({
   threadId,
+  selectedSlashCommandRef,
   composerSelectLockRef,
   setComposerCommandPicker,
   setComposerHighlightedItemId,
@@ -223,6 +226,12 @@ export function useChatComposerCommands({
           snapshot,
           trigger,
           base: `/${item.command} `,
+          onApplied: () => {
+            if (item.provider === "omp") {
+              useComposerDraftStore.getState().setSelectedSlashCommand(threadId, item.command);
+              selectedSlashCommandRef.current = { threadId, name: item.command };
+            }
+          },
         });
         return;
       }
@@ -292,6 +301,7 @@ export function useChatComposerCommands({
       setComposerCommandPicker,
       localFolderBrowseRootPath,
       selectedProvider,
+      selectedSlashCommandRef,
       updateSelectedComposerMentions,
       updateSelectedComposerSkills,
       resolveActiveComposerTrigger,
@@ -330,6 +340,12 @@ export function useChatComposerCommands({
       cursorAdjacentToMention: boolean,
       terminalContextIds: string[],
     ) => {
+      const selected = selectedSlashCommandRef.current;
+      const trimmedPrompt = nextPrompt.trimStart();
+      if (selected?.threadId === threadId &&
+          (!trimmedPrompt.startsWith("/") || trimmedPrompt.slice(1).split(/\s/, 1)[0] !== selected.name)) {
+        selectedSlashCommandRef.current = null;
+      }
       if (activePendingQuestion && activePendingUserInput) {
         const interruptedNavigation = promptHistoryNavigationRef.current;
         if (interruptedNavigation !== null) {

@@ -1,11 +1,12 @@
 # Cedia — Command / Shortcut Map (H01)
 
-Status: policy locked from docs; bindings marked `pending-runtime` until the
-F01 upstream dump (pinned Code-OSS `3e078a3`) and the G-VIS-02 reference map
-(one verified Cursor build) exist. Rule: **current verified build wins, never
-union contradictory specs** (G-VIS-02, J6).
+Status: historical identifier/conflict baseline and implementation notes, not a
+separate product policy or open-work list. Current shortcut requirements and readiness
+are owned by [CEDIA-PLAN.md](../docs/maintenance/CEDIA-PLAN.md), especially §10 items 57/69.
+The older revision and Cursor-reference gates below retain their original evidence scope;
+they do not override the owner's current shortcut choices or create new prerequisites.
 
-## Locked priority policy
+## Recorded baseline priority policy
 
 1. Inside Cedia-owned surfaces (Agents Window, composer, review panels),
    Cedia commands bind `when`-clause context keys scoped to that surface.
@@ -46,7 +47,7 @@ invalid entry with a named issue, never silently false: an unknown identifier
 would be invisible forever, the same defect class `menus-contract` guards on
 the workbench side.
 
-## Runtime gates that close this file
+## Historical runtime gates (not the current open-work list)
 
 - [ ] F01-DUMP: default keybinding set + command list extracted from pinned
   Code-OSS revision; C-03/C-04 verified against real upstream chords.
@@ -55,5 +56,5 @@ the workbench side.
 - [ ] CONFLICT-GATE: automated check that no Cedia binding shadows an
   upstream/global command outside its surface context (runs in CI from M1).
 
-Until all three are checked, no pixel/behavior freeze for keyboard-driven
-surfaces (A03/A05/A06/D03/D04).
+These unchecked baseline gates are not evidence that the current shortcut contract passes.
+Current acceptance criteria and unfinished work live only in the plan.

@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" href="./cedia.svg" type="image/svg+xml" />
+    <link rel="icon" href="./cedia-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="./cedia-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)" />
     <title>Cedia Agents</title>
     <style>
       html,
@@ -67,12 +68,10 @@
   <body>
     <div id="root">
       <div class="app-boot-splash" aria-hidden="true">
-        <img
-          class="app-boot-splash__icon"
-          src="./cedia.svg"
-          alt=""
-          draggable="false"
-        />
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="./cedia-dark.svg" />
+          <img class="app-boot-splash__icon" src="./cedia-light.svg" alt="" draggable="false" />
+        </picture>
       </div>
     </div>
     <script type="module" src="/src/bootstrap.ts"></script>

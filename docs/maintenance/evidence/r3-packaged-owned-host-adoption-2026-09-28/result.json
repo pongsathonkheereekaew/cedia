@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "runtimeVersion": "omp/18.1.18",
+  "appGenerations": [
+    "packaged-owner-first-6627479b-f3f8-48ce-bc29-6054d7e84a64",
+    "packaged-owner-second-3292245d-d19a-42c6-93e4-5546beb38e1e"
+  ],
+  "appProcessIds": [
+    93216,
+    93851
+  ],
+  "hostPid": 93224,
+  "hostGeneration": "3fac36be-615c-4c94-af57-7d5bd38c0dbd",
+  "hostAppGeneration": "packaged-owner-first-6627479b-f3f8-48ce-bc29-6054d7e84a64",
+  "bundledHost": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-app-owner-adoption-stage.d55NtJ/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/host/cli.js",
+  "projectId": "8f402118-6cc6-4516-85be-71a54379fbb6",
+  "taskId": "83c62bf2-75a5-436c-b474-674d92db6884",
+  "incarnation": "11fe2119-2de3-4a65-be8b-20e8bb9828aa",
+  "ompOwnerPid": 93286,
+  "ownerSummary": "available",
+  "providerRequests": 0,
+  "loginItemInterceptions": 2,
+  "sourceHostSha256": "17af849b2a5a9b0699b7d1b827824f1bae5a8ae734e8515c15f95c7d30f3faad",
+  "sourceOmpSha256": "9c4619f443a0458f240c2c282d34c890529aa2dba90eb882051cb503668f7cfa"
+}

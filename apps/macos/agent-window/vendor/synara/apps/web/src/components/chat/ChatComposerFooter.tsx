@@ -34,6 +34,7 @@ interface ChatComposerFooterProps {
     responding: boolean;
     answersComplete: boolean;
   } | null;
+  runPauseControls?: ReactNode;
   submission: {
     phase: SessionPhase;
     busy: boolean;
@@ -62,6 +63,7 @@ export function ChatComposerFooter({
   voice,
   pendingInput,
   submission,
+  runPauseControls = null,
 }: ChatComposerFooterProps) {
   return (
     <div
@@ -147,6 +149,7 @@ export function ChatComposerFooter({
             }}
           />
         ) : null}
+        {runPauseControls}
         {pendingInput?.progress ? (
           <Button
             type="submit"

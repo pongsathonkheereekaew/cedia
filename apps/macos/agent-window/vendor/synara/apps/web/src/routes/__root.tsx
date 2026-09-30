@@ -1993,6 +1993,22 @@ function EventRouter() {
       }
     });
     const unsubThreadEvent = api.orchestration.onThreadEvent((item) => {
+      const progressThreadId =
+        item.kind === "snapshot"
+          ? item.snapshot.thread.id
+          : ThreadId.makeUnsafe(String(item.event.aggregateId));
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.progress(progressThreadId) });
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.agents(progressThreadId) });
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.agentTranscriptRoot(progressThreadId) });
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.advisor(progressThreadId) });
+      // OMP holds the queue itself, so the window only learns the owner queued or drained work
+      // from the runtime's own activity: re-read the queue on the same event the sibling strips use.
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.queue(progressThreadId) });
+      // Context usage and maintenance state are runtime-owned; activity is the owner's signal to
+      // re-read them, so this panel does not invent a polling cadence.
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.context(progressThreadId) });
+      // Memory state is runtime-owned as well; re-read it on the same activity signal as context.
+      void queryClient.invalidateQueries({ queryKey: serverQueryKeys.memory(progressThreadId) });
       if (item.kind === "snapshot") {
         const threadId = item.snapshot.thread.id;
         threadSnapshotRequestInFlight.delete(threadId);

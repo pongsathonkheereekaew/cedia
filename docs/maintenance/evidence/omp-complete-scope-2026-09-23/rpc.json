@@ -1,0 +1,822 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Exhaustive OMP rpc-ui capability inventory for the CEDIA Agentic IDE plan; this is evidence, not a second product plan.",
+  "source": {
+    "stockRevision": "00085d4e7dfdcfbf302c122fa2682b410a0f43d1",
+    "stockVersion": "18.1.18",
+    "stockSource": "upstream/omp/packages/coding-agent/src/modes/rpc/rpc-types.ts (HEAD)",
+    "patchManifest": "patches/omp/manifest.json",
+    "patchFile": "patches/omp/0001-cedia-rpc-bridges.patch",
+    "patchSha256": "c7286164c78b543501e23519769cd275764e463e8645157093846cdedc508b6e",
+    "effectiveRule": "Pinned base plus manifest patch; verifyOmpSource confirms the dirty working tree exactly matches that combination (not outside-patch changes).",
+    "verifiedSourceTree": "112ad5eee1cc236b5382a691ccf3202b2ced5c1e"
+  },
+  "counts": {
+    "stockCommands": 42,
+    "cediaPatchCommands": 8,
+    "effectiveCommands": 50,
+    "extensionUiMethods": 11,
+    "hostBridgeFrameTypes": 7,
+    "rpcSessionEventNames": 28,
+    "rpcClientRecognizedSessionEventNames": 25
+  },
+  "commands": [
+    {
+      "name": "negotiate_protocol",
+      "source": "stock",
+      "family": "protocol",
+      "payload": [
+        "protocolVersion"
+      ],
+      "host": "adapter-startup",
+      "presentation": "internal-existing",
+      "required": "none"
+    },
+    {
+      "name": "cedia_terminal_negotiate",
+      "source": "cedia_patch",
+      "family": "terminal",
+      "payload": [
+        "version",
+        "cols?",
+        "rows?"
+      ],
+      "host": "requestCedia bridge-gated by ready.cediaVirtualUiVersion",
+      "presentation": "ui-existing (IDE, web/iPhone projection)",
+      "required": "keep capability-gated reconnect and checkpoint acceptance"
+    },
+    {
+      "name": "cedia_terminal_input",
+      "source": "cedia_patch",
+      "family": "terminal",
+      "payload": [
+        "terminalId",
+        "data"
+      ],
+      "host": "generic host command plus terminal registry",
+      "presentation": "ui-existing (virtual agent terminal)",
+      "required": "keep identified-terminal and incarnation guards on every client"
+    },
+    {
+      "name": "cedia_terminal_resize",
+      "source": "cedia_patch",
+      "family": "terminal",
+      "payload": [
+        "terminalId",
+        "cols",
+        "rows"
+      ],
+      "host": "generic host command plus terminal registry",
+      "presentation": "ui-existing (virtual agent terminal)",
+      "required": "keep acknowledged resize before checkpoint rendering"
+    },
+    {
+      "name": "prompt",
+      "source": "stock",
+      "family": "prompting",
+      "payload": [
+        "message",
+        "images?",
+        "streamingBehavior?"
+      ],
+      "host": "POST /v1/sessions/:id/commands -> OmpRpcClient.request",
+      "presentation": "ui-existing (Agent composer, IDE dock, iPhone, CLI)",
+      "required": "none; verify queued/accepted/running/finished states separately"
+    },
+    {
+      "name": "steer",
+      "source": "stock",
+      "family": "prompting",
+      "payload": [
+        "message",
+        "images?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-existing (running composer mode, iPhone), CLI",
+      "required": "make explicit Steer state/action visible on every remote client"
+    },
+    {
+      "name": "follow_up",
+      "source": "stock",
+      "family": "prompting",
+      "payload": [
+        "message",
+        "images?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-existing (queue composer mode, iPhone), CLI",
+      "required": "show queued status and never label ACK as turn completion"
+    },
+    {
+      "name": "abort",
+      "source": "stock",
+      "family": "prompting",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-existing (Stop/Abort controls, CLI)",
+      "required": "bind cancellation to one task incarnation and reconcile unknown outcomes"
+    },
+    {
+      "name": "abort_and_prompt",
+      "source": "stock",
+      "family": "prompting",
+      "payload": [
+        "message",
+        "images?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-partial (CLI and generic RPC; no dedicated Agent composer action)",
+      "required": "add explicit replace-current-turn action or mark it advanced-only"
+    },
+    {
+      "name": "new_session",
+      "source": "stock",
+      "family": "session",
+      "payload": [
+        "parentSession?"
+      ],
+      "host": "generic host command; CEDIA task creation is a separate host route",
+      "presentation": "ui-partial (task/new and fork flows exist; direct parentSession RPC is not a normal control)",
+      "required": "map new/fork/sidechat UI to this semantic without a second transcript owner"
+    },
+    {
+      "name": "get_state",
+      "source": "stock",
+      "family": "state",
+      "payload": [],
+      "host": "host startup, polling and generic command",
+      "presentation": "internal-existing (projected model/effort/context/session state)",
+      "required": "expose capability and provenance without copying OMP settings"
+    },
+    {
+      "name": "set_fast_mode",
+      "source": "stock",
+      "family": "state",
+      "payload": [
+        "enabled"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add an OMP settings control or honest capability-status entry"
+    },
+    {
+      "name": "get_available_commands",
+      "source": "stock",
+      "family": "skills-and-commands",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-existing (slash-command/skill catalog)",
+      "required": "preserve source distinction for commands versus skills"
+    },
+    {
+      "name": "set_todos",
+      "source": "stock",
+      "family": "plan-and-todo",
+      "payload": [
+        "phases"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing (OMP emits todo events; CEDIA does not directly edit them)",
+      "required": "add OMP-owned todo/plan projection and explicit mutation only if OMP semantics require it"
+    },
+    {
+      "name": "set_host_tools",
+      "source": "stock",
+      "family": "host-bridge",
+      "payload": [
+        "tools"
+      ],
+      "host": "host startup registration",
+      "presentation": "internal-existing",
+      "required": "keep tool definitions capability-gated and approval-owned by CEDIA"
+    },
+    {
+      "name": "set_host_uri_schemes",
+      "source": "stock",
+      "family": "host-bridge",
+      "payload": [
+        "schemes"
+      ],
+      "host": "generic host command; dispatcher registration seam exists",
+      "presentation": "internal-existing for definitions; no user catalog",
+      "required": "register advertised URI schemes and show failures as capability status"
+    },
+    {
+      "name": "set_subagent_subscription",
+      "source": "stock",
+      "family": "subagents",
+      "payload": [
+        "level"
+      ],
+      "host": "host startup currently selects events",
+      "presentation": "internal-existing",
+      "required": "make off/progress/events policy visible and tie it to Subagents surface"
+    },
+    {
+      "name": "get_subagents",
+      "source": "stock",
+      "family": "subagents",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add live Subagents panel with lifecycle/progress/error states"
+    },
+    {
+      "name": "get_subagent_messages",
+      "source": "stock",
+      "family": "subagents",
+      "payload": [
+        "subagentId?",
+        "sessionFile?",
+        "fromByte?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add subagent transcript drill-down with bounded paging and session ownership checks"
+    },
+    {
+      "name": "set_model",
+      "source": "stock",
+      "family": "models",
+      "payload": [
+        "provider",
+        "modelId"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-existing (model picker and task metadata)",
+      "required": "none; preserve OMP catalog/provider provenance"
+    },
+    {
+      "name": "cycle_model",
+      "source": "stock",
+      "family": "models",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-partial (picker can select; no explicit cycle action)",
+      "required": "add cycle action only if OMP cycle order is exposed"
+    },
+    {
+      "name": "get_available_models",
+      "source": "stock",
+      "family": "models",
+      "payload": [],
+      "host": "catalog query through host command",
+      "presentation": "ui-existing (models settings/picker)",
+      "required": "none; empty means unavailable, never fabricate a model"
+    },
+    {
+      "name": "cedia_get_model_roles",
+      "source": "cedia_patch",
+      "family": "models",
+      "payload": [],
+      "host": "requestCedia model-role bridge; ready.cediaModelRolesVersion",
+      "presentation": "ui-existing (OMP roles picker/settings)",
+      "required": "keep role storage/provenance sourced from OMP"
+    },
+    {
+      "name": "cedia_set_model_role",
+      "source": "cedia_patch",
+      "family": "models",
+      "payload": [
+        "role",
+        "modelId|null"
+      ],
+      "host": "requestCedia model-role bridge",
+      "presentation": "ui-existing (OMP roles picker/settings)",
+      "required": "guard global/project scope and refresh catalog after mutation"
+    },
+    {
+      "name": "cedia_get_auth_providers",
+      "source": "cedia_patch",
+      "family": "provider-auth",
+      "payload": [],
+      "host": "requestCedia auth bridge; ready.cediaAuthVersion",
+      "presentation": "ui-existing (OMP provider settings)",
+      "required": "never return credential bytes; fall back to stock login metadata only"
+    },
+    {
+      "name": "cedia_set_api_key",
+      "source": "cedia_patch",
+      "family": "provider-auth",
+      "payload": [
+        "providerId",
+        "apiKey"
+      ],
+      "host": "requestCedia auth bridge",
+      "presentation": "ui-existing (provider settings)",
+      "required": "retain OMP auth owner and redact all logs/journals"
+    },
+    {
+      "name": "cedia_logout",
+      "source": "cedia_patch",
+      "family": "provider-auth",
+      "payload": [
+        "providerId"
+      ],
+      "host": "requestCedia auth bridge",
+      "presentation": "ui-existing (provider settings)",
+      "required": "retain OMP auth owner and show shared-impact warning"
+    },
+    {
+      "name": "set_thinking_level",
+      "source": "stock",
+      "family": "thinking",
+      "payload": [
+        "level"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-existing (effort picker)",
+      "required": "none; use only levels advertised for selected model"
+    },
+    {
+      "name": "cycle_thinking_level",
+      "source": "stock",
+      "family": "thinking",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-partial (no explicit cycle control)",
+      "required": "add cycle only when model ladder and current setting are known"
+    },
+    {
+      "name": "set_steering_mode",
+      "source": "stock",
+      "family": "queue-policy",
+      "payload": [
+        "mode"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add queue-policy settings with explicit OMP ownership"
+    },
+    {
+      "name": "set_follow_up_mode",
+      "source": "stock",
+      "family": "queue-policy",
+      "payload": [
+        "mode"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add queue-policy settings with explicit OMP ownership"
+    },
+    {
+      "name": "set_interrupt_mode",
+      "source": "stock",
+      "family": "queue-policy",
+      "payload": [
+        "mode"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add queue-policy settings with explicit OMP ownership"
+    },
+    {
+      "name": "compact",
+      "source": "stock",
+      "family": "compaction",
+      "payload": [
+        "customInstructions?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-existing (compact action)",
+      "required": "surface compaction lifecycle and preserve transcript ownership"
+    },
+    {
+      "name": "set_auto_compaction",
+      "source": "stock",
+      "family": "compaction",
+      "payload": [
+        "enabled"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add OMP setting readback/write path; do not mirror config locally"
+    },
+    {
+      "name": "set_auto_retry",
+      "source": "stock",
+      "family": "retry",
+      "payload": [
+        "enabled"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add OMP retry setting and status presentation"
+    },
+    {
+      "name": "abort_retry",
+      "source": "stock",
+      "family": "retry",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add retry-cancel control when retry state is visible"
+    },
+    {
+      "name": "bash",
+      "source": "stock",
+      "family": "agent-shell",
+      "payload": [
+        "command"
+      ],
+      "host": "generic host command; OMP owns execution",
+      "presentation": "ui-partial (tool transcript and generic CLI; no separate Agent action)",
+      "required": "render tool lifecycle/output as an activity without conflating with user Terminal"
+    },
+    {
+      "name": "abort_bash",
+      "source": "stock",
+      "family": "agent-shell",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add per-tool cancellation action with outcome-unknown handling"
+    },
+    {
+      "name": "get_session_stats",
+      "source": "stock",
+      "family": "session",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add diagnostics/usage view sourced from OMP"
+    },
+    {
+      "name": "export_html",
+      "source": "stock",
+      "family": "session",
+      "payload": [
+        "outputPath?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add explicit export action with safe destination and completion receipt"
+    },
+    {
+      "name": "switch_session",
+      "source": "stock",
+      "family": "session",
+      "payload": [
+        "sessionPath"
+      ],
+      "host": "generic host command, path constrained by host",
+      "presentation": "ui-partial (task selection owns normal switching)",
+      "required": "support import/attach only through explicit CEDIA task boundary; never bypass session ownership"
+    },
+    {
+      "name": "branch",
+      "source": "stock",
+      "family": "rewind",
+      "payload": [
+        "entryId"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-existing (rewind/edit-and-resend)",
+      "required": "retain OMP tree semantics and resync transcript after branch"
+    },
+    {
+      "name": "get_branch_messages",
+      "source": "stock",
+      "family": "rewind",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-existing (rewind picker)",
+      "required": "none"
+    },
+    {
+      "name": "get_last_assistant_text",
+      "source": "stock",
+      "family": "messages",
+      "payload": [],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add context-copy/reuse action only if useful; otherwise keep advanced RPC/CLI"
+    },
+    {
+      "name": "set_session_name",
+      "source": "stock",
+      "family": "session",
+      "payload": [
+        "name"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-partial (CEDIA metadata PATCH owns title today)",
+      "required": "choose one title owner and keep OMP session name synchronized where exposed"
+    },
+    {
+      "name": "handoff",
+      "source": "stock",
+      "family": "session-lifecycle",
+      "payload": [
+        "customInstructions?"
+      ],
+      "host": "generic host command",
+      "presentation": "ui-missing",
+      "required": "add explicit Handoff/Continue semantics only after restart/remote recovery tests"
+    },
+    {
+      "name": "get_messages",
+      "source": "stock",
+      "family": "messages",
+      "payload": [],
+      "host": "host startup and transcript resync",
+      "presentation": "internal-existing (Agent/IDE projection)",
+      "required": "none; never synthesize a second transcript"
+    },
+    {
+      "name": "get_messages_page",
+      "source": "stock",
+      "family": "messages",
+      "payload": [
+        "cursor?",
+        "limit?"
+      ],
+      "host": "generic host command and provider history path",
+      "presentation": "ui-existing (history paging where available)",
+      "required": "retain cursor-stale/busy fallback and explicit truncation metadata"
+    },
+    {
+      "name": "get_login_providers",
+      "source": "stock",
+      "family": "provider-auth",
+      "payload": [],
+      "host": "generic host command and stock-auth fallback",
+      "presentation": "ui-existing (provider settings/login)",
+      "required": "none; use patch auth metadata when advertised"
+    },
+    {
+      "name": "login",
+      "source": "stock",
+      "family": "provider-auth",
+      "payload": [
+        "providerId"
+      ],
+      "host": "generic host command with extension UI side channel",
+      "presentation": "ui-existing (provider login flow)",
+      "required": "route select/input/open_url/notify through the same approval-safe broker"
+    }
+  ],
+  "extensionUiMethods": [
+    {
+      "method": "select",
+      "class": "interactive",
+      "current": "ExtensionUiBroker validates, journals and sends explicit answer; host native permission path uses it",
+      "required": "Agent/IDE/mobile all need shared select presentation with one response owner"
+    },
+    {
+      "method": "confirm",
+      "class": "interactive",
+      "current": "ExtensionUiBroker and permission/auth flows",
+      "required": "render approval/input distinctly and preserve cancellation/timeout"
+    },
+    {
+      "method": "input",
+      "class": "interactive",
+      "current": "provider-auth login and broker",
+      "required": "present on every eligible surface; never auto-submit"
+    },
+    {
+      "method": "editor",
+      "class": "interactive",
+      "current": "broker protocol only; no normal CEDIA editor dialog found",
+      "required": "add full editor-capable response surface or report unavailable honestly"
+    },
+    {
+      "method": "cancel",
+      "class": "cancellation",
+      "current": "server cancel targets a pending request; host aborts via ExtensionUiBroker",
+      "required": "propagate cancellation to remote clients and clear stale requests"
+    },
+    {
+      "method": "notify",
+      "class": "customUI/presentation",
+      "current": "broker journals; provider-auth consumes it",
+      "required": "map severity to CEDIA notification policy"
+    },
+    {
+      "method": "setStatus",
+      "class": "customUI/presentation",
+      "current": "broker accepts and journals; no dedicated status-widget surface found",
+      "required": "add bounded task status slot or capability-status fallback"
+    },
+    {
+      "method": "setWidget",
+      "class": "customUI/presentation",
+      "current": "broker accepts and journals; no dedicated widget renderer found",
+      "required": "add bounded widget slot or preserve raw activity without fake layout"
+    },
+    {
+      "method": "setTitle",
+      "class": "customUI/presentation",
+      "current": "broker accepts and journals; CEDIA window title is host-owned",
+      "required": "define whether OMP title is task-local metadata and prevent chrome takeover"
+    },
+    {
+      "method": "set_editor_text",
+      "class": "customUI/editor",
+      "current": "broker accepts and journals; native editor bridge is a separate host-tool path",
+      "required": "map to guarded buffer operation or return explicit unsupported response"
+    },
+    {
+      "method": "open_url",
+      "class": "customUI/presentation",
+      "current": "provider-auth consumes safe https/loopback URL; generic broker preserves frame",
+      "required": "route through CEDIA browser/external-link policy with audit and no silent navigation"
+    }
+  ],
+  "hostBridgeFrames": [
+    {
+      "type": "host_tool_call",
+      "direction": "OMP->CEDIA",
+      "current": "OmpHostDispatcher validates, authorizes, runs registered tools, sends result",
+      "required": "none for bridge; each tool needs a capability entry and approval policy"
+    },
+    {
+      "type": "host_tool_cancel",
+      "direction": "OMP->CEDIA",
+      "current": "dispatcher aborts active tool via AbortController",
+      "required": "surface cancellation and unknown outcome to task activity"
+    },
+    {
+      "type": "host_tool_update",
+      "direction": "CEDIA->OMP",
+      "current": "dispatcher streams partial result",
+      "required": "render tool progress without transcript duplication"
+    },
+    {
+      "type": "host_tool_result",
+      "direction": "CEDIA->OMP",
+      "current": "dispatcher sends normalized success/error result",
+      "required": "none for transport; test retries and disposal"
+    },
+    {
+      "type": "host_uri_request",
+      "direction": "OMP->CEDIA",
+      "current": "dispatcher validates registered read/write scheme and authorization",
+      "required": "register real MCP/URI schemes and show unavailable ones honestly"
+    },
+    {
+      "type": "host_uri_cancel",
+      "direction": "OMP->CEDIA",
+      "current": "dispatcher aborts active URI operation",
+      "required": "preserve cancellation and no-replay rule"
+    },
+    {
+      "type": "host_uri_result",
+      "direction": "CEDIA->OMP",
+      "current": "dispatcher sends content/type/notes/immutable/error result",
+      "required": "none for transport; add per-scheme capability receipts"
+    }
+  ],
+  "sessionEvents": {
+    "sourceUnion": [
+      "agent_start",
+      "agent_end",
+      "turn_start",
+      "turn_end",
+      "message_start",
+      "message_update",
+      "message_end",
+      "tool_execution_start",
+      "tool_execution_update",
+      "tool_stream_update",
+      "tool_execution_end",
+      "auto_compaction_start",
+      "auto_compaction_end",
+      "auto_retry_start",
+      "auto_retry_end",
+      "retry_fallback_applied",
+      "retry_fallback_succeeded",
+      "model_changed",
+      "config_warnings_changed",
+      "advisor_cost_changed",
+      "advisor_yielded",
+      "ttsr_triggered",
+      "todo_reminder",
+      "todo_auto_clear",
+      "irc_message",
+      "notice",
+      "thinking_level_changed",
+      "goal_updated"
+    ],
+    "rpcClientRecognizes": [
+      "agent_start",
+      "agent_end",
+      "turn_start",
+      "turn_end",
+      "message_start",
+      "message_update",
+      "message_end",
+      "tool_execution_start",
+      "tool_execution_update",
+      "tool_stream_update",
+      "tool_execution_end",
+      "auto_compaction_start",
+      "auto_compaction_end",
+      "auto_retry_start",
+      "auto_retry_end",
+      "retry_fallback_applied",
+      "retry_fallback_succeeded",
+      "ttsr_triggered",
+      "todo_reminder",
+      "todo_auto_clear",
+      "irc_message",
+      "notice",
+      "thinking_level_changed",
+      "model_changed",
+      "goal_updated"
+    ],
+    "recognitionGap": [
+      "config_warnings_changed",
+      "advisor_cost_changed",
+      "advisor_yielded"
+    ],
+    "currentCediaPath": "OmpRpcClient onFrame -> apps/host/src/service.ts#onFrame journal -> apps/macos/agent-window/src/cedia-adapter.ts and apps/macos/src/state.ts reducers; unmodelled frames remain raw activity/events.",
+    "required": "Add a typed event capability registry and acceptance fixtures for every sourceUnion event; never silently drop the three recognitionGap events."
+  },
+  "otherFrames": [
+    {
+      "type": "ready",
+      "current": "adapter validates protocol v2 limits and optional Cedia bridge markers",
+      "required": "derive capability status from markers"
+    },
+    {
+      "type": "rpc_chunk",
+      "current": "RpcFrameDecoder reassembles after negotiate_protocol",
+      "required": "retain size/order/error tests"
+    },
+    {
+      "type": "response",
+      "current": "OmpRpcClient correlates by id; host journals ACK separately from terminal result",
+      "required": "keep accepted/acknowledged/completed/outcome_unknown distinction"
+    },
+    {
+      "type": "prompt_result",
+      "current": "host completes command when mapped",
+      "required": "keep separate from agent_end when local-only"
+    },
+    {
+      "type": "available_commands_update",
+      "current": "stock RpcClient recognizes; CEDIA generic listener journals unknown frames",
+      "required": "refresh slash/skill catalog without replacing OMP ownership"
+    },
+    {
+      "type": "subagent_lifecycle",
+      "current": "typed source frame; host records, Agent reducer has no dedicated panel",
+      "required": "Subagents panel"
+    },
+    {
+      "type": "subagent_progress",
+      "current": "typed source frame; host records, Agent reducer has no dedicated panel",
+      "required": "Subagents progress presentation"
+    },
+    {
+      "type": "subagent_event",
+      "current": "typed source frame; host records, Agent reducer has no dedicated panel",
+      "required": "Subagent event/transcript drill-down"
+    },
+    {
+      "type": "extension_ui_request",
+      "current": "ExtensionUiBroker ingests and sends responses",
+      "required": "all 11 methods mapped or explicit unsupported"
+    }
+  ],
+  "nonRpcCapabilities": [
+    {
+      "name": "browser",
+      "owner": "CEDIA host/Agent window",
+      "rule": "No OMP RpcCommand; expose as a CEDIA panel/tool and optionally register host tools."
+    },
+    {
+      "name": "user_terminal",
+      "owner": "CEDIA host/Code-OSS or remote shell",
+      "rule": "Separate from OMP bash and the virtual cedia_terminal_* bridge."
+    },
+    {
+      "name": "git-review-worktrees",
+      "owner": "CEDIA host/Code-OSS",
+      "rule": "No OMP RpcCommand; preserve task/worktree and review ownership in CEDIA."
+    },
+    {
+      "name": "MCP-hooks-plugins-automations",
+      "owner": "OMP configuration plus CEDIA presentation",
+      "rule": "No invented RPC names; use OMP advertised commands/host bridges and capability status."
+    },
+    {
+      "name": "remote-devices-notifications",
+      "owner": "CEDIA host/relay/clients",
+      "rule": "No stock OMP RPC; do not infer support from collab frames."
+    },
+    {
+      "name": "speech-to-text",
+      "owner": "deferred",
+      "rule": "Explicitly out of this scope and not part of this RPC completeness gate."
+    }
+  ],
+  "coverageChecks": {
+    "stockCommandListMatchesAdapter": "packages/omp-adapter/test/rpc-inventory.test.ts locks 42 names against source-inventory.json; adapter source list currently excludes the 8 Cedia patch commands by design.",
+    "dispatcher": "upstream/omp/packages/coding-agent/src/modes/rpc/rpc-mode.ts dispatches every stock and patch command in its handleCommand switch.",
+    "hostGateway": "apps/host/src/service.ts accepts stock and CEDIA_UI_COMMAND_TYPES, dispatches through request/requestCedia, and records frames.",
+    "fullCoverageRule": "A capability is not complete merely because the generic command route accepts it: each entry needs a named CEDIA surface, owner, capability marker, and fixture/runtime acceptance test."
+  }
+}

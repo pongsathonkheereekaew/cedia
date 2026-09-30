@@ -21,6 +21,18 @@ export async function dispatchThreadGoal(
   });
 }
 
+export async function dispatchThreadGoalBudget(threadId: ThreadId, tokenBudget: number): Promise<void> {
+  const api = readNativeApi();
+  if (!api) {
+    throw new Error("Cedia API is unavailable.");
+  }
+  const hostApi = api as typeof api & { cedia?: { setGoalBudget?: (threadId: string, tokenBudget: number) => Promise<unknown> } };
+  if (typeof hostApi.cedia?.setGoalBudget !== "function") {
+    throw new Error("Cedia goal budget bridge is unavailable.");
+  }
+  await hostApi.cedia.setGoalBudget(threadId, tokenBudget);
+}
+
 export async function dispatchThreadGoalPaused(threadId: ThreadId, paused: boolean): Promise<void> {
   const api = readNativeApi();
   if (!api) {

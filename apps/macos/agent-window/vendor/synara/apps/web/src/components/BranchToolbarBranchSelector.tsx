@@ -32,6 +32,8 @@ import { parsePullRequestReference } from "../pullRequestReference";
 import {
   dedupeRemoteBranchesWithLocalMatches,
   deriveLocalBranchNameFromRemoteRef,
+  resolveBranchPickerBranches,
+  resolveWorktreeBaseBranch,
   EnvMode,
   resolveBranchSelectionTarget,
   resolveBranchToolbarValue,
@@ -403,13 +405,16 @@ export function BranchToolbarBranchSelector({
   const hasOriginRemote = branchesQuery.data?.hasOriginRemote ?? false;
   const currentGitBranch =
     branchStatusQuery.data?.branch ?? branches.find((branch) => branch.current)?.name ?? null;
+  const defaultGitBranch = resolveWorktreeBaseBranch(branches, currentGitBranch);
+  const isSelectingWorktreeBase =
+    effectiveEnvMode === "worktree" && !envLocked && !activeWorktreePath;
+  const baseBranch = defaultGitBranch ?? currentGitBranch;
   const canonicalActiveBranch = resolveBranchToolbarValue({
     envMode: effectiveEnvMode,
     activeWorktreePath,
     activeThreadBranch,
-    currentGitBranch,
+    currentGitBranch: isSelectingWorktreeBase ? baseBranch : currentGitBranch,
   });
-  const branchNames = useMemo(() => branches.map((branch) => branch.name), [branches]);
   const branchByName = useMemo(
     () => new Map(branches.map((branch) => [branch.name, branch] as const)),
     [branches],
@@ -418,8 +423,11 @@ export function BranchToolbarBranchSelector({
   const deferredTrimmedBranchQuery = deferredBranchQuery.trim();
   const normalizedDeferredBranchQuery = deferredTrimmedBranchQuery.toLowerCase();
   const prReference = parsePullRequestReference(trimmedBranchQuery);
-  const isSelectingWorktreeBase =
-    effectiveEnvMode === "worktree" && !envLocked && !activeWorktreePath;
+  const pickerBranches = useMemo(
+    () => resolveBranchPickerBranches(branches, isSelectingWorktreeBase),
+    [branches, isSelectingWorktreeBase],
+  );
+  const branchNames = useMemo(() => pickerBranches.map((branch) => branch.name), [pickerBranches]);
   const checkoutPullRequestItemValue =
     prReference && onCheckoutPullRequestRequest ? `__checkout_pull_request__:${prReference}` : null;
   const canPrefillCreateBranch = !isSelectingWorktreeBase && trimmedBranchQuery.length > 0;
@@ -457,7 +465,7 @@ export function BranchToolbarBranchSelector({
         envMode: effectiveEnvMode,
         activeWorktreePath,
         activeThreadBranch,
-        currentGitBranch,
+        currentGitBranch: isSelectingWorktreeBase ? baseBranch : currentGitBranch,
         hasServerThread,
         isThreadSettled,
         isBranchActionPending,
@@ -470,9 +478,11 @@ export function BranchToolbarBranchSelector({
   }, [
     activeThreadBranch,
     activeWorktreePath,
+    baseBranch,
     currentGitBranch,
     effectiveEnvMode,
     hasServerThread,
+    isSelectingWorktreeBase,
     isThreadSettled,
     isBranchActionPending,
     onSetThreadWorkspace,
@@ -688,10 +698,11 @@ export function BranchToolbarBranchSelector({
     ) {
       return;
     }
-    onSetThreadWorkspace({ branch: currentGitBranch, worktreePath: null });
+    onSetThreadWorkspace({ branch: baseBranch, worktreePath: null });
   }, [
     activeThreadBranch,
     activeWorktreePath,
+    baseBranch,
     currentGitBranch,
     effectiveEnvMode,
     onSetThreadWorkspace,
@@ -860,6 +871,16 @@ export function BranchToolbarBranchSelector({
       value={resolvedActiveBranch}
     >
       <ComboboxTrigger
+        aria-label={
+          isSelectingWorktreeBase
+            ? `Base branch for new worktree: ${triggerLabel}`
+            : `Git branch: ${triggerLabel}`
+        }
+        title={
+          isSelectingWorktreeBase
+            ? `This worktree will start from ${resolvedActiveBranch ?? "a local branch"}`
+            : triggerLabel
+        }
         className={
           isPanel
             ? ENVIRONMENT_ROW_CLASS_NAME
@@ -883,6 +904,14 @@ export function BranchToolbarBranchSelector({
       </ComboboxTrigger>
       <ComboboxPopup align="end" side={isPanel ? "bottom" : "top"} className="w-80">
         <div className="border-b p-1">
+          {isSelectingWorktreeBase ? (
+            <p
+              data-testid="worktree-base-branch-copy"
+              className="px-1 pb-1 text-[11px] leading-4 text-muted-foreground"
+            >
+              Choose the local branch this worktree will start from. CEDIA will not fetch or pull.
+            </p>
+          ) : null}
           <ComboboxInput
             className="rounded-xl border-[color:var(--color-border)] bg-[var(--color-background-control-opaque)] shadow-none before:hidden has-focus-visible:border-[color:var(--color-border-focus)] has-focus-visible:ring-0 [&_input]:font-sans"
             inputClassName="ring-0"
@@ -895,7 +924,11 @@ export function BranchToolbarBranchSelector({
         </div>
         <ComboboxEmpty>No branches found.</ComboboxEmpty>
 
-        <ComboboxList ref={setBranchListRef} className="max-h-56">
+        <ComboboxList
+          ref={setBranchListRef}
+          className="max-h-56"
+          data-testid={isSelectingWorktreeBase ? "worktree-base-branch-list" : undefined}
+        >
           {shouldVirtualizeBranchList ? (
             <div
               className="relative"

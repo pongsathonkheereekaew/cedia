@@ -12,7 +12,7 @@ import { isRecord, nonEmptyString, type LoginProviderOption, type ModelOption, t
 import type { ArtifactChunk, ArtifactReceipt } from "../../../../packages/protocol/src/artifacts.ts";
 import { parseArtifactChunk, parseArtifactReceipt } from "./artifacts.ts";
 import { parseHostReview, type HostReviewPayload } from "./review-sheet.ts";
-import type { ClientTransport, TransportMethod } from "./transport.ts";
+import { TransportError, type ClientTransport, type TransportMethod } from "./transport.ts";
 
 function encoded(value: string): string {
   return encodeURIComponent(value);
@@ -120,7 +120,18 @@ export class CediaApi {
   }
 
   async request<T>(method: TransportMethod | string, path: string, body?: unknown): Promise<T> {
-    const result = await this.#transport.request(method, path, body);
+    let result: { status: number; body: unknown };
+    try {
+      result = await this.#transport.request(method, path, body);
+    } catch (error) {
+      // HTTP transports may reject before returning a response so that their
+      // auth mode can carry a typed session/CSRF state. Keep the API surface's
+      // existing host error contract while preserving the machine code.
+      if (error instanceof TransportError && error.status !== undefined) {
+        throw new CediaHostError(error.status, error.code ?? "request_failed", error.message);
+      }
+      throw error;
+    }
     if (result.status < 200 || result.status >= 300) throw hostError(result.status, result.body);
     return await this.#hydrateResponseBody(path, result.body) as T;
   }

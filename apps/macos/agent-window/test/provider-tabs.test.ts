@@ -6,6 +6,7 @@ import {
 	resolveComposerModelPickerInitialTab,
 	resolveComposerModelPickerUpstreamTabs,
 } from '../vendor/synara/apps/web/src/components/chat/ComposerModelPicker.logic';
+import { resolveOmpUpstreamProviderTab } from '../../../../scripts/lib/omp-native-confirm-picker.ts';
 import { ProviderGlyphIcon, resolveProviderGlyphId } from '../vendor/synara/apps/web/src/components/ProviderIcon';
 
 it('derives one user-facing tab per OMP upstream provider and never exposes OMP', () => {
@@ -82,6 +83,24 @@ it('opens on the upstream tab that owns the selected provider-qualified model', 
 	).toBe(tabs[1]?.tab);
 });
 
+it('resolves the proof target by stable tab id and supports the sole visible upstream tab fallback', () => {
+	const tabs = [
+		{ label: 'Starred', stableTabId: null },
+		{ label: 'OpenCode Go', stableTabId: 'upstream:opencode-go' },
+		{ label: 'Anthropic', stableTabId: 'upstream:anthropic' },
+	];
+	expect(resolveOmpUpstreamProviderTab(tabs, 'opencode-go')).toEqual(tabs[1]);
+	expect(resolveOmpUpstreamProviderTab([
+		{ label: 'Starred', stableTabId: null },
+		{ label: 'opencode-go', stableTabId: null },
+	], 'opencode-go')).toEqual({ label: 'opencode-go', stableTabId: null });
+	expect(resolveOmpUpstreamProviderTab([
+		{ label: 'Starred', stableTabId: null },
+		{ label: 'OpenCode Go', stableTabId: null },
+		{ label: 'Anthropic', stableTabId: null },
+	], 'opencode-go')).toBeUndefined();
+});
+
 it('moves upstream provider tabs without changing their stable ids', () => {
 	const tabs = resolveComposerModelPickerUpstreamTabs([
 		{ slug: 'openai/gpt', name: 'GPT', upstreamProviderId: 'openai', upstreamProviderName: 'OpenAI' },
@@ -91,6 +110,48 @@ it('moves upstream provider tabs without changing their stable ids', () => {
 		'upstream:anthropic',
 		'upstream:openai',
 	]);
+});
+
+it('projects upstream provider additions and removals from updated OMP model catalogs', () => {
+	const baselineOptions = [
+		{ slug: 'openai-codex/gpt-5.5', name: 'GPT-5.5', upstreamProviderId: 'openai-codex', upstreamProviderName: 'OpenAI Codex' },
+	];
+	const baselineTabs = resolveComposerModelPickerUpstreamTabs(baselineOptions);
+	expect(baselineTabs.map(tab => tab.tab)).toEqual(['upstream:openai-codex']);
+
+	const providerAddedOptions = [
+		...baselineOptions,
+		{
+			slug: 'opencode-go/muse-spark-1.3-contributor',
+			name: 'Muse Spark 1.3 Contributor',
+			upstreamProviderId: 'opencode-go',
+			upstreamProviderName: 'OpenCode Go',
+		},
+	];
+	const addedTabs = resolveComposerModelPickerUpstreamTabs(providerAddedOptions);
+	expect(addedTabs.map(tab => tab.tab)).toEqual(['upstream:openai-codex', 'upstream:opencode-go']);
+	expect(addedTabs[0]?.tab).toBe(baselineTabs[0]?.tab);
+	expect(addedTabs.find(tab => tab.upstreamProviderId === 'opencode-go')?.label).toBe('OpenCode Go');
+	expect(buildProviderTabRows({
+		provider: 'omp',
+		options: providerAddedOptions,
+		query: '',
+		selectedModel: null,
+		upstreamProviderId: 'opencode-go',
+	}).map(row => [row.model, row.name, row.upstreamProviderId])).toEqual([
+		['opencode-go/muse-spark-1.3-contributor', 'Muse Spark 1.3 Contributor', 'opencode-go'],
+	]);
+
+	const providerRemovedOptions = providerAddedOptions.filter(option => option.upstreamProviderId !== 'opencode-go');
+	const removedTabs = resolveComposerModelPickerUpstreamTabs(providerRemovedOptions);
+	expect(removedTabs.map(tab => tab.tab)).toEqual(['upstream:openai-codex']);
+	expect(buildProviderTabRows({
+		provider: 'omp',
+		options: providerRemovedOptions,
+		query: '',
+		selectedModel: null,
+		upstreamProviderId: 'opencode-go',
+	})).toEqual([]);
 });
 
 it('resolves bundled marks for upstream providers instead of falling back to a globe', () => {

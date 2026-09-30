@@ -1,7 +1,9 @@
-import { OmpRpcClient } from "../../../packages/omp-adapter/src/client.ts";
+import { execFile } from "node:child_process";
+import { OmpCommandError, OmpRpcClient } from "../../../packages/omp-adapter/src/client.ts";
 import type { ModelCatalogModel, ModelCatalogResult, ModelReasoningEffort } from "../../../packages/protocol/src/models.ts";
 
 const MODEL_CATALOG_CACHE_MS = 30_000;
+const MODEL_CATALOG_CLI_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 export interface OmpModelCatalogOptions {
 	readonly ompExecutable?: string;
@@ -167,6 +169,43 @@ export function metadataArgs(options: OmpModelCatalogOptions, cwd: string): stri
 	];
 }
 
+function isOversizedModelCatalogError(error: unknown): boolean {
+	return error instanceof OmpCommandError &&
+		error.command === "get_available_models" &&
+		error.message === "RPC response exceeded the transport limit";
+}
+
+function listCompactModelsWithCli(options: OmpModelCatalogOptions, cwd: string): Promise<unknown> {
+	// OMP's RPC answer contains full model definitions; very large provider catalogs can exceed
+	// protocol-v2's 64 MiB reassembly limit. `models --json` is OMP's compact picker projection
+	// and uses the same executable, cwd, auth storage, and metadata flags as the RPC worker.
+	return new Promise((resolve, reject) => {
+		execFile(
+			options.ompExecutable ?? "omp",
+			[...metadataArgs(options, cwd), "models", "--json"],
+			{
+				cwd,
+				env: options.ompEnv,
+				encoding: "utf8",
+				maxBuffer: MODEL_CATALOG_CLI_MAX_BUFFER_BYTES,
+				timeout: 30_000,
+				windowsHide: true,
+			},
+			(error, stdout) => {
+				if (error) {
+					reject(new Error("OMP could not return its compact model catalog", { cause: error }));
+					return;
+				}
+				try {
+					resolve(JSON.parse(stdout.trim()));
+				} catch (cause) {
+					reject(new Error("OMP models --json returned invalid JSON", { cause }));
+				}
+			},
+		);
+	});
+}
+
 export function createOmpModelCatalog(options: OmpModelCatalogOptions = {}): OmpModelCatalog {
 	const now = options.now ?? Date.now;
 	const cwd = text(options.cwd) ?? process.cwd();
@@ -188,14 +227,23 @@ export function createOmpModelCatalog(options: OmpModelCatalogOptions = {}): Omp
 				readyTimeoutMs: 20_000,
 				requestTimeoutMs: 30_000,
 			});
+			let ack: Awaited<ReturnType<typeof client.request>> | undefined;
+			let rpcCatalogWasOversized = false;
 			try {
-				const ack = await client.request("get_available_models", {});
-				const models = normalizeOmpModelCatalog(ack.data);
-				cached = { expiresAt: now() + MODEL_CATALOG_CACHE_MS, models };
-				return { source: "omp", models, cached: false };
+				ack = await client.request("get_available_models", {});
+			} catch (error) {
+				if (!isOversizedModelCatalogError(error)) throw error;
+				rpcCatalogWasOversized = true;
 			} finally {
 				await client.close();
 			}
+			const catalog = rpcCatalogWasOversized
+				? await listCompactModelsWithCli(options, cwd)
+				: ack?.data;
+			if (catalog === undefined) throw new Error("OMP did not return a model catalog");
+			const models = normalizeOmpModelCatalog(catalog);
+			cached = { expiresAt: now() + MODEL_CATALOG_CACHE_MS, models };
+			return { source: "omp", models, cached: false };
 		})();
 		inflight = operation;
 		try {

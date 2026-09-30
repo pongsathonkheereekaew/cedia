@@ -65,7 +65,8 @@ import {
   normalizeChatWidthMode as normalizeChatWidthModeValue,
 } from "./lib/chatWidth";
 
-const APP_SETTINGS_STORAGE_KEY = "synara:app-settings:v1";
+/** Exported for Cedia's host preference sync, which owns a subset of the same store (§6.4). */
+export const APP_SETTINGS_STORAGE_KEY = "synara:app-settings:v1";
 const SERVER_SETTINGS_MIGRATION_STORAGE_KEY = "synara:server-settings-migrated:v1";
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
@@ -412,7 +413,8 @@ export interface AppModelOption extends ProviderModelOption {
   isCustom: boolean;
 }
 
-const DEFAULT_APP_SETTINGS = AppSettingsSchema.makeUnsafe({});
+/** Exported so a non-React writer (Cedia's host preference sync) can start from the real defaults. */
+export const DEFAULT_APP_SETTINGS = AppSettingsSchema.makeUnsafe({});
 let serverSettingsMigrationInFlight = false;
 
 const PROVIDER_CUSTOM_MODEL_CONFIG: Partial<Record<ProviderKind, ProviderCustomModelConfig>> = {

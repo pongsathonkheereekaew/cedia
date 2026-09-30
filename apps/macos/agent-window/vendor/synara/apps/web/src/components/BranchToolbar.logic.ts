@@ -162,6 +162,28 @@ function deriveLocalBranchNameCandidatesFromRemoteRef(
   return [...candidates];
 }
 
+/**
+ * Branches offered when a draft worktree is choosing its starting revision.
+ * The host resolves this value as a local Git revision; remote labels are deliberately
+ * excluded so the picker cannot suggest a ref that only exists after a fetch.
+ */
+export function resolveBranchPickerBranches(
+  branches: ReadonlyArray<GitBranch>,
+  selectingWorktreeBase: boolean,
+): ReadonlyArray<GitBranch> {
+  return selectingWorktreeBase ? branches.filter((branch) => !branch.isRemote) : branches;
+}
+
+/** The configured local primary branch is the default worktree base. */
+export function resolveWorktreeBaseBranch(
+  branches: ReadonlyArray<GitBranch>,
+  currentBranch: string | null,
+): string | null {
+  return (
+    branches.find((branch) => !branch.isRemote && branch.isDefault)?.name ?? currentBranch
+  );
+}
+
 export function dedupeRemoteBranchesWithLocalMatches(
   branches: ReadonlyArray<GitBranch>,
 ): ReadonlyArray<GitBranch> {

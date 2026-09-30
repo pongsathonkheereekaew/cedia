@@ -173,6 +173,7 @@ export class OmpRpcClient {
 	#stdioCloseResolve: (() => void) | undefined;
 	#stdioClosed = false;
 	#closePromise: Promise<void> | undefined;
+	#ownerBridgeRequested = false;
 	#readyPromise: Promise<RpcReadyFrame> | undefined;
 	#readyResolve: ((frame: RpcReadyFrame) => void) | undefined;
 	#readyReject: ((error: Error) => void) | undefined;
@@ -268,6 +269,9 @@ export class OmpRpcClient {
 		const modelRoles = command === "cedia_get_model_roles" || command === "cedia_set_model_role";
 		const providerAuth =
 			command === "cedia_get_auth_providers" || command === "cedia_set_api_key" || command === "cedia_logout";
+		const capabilities = command === "cedia_get_capabilities" || command === "cedia_control";
+		const goal = command === "cedia_goal";
+		const plan = command === "cedia_plan";
 		if (!this.#cediaCommandAdvertised(command))
 			return Promise.reject(
 				new OmpClientStateError(
@@ -275,7 +279,13 @@ export class OmpRpcClient {
 						? "This OMP runtime does not advertise the Cedia model-role bridge"
 						: providerAuth
 							? "This OMP runtime does not advertise the Cedia provider-auth bridge"
-							: "This OMP runtime does not advertise Cedia virtual UI v1",
+							: capabilities
+								? "This OMP runtime does not advertise the Cedia capability bridge"
+								: goal
+									? "This OMP runtime does not advertise the Cedia goal bridge"
+									: plan
+										? "This OMP runtime does not advertise the Cedia plan bridge"
+										: "This OMP runtime does not advertise Cedia virtual UI v1",
 				),
 			);
 		return this.#sendCommand(command as unknown as RpcCommandType, payload as RpcCommandPayload<RpcCommandType>, options?.timeoutMs ?? this.#options.requestTimeoutMs, options?.onRequestId);
@@ -303,6 +313,7 @@ export class OmpRpcClient {
 		// provider credentials or unrelated variables into the child.  Callers that
 		// need PATH or locale values must provide them themselves.
 		const env = this.#options.env === undefined ? process.env : this.#options.env;
+		this.#ownerBridgeRequested = env.CEDIA_RPC_OWNER_BRIDGE === "1";
 		const executable = this.#options.executable ?? "omp";
 		const args = ["--mode", "rpc-ui", ...extraArgs];
 		let child: ChildProcessWithoutNullStreams;
@@ -451,9 +462,52 @@ export class OmpRpcClient {
 		const ready = this.#readyFrame;
 		if (!ready) return false;
 		if (command === "cedia_get_model_roles" || command === "cedia_set_model_role") return ready.cediaModelRolesVersion === 1;
+		// The turn bridge names submissions and reports the queue; its identities are simply
+		// absent on a runtime that never advertised it, so the command is refused here rather
+		// than sent to a process that would answer with an error.
+		if (command === "cedia_turn_queue") return ready.cediaTurnBridgeVersion === 1;
+		// Pending model/effort acceptance is its own bridge: a runtime can hold a revision for
+		// the next turn only when it says so, and the ordinary `set_model` path is unaffected.
+		if (command === "cedia_pending_model") return ready.cediaPendingModelVersion === 1;
+		// Goal mode is its own bridge (O07): the command reads OMP's own goal state and asks for
+		// the transitions `/goal` performs, so a runtime without it must answer with the gap
+		// rather than with a goal state a client would then draw.
+		if (command === "cedia_goal") return ready.cediaGoalVersion === 1;
+		if (command === "cedia_plan") return ready.cediaPlanVersion === 1;
 		if (command === "cedia_get_auth_providers" || command === "cedia_set_api_key" || command === "cedia_logout")
 			return ready.cediaAuthVersion === 1;
+		// The capability table and its controlled operations are one bridge: a runtime
+		// that cannot name the table cannot be asked to run an operation from it.
+		if (command === "cedia_get_capabilities" || command === "cedia_control") return ready.cediaCapabilitiesVersion === 1;
 		return ready.cediaVirtualUiVersion === 1;
+	}
+
+	/**
+	 * Whether the running OMP advertises Cedia's turn bridge (§2.4): it echoes the identity of
+	 * a named submission on that turn's boundaries and answers `cedia_turn_queue`. A runtime
+	 * without it still runs every command - the host then records its own acceptance order and
+	 * says so, instead of claiming OMP reported a queue it never reported.
+	 */
+	turnBridgeAdvertised(): boolean {
+		return this.#readyFrame?.cediaTurnBridgeVersion === 1;
+	}
+
+	/**
+	 * Whether the running OMP accepts a pending model/effort change (§2.4): it validates the
+	 * revision now and commits it at its own turn boundary. A runtime without it keeps the
+	 * ordinary model command, so the host never presents an unaccepted change as accepted.
+	 */
+	pendingModelAdvertised(): boolean {
+		return this.#readyFrame?.cediaPendingModelVersion === 1;
+	}
+
+	/**
+	 * Whether the running OMP advertises Cedia's capability table and `cedia_control` (§8.2 O04).
+	 * The two ship as one bridge: a runtime that cannot name its table cannot be asked to run an
+	 * operation from it, so a caller that sees `false` reports the gap instead of inventing one.
+	 */
+	capabilitiesAdvertised(): boolean {
+		return this.#readyFrame?.cediaCapabilitiesVersion === 1;
 	}
 
 	#sendCommand<C extends RpcCommandType>(
@@ -655,11 +709,22 @@ export class OmpRpcClient {
 			return;
 		}
 		try {
+			// An instrumented owner survives stdin EOF so a crashed host can reattach.
+			// Explicit close must ask that owner to dispose itself before ending stdio;
+			// SIGTERM remains a bounded fallback if the private shutdown frame is lost.
+			if (this.#ownerBridgeRequested && this.#phase === "closing" && !child.stdin.destroyed && !child.stdin.writableEnded) {
+				try {
+					child.stdin.write(`${JSON.stringify({ type: "cedia_owner_shutdown", id: `cedia_close_${++processRequestSequence}` })}\n`);
+				} catch {
+					// EOF and the bounded signal fallback still reap an unresponsive child.
+				}
+			}
 			if (!child.stdin.destroyed && !child.stdin.writableEnded) child.stdin.end();
 		} catch {
 			// Continue with process reaping if EOF cannot be written.
 		}
-		await this.#waitForExit(this.#options.shutdownGraceMs);
+		const shutdownGraceMs = this.#ownerBridgeRequested ? Math.max(5_000, this.#options.shutdownGraceMs) : this.#options.shutdownGraceMs;
+		await this.#waitForExit(shutdownGraceMs);
 		if (!this.#hasExited(child)) {
 			try {
 				child.kill("SIGTERM");

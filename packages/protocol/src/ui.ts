@@ -1,7 +1,7 @@
 /**
  * Cedia's host↔client extension-UI contract.
  *
- * Wire shapes are copied from OMP v18.1.18 at
+ * Wire shapes are copied from OMP v18.4.3 at
  * `packages/coding-agent/src/modes/rpc/rpc-types.ts` (pinned by
  * `upstream-lock.json`).  That RPC can send exactly four interactive methods —
  * `select`, `confirm`, `input`, `editor` — six fire-and-forget presentation
@@ -79,6 +79,51 @@ export const UI_INTERACTIVE_METHODS: Readonly<Record<UiInteractiveMethod, true>>
  */
 export function isUiInteractiveMethod(method: string): method is UiInteractiveMethod {
 	return Object.prototype.hasOwnProperty.call(UI_INTERACTIVE_METHODS, method) && UI_INTERACTIVE_METHODS[method as UiInteractiveMethod] === true;
+}
+
+/**
+ * The presentation methods: notices a client renders without answering anything.
+ *
+ * Each one has a real parser in the task reducer, so a row carries the fields it
+ * declares instead of arriving as an anonymous frame.  A method outside this
+ * union is not a presentation Cedia knows, and saying so is what keeps an
+ * unknown row from being rendered as if it had been understood.
+ */
+export const UI_PRESENTATION_METHODS: Readonly<Record<UiPresentationMethod, true>> = {
+	notify: true,
+	setStatus: true,
+	setWidget: true,
+	setTitle: true,
+	set_editor_text: true,
+	open_url: true,
+};
+
+export type UiPresentationMethod = "notify" | "setStatus" | "setWidget" | "setTitle" | "set_editor_text" | "open_url";
+
+export function isUiPresentationMethod(method: string): method is UiPresentationMethod {
+	return Object.prototype.hasOwnProperty.call(UI_PRESENTATION_METHODS, method) && UI_PRESENTATION_METHODS[method as UiPresentationMethod] === true;
+}
+
+/** How Cedia carries one extension-UI method the pinned OMP can send (§8.2 O05). */
+export type UiMethodClass = "interactive" | "presentation" | "cancellation";
+
+/**
+ * Every extension-UI method, with the class that says which Cedia path carries it.
+ *
+ * The coverage gate reads this table instead of its own list: a method Cedia has
+ * not classified is a gap, and a classification can never disagree with the
+ * parsers above because adding a member here without one is a compile error.
+ */
+export const UI_METHOD_CLASSES: Readonly<Record<string, UiMethodClass>> = {
+	...Object.fromEntries(Object.keys(UI_INTERACTIVE_METHODS).map(method => [method, "interactive" as const])),
+	...Object.fromEntries(Object.keys(UI_PRESENTATION_METHODS).map(method => [method, "presentation" as const])),
+	// OMP cancels an outstanding request or element by id; Cedia carries it as the host's
+	// server-cancel notification, which clears the matching pending request.
+	cancel: "cancellation",
+};
+
+export function uiMethodClass(method: string): UiMethodClass | undefined {
+	return Object.prototype.hasOwnProperty.call(UI_METHOD_CLASSES, method) ? UI_METHOD_CLASSES[method] : undefined;
 }
 
 /**

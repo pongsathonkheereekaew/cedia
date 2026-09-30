@@ -57,7 +57,7 @@ import { layoutBoxes, layoutSashes, setSplitRatio } from "./layout-geometry.ts";
 import { buildPaneViews, rememberPaneTranscript, type PaneTranscriptCache, type PaneView } from "./pane-views.ts";
 import { announceSummary, motionTokens } from "./ui-a11y.ts";
 import { redactedDiagnostics } from "./diagnostics.ts";
-import { AGENTS_WINDOW_WORKSPACE, allThemeProvidingExtensionIds, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, type IdeLayoutSnapshot, type NativeDestination, type RetentionSnapshot } from "./workbench-mode.ts";
+import { AGENTS_WINDOW_WORKSPACE, themeProvidingExtensionIds, consumePendingNativeDestination, DEFAULT_IDE_LAYOUT, draftViewKey, isAgentsWindow, mergeAgentsWindowWorkspaceSettings, modeSwitchProof, normalizeIdeLayout, persistDestinationAcrossReload, queuePendingNativeDestination, rememberIdeChrome, resolveSnapshotThemeName, resolveStartupView, retentionReceipt, runWorkbenchCommands, switchWorkbenchMode, type IdeLayoutSnapshot, type NativeDestination, type RetentionSnapshot } from "./workbench-mode.ts";
 import { availabilityFromLists, routeErrorPage, validateRoute, type RouteErrorPage } from "./route-error.ts";
 import { applySettingsSection, beginSettingsDraft, previewResetOverride, settingsSourcePath, type ResetOverridePreview, type SettingsSectionDraft } from "./settings-revision.ts";
 import { OLDER_PAGES_NOTE } from "./history-page.ts";
@@ -87,15 +87,32 @@ import type { Command, Json, Project, Session } from "../../../packages/protocol
 
 import type { CediaTaskViewProviderApi } from "./provider-api.ts";
 import { errorMessage, asArray, workspacePath, hostSetupMessage, normalizeProject, normalizeSession, EVENT_PAGE_LIMIT, POLL_INTERVAL_MS, requestGit, HostSetupRequiredError } from "./task-runtime.ts";
+import { importLegacyExtensionDrafts, legacyDraftMigrationFromExtensionState } from "./agent-ui-state.ts";
+
+async function migrateLegacyDrafts(provider: CediaTaskViewProviderApi, client: CediaHostClient): Promise<void> {
+	const marker = provider.context.globalState.get<{ version?: unknown }>("cedia.drafts.migration");
+	if (marker?.version === 1) return;
+	provider.legacyDraftMigration ??= importLegacyExtensionDrafts(
+		(method, path, body) => client.requestApplication(method, path, body),
+		legacyDraftMigrationFromExtensionState(provider.context.globalState),
+	).catch(error => {
+		provider.legacyDraftMigration = undefined;
+		throw error;
+	});
+	await provider.legacyDraftMigration;
+}
 
 export const hostConcern: Partial<CediaTaskViewProviderApi> = {
 		async ensureClient(this: CediaTaskViewProviderApi): Promise<CediaHostClient> {
 				if (this.client) {
-					try {
-						await this.client.health();
+					const active = this.client;
+					try { await active.health(); } catch { if (this.client === active) this.client = undefined; }
+					if (this.client === active) {
+						try { await migrateLegacyDrafts(this, active); }
+						catch (error) { this.log.warn(`legacy draft migration remains pending: ${errorMessage(error)}`); }
 						if (this.state.connection !== "connected" && this.state.connection !== "running") this.setState({ type: "connection", status: "connected" });
-						return this.client;
-					} catch { this.client = undefined; }
+						return active;
+					}
 				}
 				this.setState({ type: "connection", status: "connecting" });
 				try {
@@ -118,6 +135,10 @@ export const hostConcern: Partial<CediaTaskViewProviderApi> = {
 						}
 					}
 					if (!this.client) throw new HostSetupRequiredError(`${hostSetupMessage(this.stateDir)} ${errorMessage(lastError)}`);
+				}
+				if (this.client) {
+					try { await migrateLegacyDrafts(this, this.client); }
+					catch (error) { this.log.warn(`legacy draft migration remains pending: ${errorMessage(error)}`); }
 				}
 				this.setState({ type: "connection", status: "connected", error: undefined });
 				this.startPolling();

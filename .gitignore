@@ -34,6 +34,19 @@ VSCode-*/
 # Local-only working data: shadow-eval corpora and run artifacts carry real prompts.
 .local/
 
+# Local runtime databases and advisor state created by development sessions.
+# Keep these files on disk; they are not application source or test fixtures.
+/agent.db
+/agent.db-shm
+/agent.db-wal
+/history.db
+/history.db-shm
+/history.db-wal
+/models.db
+/models.db-shm
+/models.db-wal
+/WATCHDOG.yml
+
 # Cedia's skill installer state (which skills are enabled, and at what revision). The policy that
 # belongs in git is `.agents/AGENTS.md`, which `~/.agents/AGENTS.md` points at; these two are
 # machine state that the installer rewrites.

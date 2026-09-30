@@ -5,8 +5,12 @@ Base: `ea1912fd6a05b80a56b2ad9b955075211deea521` (retained Cedia Code-OSS fork).
 `manifest.json` lists every patch and its digest; `scripts/prepare-desktop.ts`
 verifies the base revision and each digest before applying, deletes the
 `removals` paths, and writes a `.prepared.json` stamp so a second run over the
-same manifest short-circuits. The manifest is the whole patch set — 15 patches
-and 19 removals as of 2026-09-23 — and every paragraph below is backed by an
+same manifest short-circuits. When a later patch overlaps lines an earlier one
+added, the per-patch reverse-check cannot decide "already applied" on its own;
+the script then proves the whole set by undoing it, in reverse manifest order,
+over a mirror of the checkout's touched files and comparing the result with the
+pinned base byte for byte. The manifest is the whole patch set — 17 patches
+and 19 removals as of 2026-09-24 — and every paragraph below is backed by an
 entry in it. The dated notes at the end of this section are the only text about
 patches that no longer exist.
 
@@ -210,6 +214,38 @@ is never contributed (`when: ContextKeyExpr.false()`), and the three "open chat"
 actions (`workbench.action.chat.open`, and the two new-chat entry points) route to
 `cedia.openComposer`/`cedia.newTask` instead of the base chat widget. Other products
 built from this fork keep the base behavior.
+
+`0060-cedia-app-lifecycle.patch` gives Cedia one application lifetime owner. It calls
+the agent bundle's `installCediaMainProcessLifecycle` from the same place `0056`
+loads the bridge, and that module (a) joins the host's owner-authenticated quit into
+`lifecycleMainService.onWillShutdown`, so the host stops, its running tasks pause and
+its durable `stopped` receipt is written before the process exits instead of leaving a
+detached execution daemon behind, and (b) registers the packaged build as a macOS
+login item. The same patch reads the bundle's `shouldOpenFirstWindow` decision in
+`openFirstWindow`: a packaged login launch starts in the background - the host may
+run, but no work window opens and no task replays - while a CLI launch, `--agents`,
+a folder/file argument, a URL or a protocol link always opens its window. The bundle
+call is optional and the whole block is inside a try/catch, so a checkout without the
+bundle, or a bundle that predates this export, starts exactly as before.
+
+`0061-cedia-chat-action-returns.patch` repairs two return paths `0059` introduced in
+`chatActions.ts`: `if (product.nameShort === 'Cedia') return accessor.get(ICommandService)
+.executeCommand(...)` returned a value from some branches of an `async run()` that returns
+nothing on every other branch, which is `TS7030` under `noImplicitReturns`. The Cedia
+branch now awaits the command and returns. `0059` stays as history; this patch is appended
+so the reviewed set is what the checkout contains and `npm run typecheck-client` is clean
+again (measured 2026-09-24: 0 errors over `desktop/src`).
+
+`0062-cedia-quit-decision.patch` makes a deliberate Quit cancellable, which the pinned
+base does not support: `ILifecycleMainService.onBeforeShutdown` fires only after the
+quit is already recorded, so nothing on the main-process side could offer
+Stop-and-quit/Cancel before windows started closing (plan §2.7). The service gains
+`registerQuitDecider(decider)`, called from the same `before-quit` listener before
+`_quitRequested` is set and before `onBeforeShutdown` fires: a decider that answers
+`false` leaves the lifecycle exactly as it was - no window closes, no shutdown starts,
+and the next Quit asks again - while `true` lets that same quit continue. `app.ts`
+passes the service to the bundle's `installCediaMainProcessLifecycle`, which registers
+Cedia's decider; without the bundle the service behaves exactly as upstream.
 
 ## Removals
 

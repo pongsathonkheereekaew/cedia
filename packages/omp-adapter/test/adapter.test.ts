@@ -50,6 +50,17 @@ describe("OMP protocol framing", () => {
 		expect(() => decoder.push(Buffer.alloc(MAX_RPC_FRAME_BYTES + 1, 0x78))).toThrow(/1 MiB/);
 	});
 
+	it("decodes coalesced records, tolerates blank lines, and finishes without a trailing newline", () => {
+		// #1306 acceptance, CEDIA side: split header/body at every byte boundary,
+		// coalesced records in one callback, malformed frames fail loudly.
+		const decoder = new NdjsonFrameDecoder();
+		const first = decoder.push(Buffer.from('{"type":"a"}\n\n{"type":"b"}\n', "utf8"));
+		expect(first).toEqual([{ type: "a" }, {}, { type: "b" }]);
+		expect(() => decoder.push(Buffer.from('{"type":\n', "utf8"))).toThrow(/valid JSON/);
+		const tail = new NdjsonFrameDecoder();
+		expect(tail.push(Buffer.from('{"type":"c"}', "utf8"))).toEqual([]);
+		expect(tail.finish()).toEqual([{ type: "c" }]);
+	});
 	it("validates protocol-v2 chunk sequence and reassembled size", () => {
 		const decoder = new RpcFrameDecoder();
 		const json = JSON.stringify({ type: "future_event", preserved: "yes", payload: "x".repeat(MAX_RPC_FRAME_BYTES) });
@@ -77,12 +88,13 @@ describe("OMP protocol framing", () => {
 });
 
 describe("OmpRpcClient", () => {
-	it("exports the exact pinned 42-command contract", async () => {
+	it("exports the exact pinned 47-command contract", async () => {
 		const inventory = JSON.parse(
-			await readFile(new URL("../../../docs/maintenance/evidence/omp-rpc-2026-09-12/source-inventory.json", import.meta.url), "utf8"),
-		) as { rpcCommands: string[] };
-		expect([...RPC_COMMAND_TYPES] as string[]).toEqual(inventory.rpcCommands);
-		expect(RPC_COMMAND_TYPES).toHaveLength(42);
+			await readFile(new URL("../../../docs/maintenance/evidence/omp-complete-scope-2026-09-29/rpc.json", import.meta.url), "utf8"),
+		) as { commands: { name: string }[] };
+		const stock = inventory.commands.map(row => row.name).filter(name => !name.startsWith("cedia_"));
+		expect(new Set([...RPC_COMMAND_TYPES] as string[])).toEqual(new Set(stock));
+		expect(RPC_COMMAND_TYPES).toHaveLength(47);
 	});
 
 	it("requires rpc-ui ready, negotiates v2, and preserves unknown frames", async () => {
@@ -103,6 +115,31 @@ describe("OmpRpcClient", () => {
 		expect(ack.success).toBe(true);
 		expect(ack.command).toBe("get_state");
 		expect((ack.data as { fixture: string }).fixture).toBe("get_state");
+	});
+
+	it("gates cedia_plan on its ready marker and forwards its state frames", async () => {
+		const frames: Record<string, unknown>[] = [];
+		const client = await OmpRpcClient.start({
+			executable: fixture,
+			args: [],
+			env: { CEDIA_NODE: fixtureNode, CEDIA_FAKE_OMP_MODE: "plan" },
+			readyTimeoutMs: 2_000,
+			requestTimeoutMs: 1_000,
+			onFrame: frame => frames.push(frame),
+		});
+		children.push(client);
+		expect(client.readyFrame?.cediaPlanVersion).toBe(1);
+		const ack = await client.requestCedia("cedia_plan", { command: { op: "read" } });
+		expect(ack.data).toMatchObject({ changed: false, plan: { workflow: "iterative" } });
+		await new Promise(resolve => setTimeout(resolve, 20));
+		expect(frames.some(frame => frame.type === "cedia_plan_state")).toBe(true);
+		expect(frames.some(frame => frame.type === "cedia_plan_review")).toBe(true);
+		expect(frames.some(frame => frame.type === "cedia_plan_review_closed")).toBe(true);
+	});
+
+	it("refuses cedia_plan before dispatch when the ready marker is absent", async () => {
+		const client = await start("normal");
+		await expect(client.requestCedia("cedia_plan", { command: { op: "read" } })).rejects.toThrow(/plan bridge/);
 	});
 
 	it("rejects startup when negotiation ACK is coalesced with an invalid chunk", async () => {

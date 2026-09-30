@@ -102,6 +102,7 @@ import {
 import {
   normalizeHiddenSidebarNavItems,
   normalizeSidebarNavOrder,
+  sidebarNavItemVisible,
   type SidebarNavItemId,
 } from "../sidebarNavOrdering";
 import { isElectron } from "../env";
@@ -148,6 +149,7 @@ import {
 import { prefetchModelsForNewThread } from "../lib/providerModelPrefetch";
 import {
   hasReconciledServerProviderStatuses,
+  serverCapabilitiesQueryOptions,
   serverConfigQueryOptions,
   serverSettingsQueryOptions,
 } from "../lib/serverReactQuery";
@@ -164,6 +166,7 @@ import { useLatestProjectStore } from "../latestProjectStore";
 import { resolveThreadEnvironmentPresentation } from "../lib/threadEnvironment";
 import { dispatchThreadRename } from "../lib/threadRename";
 import { quotePosixShellArgument } from "../lib/shellQuote";
+import { useStableValue } from "~/hooks/useStableValue";
 import { DEFAULT_THREAD_TERMINAL_ID, type SidebarThreadSummary, type Thread } from "../types";
 import {
   applyAutomationEvent,
@@ -367,10 +370,11 @@ import { useThreadDetailPrewarm } from "../threadDetailPrewarm";
 import { hasThreadDetailResumeCursor } from "../threadDetailResumeCursors";
 import { retainThreadDetailSubscription } from "../threadDetailSubscriptionRetention";
 import { useWorkspacePathsStore } from "../workspacePathsStore";
-import type {
-  SidebarSearchAction,
-  SidebarSearchProject,
-  SidebarSearchThread,
+import {
+  areSidebarSearchThreadListsEqual,
+  type SidebarSearchAction,
+  type SidebarSearchProject,
+  type SidebarSearchThread,
 } from "./SidebarSearchPalette.logic";
 import { useFocusedChatContext } from "../focusedChatContext";
 import { waitForRecoverableProjectInReadModel } from "../lib/projectCreateRecovery";
@@ -893,6 +897,7 @@ function SidebarPrimaryAction({
             : cn(SIDEBAR_ROW_IDLE_TEXT_CLASS_NAME, SIDEBAR_ROW_HOVER_CLASS_NAME),
         )}
         aria-disabled={disabled || undefined}
+        aria-description={disabledReason}
         disabled={disabled}
         onClick={onClick}
         onMouseEnter={onMouseEnter}
@@ -1341,6 +1346,10 @@ export default function Sidebar() {
   const serverCwd = serverCwdQuery.data ?? null;
   const providerStatuses = useProviderStatusesForLocalConfig();
   const serverSettingsQuery = useQuery(serverSettingsQueryOptions());
+  // Cedia §3.B: the host tells this window which rows exist. An unloaded or unknown
+  // snapshot leaves every row in its current state; only an explicit
+  // `integration_missing` takes a row out of the sidebar.
+  const capabilitiesQuery = useQuery(serverCapabilitiesQueryOptions());
   // Declared next to `keybindings` (rather than further down) because the project-row render
   // helpers above read these labels. A const declared after the closure that captures it
   // widens its inferred mutable range and makes React Compiler drop the memoization of every
@@ -3270,9 +3279,11 @@ export default function Sidebar() {
   const visibleSidebarNavIds = useMemo(
     () =>
       sidebarNavOrder.filter(
-        (id) => !hiddenSidebarNavItems.has(id) || sidebarNavDescriptors[id].active,
+        (id) =>
+          sidebarNavItemVisible(id, capabilitiesQuery.data) &&
+          (!hiddenSidebarNavItems.has(id) || sidebarNavDescriptors[id].active),
       ),
-    [hiddenSidebarNavItems, sidebarNavDescriptors, sidebarNavOrder],
+    [capabilitiesQuery.data, hiddenSidebarNavItems, sidebarNavDescriptors, sidebarNavOrder],
   );
   const handleNavOrderDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -5184,6 +5195,7 @@ export default function Sidebar() {
           <SidebarGroup className="p-0">
             <SettingsSidebarNav
               activeSection={activeSettingsSection}
+              capabilities={capabilitiesQuery.data}
               onBack={handleBackToAppFromSettings}
               onSelectSection={(section, options) => {
                 void navigate({
@@ -5973,6 +5985,23 @@ export default function Sidebar() {
   );
 }
 
+// Message text projections keyed by the thread's message array, which the
+// store keeps reference-stable while that thread's messages are unchanged.
+const searchPaletteMessagesByThreadMessages = new WeakMap<
+  Thread["messages"],
+  SidebarSearchThread["messages"]
+>();
+
+function searchPaletteMessagesFor(thread: Thread): SidebarSearchThread["messages"] {
+  const cached = searchPaletteMessagesByThreadMessages.get(thread.messages);
+  if (cached) {
+    return cached;
+  }
+  const projected = thread.messages.map((message) => ({ text: message.text }));
+  searchPaletteMessagesByThreadMessages.set(thread.messages, projected);
+  return projected;
+}
+
 function SidebarSearchPaletteController(props: {
   open: boolean;
   mode: SidebarSearchPaletteMode;
@@ -6004,7 +6033,11 @@ function SidebarSearchPaletteController(props: {
   const importProviders: ReadonlyArray<ImportProviderKind> = (
     ["codex", "claudeAgent", "cursor", "opencode"] as const
   ).filter((provider, index) => supportsThreadImport(importProviderCapabilityQueries[index]?.data));
-  const searchPaletteThreads = useMemo<SidebarSearchThread[]>(() => {
+  // `threads` is rebuilt on every streamed store flush, so this projection is
+  // cheap by construction (message text is cached per thread-messages array
+  // below) and its result keeps the previous identity while nothing the
+  // palette shows has changed, sparing the palette a full rescore per token.
+  const rebuiltSearchPaletteThreads = useMemo<SidebarSearchThread[]>(() => {
     const threadById = new Map(threads.map((thread) => [thread.id, thread] as const));
     return sidebarDisplayThreads.flatMap((threadSummary) => {
       const thread = threadById.get(threadSummary.id);
@@ -6023,13 +6056,15 @@ function SidebarSearchPaletteController(props: {
           provider: thread.modelSelection.provider,
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
-          messages: thread.messages.map((message) => ({
-            text: message.text,
-          })),
+          messages: searchPaletteMessagesFor(thread),
         },
       ];
     });
   }, [props.projectById, sidebarDisplayThreads, threads]);
+  const searchPaletteThreads = useStableValue(
+    rebuiltSearchPaletteThreads,
+    areSidebarSearchThreadListsEqual,
+  );
 
   return (
     <SidebarSearchPalette

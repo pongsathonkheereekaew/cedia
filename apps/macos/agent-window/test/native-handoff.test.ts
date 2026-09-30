@@ -26,3 +26,24 @@ test("folder handoff reuses an existing project and task", async () => {
   await openNativeAgentIntent(api, undefined, undefined, id => navigated.push(id));
   expect(navigated).toEqual(["t"]);
 });
+
+test("window-local task navigation keeps each task runtime distinct without an OMP retarget command", async () => {
+  const navigated: string[] = [];
+  const reads: string[] = [];
+  const commands: unknown[] = [];
+  const api = { orchestration: {
+    getShellSnapshot: async () => { throw new Error("Task navigation must not enumerate or replace the task runtimes"); },
+    getThreadDetailSnapshot: async ({ threadId }: { threadId: string }) => { reads.push(threadId); return { id: threadId }; },
+    dispatchCommand: async (input: unknown) => { commands.push(input); return {}; },
+  } };
+
+  await openNativeAgentIntent(api, undefined, { scheme: "cedia", authority: "session", path: "/task-a" }, id => navigated.push(id));
+  await openNativeAgentIntent(api, undefined, { scheme: "cedia", authority: "session", path: "/task-b" }, id => navigated.push(id));
+
+  expect(reads).toEqual(["task-a", "task-b"]);
+  expect(navigated).toEqual(["task-a", "task-b"]);
+  expect(new Set(navigated).size).toBe(2);
+  // A window-local selection only changes which durable task is shown. It does not
+  // dispatch switch_session, abort, or any retarget command against either owner.
+  expect(commands).toEqual([]);
+});

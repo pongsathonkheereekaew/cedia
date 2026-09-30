@@ -8,7 +8,7 @@ import type {
   ProviderListSkillsResult,
   ProviderSkillsCatalogResult,
 } from "@synara/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "~/nativeApi";
 
 const EMPTY_SKILLS_RESULT: ProviderListSkillsResult = {
@@ -43,6 +43,8 @@ const EMPTY_PLUGINS_RESULT: ProviderListPluginsResult = {
   source: "empty",
   cached: false,
 };
+
+export const OMP_MODEL_CATALOG_REFRESH_INTERVAL_MS = 10_000;
 
 // The server admits at most two expensive reads at once, and agent discovery
 // uses the same budget. Keep model discovery to one request at a time so opening
@@ -273,6 +275,15 @@ export const providerDiscoveryQueryKeys = {
     [...providerDiscoveryQueryKeys.agentsForProvider(provider), binaryPath, cwd] as const,
 };
 
+/** Refetch only the active, shared OMP catalog when its composer picker opens. */
+export function refetchActiveOmpModelCatalog(queryClient: QueryClient): Promise<void> {
+  return queryClient.refetchQueries({
+    queryKey: providerDiscoveryQueryKeys.models("omp", null, null, null, null),
+    exact: true,
+    type: "active",
+  });
+}
+
 export function providerModelDiscoveryRetry(provider: ProviderKind): number {
   return provider === "cursor" ? 0 : provider === "droid" ? 2 : 3;
 }
@@ -399,6 +410,8 @@ export function providerModelsQueryOptions(input: {
   agentDir?: string | null;
   cwd?: string | null;
   enabled?: boolean;
+  /** Keep an active OMP picker catalog fresh while the picker is visible. */
+  refreshWhileObserved?: boolean;
   priority?: ProviderModelDiscoveryPriority | undefined;
 }) {
   const queryKey = providerDiscoveryQueryKeys.models(
@@ -448,6 +461,9 @@ export function providerModelsQueryOptions(input: {
           refetchInterval: (query) =>
             query.state.data?.error || query.state.error ? 30_000 : false,
         }
+      : {}),
+    ...(input.provider === "omp" && input.refreshWhileObserved
+      ? { refetchInterval: OMP_MODEL_CATALOG_REFRESH_INTERVAL_MS }
       : {}),
     ...(input.provider === "droid" ? { refetchOnWindowFocus: false } : {}),
     // 30min — matches NEW_THREAD_MODEL_PREFETCH_STALE_TIME_MS in

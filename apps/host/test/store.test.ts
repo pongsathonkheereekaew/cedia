@@ -12,6 +12,7 @@ import {
 	DurableStoreCommandTransitionError,
 	DurableStoreOwnershipError,
 	DurableStoreSchemaError,
+	DURABLE_STORE_SCHEMA_VERSION,
 	MAX_EVENT_PAGE_SIZE,
 	MAX_SESSION_EVENTS,
 	MAX_SESSION_EVENT_BYTES,
@@ -195,6 +196,40 @@ describe("DurableStore", () => {
 		const repaired = reopened.updateSession(session.id, { status: "stopped" });
 		reopened.recoverPending();
 		expect(reopened.getSession(session.id)).toEqual(repaired);
+	});
+
+	it("persists turn intents, keeps them idempotent by command, and never invents an outcome on recovery", () => {
+		const { dir, store } = temporaryStore(false);
+		const project = store.createProject({ path: projectDirectory(dir, "project") });
+		const session = store.createSession({ projectId: project.id, incarnation: "inc-1" });
+		const command = store.claimCommand({ sessionId: session.id, commandId: "turn-cmd", deviceId: "mac", incarnation: "inc-1", kind: "prompt", payload: { message: "one" } }).command;
+		const begun = store.beginTurnIntent({ sessionId: session.id, turnIntentId: "turn-1", commandId: command.commandId, deviceId: "mac", incarnation: "inc-1", payloadHash: command.payloadHash });
+		expect(begun.created).toBe(true);
+		expect(begun.intent).toMatchObject({ state: "prepared", acceptedSequence: 1 });
+
+		// A replay of that command is the same turn, and a different payload for it is a conflict.
+		const replay = store.beginTurnIntent({ sessionId: session.id, turnIntentId: "turn-1", commandId: command.commandId, deviceId: "mac", incarnation: "inc-1", payloadHash: command.payloadHash });
+		expect(replay.created).toBe(false);
+		expect(() => store.beginTurnIntent({ sessionId: session.id, turnIntentId: "turn-1", commandId: command.commandId, deviceId: "mac", incarnation: "inc-1", payloadHash: "sha256:different" })).toThrow(DurableStoreCommandConflictError);
+
+		const queued = store.transitionTurnIntent(session.id, "turn-1", "queued", { reason: "accepted" });
+		expect(queued).toMatchObject({ state: "queued", reason: "accepted" });
+		const second = store.claimCommand({ sessionId: session.id, commandId: "turn-cmd-2", deviceId: "mac", incarnation: "inc-1", kind: "prompt", payload: { message: "two" } }).command;
+		store.beginTurnIntent({ sessionId: session.id, turnIntentId: "turn-2", commandId: second.commandId, deviceId: "mac", incarnation: "inc-1", payloadHash: second.payloadHash });
+		store.transitionTurnIntent(session.id, "turn-2", "queued");
+		store.transitionTurnIntent(session.id, "turn-2", "running", { evidenceSequence: 7 });
+		expect(store.listOpenTurnIntents(session.id).map(intent => intent.turnIntentId)).toEqual(["turn-1", "turn-2"]);
+		store.close();
+		stores.splice(stores.indexOf(store), 1);
+
+		// Recovery pauses what never started and refuses to guess at what was running.
+		const reopened = DurableStore.open({ stateDir: dir });
+		stores.push(reopened);
+		expect(reopened.getTurnIntent(session.id, "turn-1")).toMatchObject({ state: "needs_continue" });
+		expect(reopened.getTurnIntent(session.id, "turn-2")).toMatchObject({ state: "outcome_unknown" });
+		// A paused turn may still be settled by evidence, and once settled it is final.
+		expect(reopened.transitionTurnIntent(session.id, "turn-1", "completed", { reason: "OMP reported the ending late" }).state).toBe("completed");
+		expect(() => reopened.transitionTurnIntent(session.id, "turn-1", "failed", { reason: "restated" })).toThrow(DurableStoreCommandTransitionError);
 	});
 
 	it("appends ordered per-session events and provides bounded cursor pagination", () => {
@@ -417,7 +452,78 @@ describe("DurableStore", () => {
 		const schema = reopenedDatabase.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string };
 		reopenedDatabase.close();
 		expect(columns.map(column => column.name)).toContain("pinned");
-		expect(schema.value).toBe("2");
+		expect(schema.value).toBe(String(DURABLE_STORE_SCHEMA_VERSION));
+	});
+
+	it("migrates a schema-2 journal by adding draft tables and preserves draft CAS", () => {
+		const dir = mkdtempSync(join(tmpdir(), "cedia-host-store-migrate-v2-"));
+		temporaryDirectories.push(dir);
+		const database = new DatabaseSync(join(dir, "journal.sqlite"));
+		database.exec(`
+			PRAGMA journal_mode=WAL;
+			CREATE TABLE metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+			CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)), archived INTEGER NOT NULL CHECK (archived IN (0, 1)), created_at TEXT NOT NULL);
+			CREATE TABLE sessions (id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, cwd TEXT NOT NULL, session_file TEXT NOT NULL, incarnation TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('idle', 'running', 'stopped', 'recovery_required')), pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)), archived INTEGER NOT NULL CHECK (archived IN (0, 1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+			CREATE TABLE commands (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, command_id TEXT NOT NULL, device_id TEXT NOT NULL, incarnation TEXT NOT NULL, kind TEXT NOT NULL, payload_json TEXT NOT NULL, payload_hash TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('claimed', 'acknowledged', 'completed', 'failed', 'outcome_unknown', 'not_dispatched')), ack_json TEXT, result_json TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (session_id, command_id));
+			CREATE TABLE events (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, incarnation TEXT NOT NULL, sequence INTEGER NOT NULL CHECK (sequence > 0), timestamp TEXT NOT NULL, frame_json TEXT NOT NULL, PRIMARY KEY (session_id, sequence));
+		`);
+		database.prepare("INSERT INTO metadata (key, value) VALUES ('schema_version', '2')").run();
+		database.close();
+
+		const store = DurableStore.open({ stateDir: dir, recover: false });
+		stores.push(store);
+		const draft = store.writeDraft({ deviceId: "mac", draftId: "legacy-draft", expectedRevision: 0, text: "preserved", attachments: [{ id: "a", kind: "text" }] });
+		expect(draft.outcome).toBe("created");
+		expect(store.readDraft("mac", "legacy-draft")).toMatchObject({ revision: 1, text: "preserved" });
+		// The upgrade kept the state it started from, named for that schema version.
+		const backup = join(dir, "journal.sqlite.schema-2.backup");
+		expect(statSync(backup).mode & 0o777).toBe(0o600);
+		const backupDatabase = new DatabaseSync(backup);
+		try {
+			expect(backupDatabase.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: "2" });
+		} finally {
+			backupDatabase.close();
+		}
+		const reopenedDatabase = new DatabaseSync(join(dir, "journal.sqlite"));
+		try {
+			expect(reopenedDatabase.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: String(DURABLE_STORE_SCHEMA_VERSION) });
+			expect(reopenedDatabase.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('drafts', 'draft_submissions') ORDER BY name").all()).toEqual([{ name: "draft_submissions" }, { name: "drafts" }]);
+		} finally { reopenedDatabase.close(); }
+	});
+
+	it("migrates the workspace cleanup projection idempotently and seeds legacy task identity", () => {
+		const dir = mkdtempSync(join(tmpdir(), "cedia-host-store-migrate-v5-"));
+		temporaryDirectories.push(dir);
+		const projectPath = projectDirectory(dir, "legacy-workspace-project");
+		const database = new DatabaseSync(join(dir, "journal.sqlite"));
+		database.exec(`
+			PRAGMA journal_mode=WAL;
+			CREATE TABLE metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+			CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, pinned INTEGER NOT NULL CHECK (pinned IN (0, 1)), archived INTEGER NOT NULL CHECK (archived IN (0, 1)), created_at TEXT NOT NULL);
+			CREATE TABLE sessions (id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, cwd TEXT NOT NULL, session_file TEXT NOT NULL, incarnation TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('idle', 'running', 'stopped', 'recovery_required')), pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)), archived INTEGER NOT NULL CHECK (archived IN (0, 1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+			CREATE TABLE commands (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, command_id TEXT NOT NULL, device_id TEXT NOT NULL, incarnation TEXT NOT NULL, kind TEXT NOT NULL, payload_json TEXT NOT NULL, payload_hash TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('claimed', 'acknowledged', 'completed', 'failed', 'outcome_unknown', 'not_dispatched')), ack_json TEXT, result_json TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (session_id, command_id));
+			CREATE TABLE events (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, incarnation TEXT NOT NULL, sequence INTEGER NOT NULL CHECK (sequence > 0), timestamp TEXT NOT NULL, frame_json TEXT NOT NULL, PRIMARY KEY (session_id, sequence));
+		`);
+		const projectId = "legacy-workspace-project-id";
+		const sessionId = "legacy-workspace-session-id";
+		const timestamp = "2026-09-12T00:00:00.000Z";
+		database.prepare("INSERT INTO metadata (key, value) VALUES ('schema_version', '5')").run();
+		database.prepare("INSERT INTO projects (id, path, name, pinned, archived, created_at) VALUES (?, ?, ?, 0, 0, ?)").run(projectId, projectPath, "Legacy workspace", timestamp);
+		database.prepare("INSERT INTO sessions (id, project_id, title, cwd, session_file, incarnation, status, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'legacy-incarnation', 'idle', 0, ?, ?)").run(sessionId, projectId, "Legacy task", projectPath, join(dir, "legacy.jsonl"), timestamp, timestamp);
+		database.close();
+
+		const store = DurableStore.open({ stateDir: dir, recover: false });
+		stores.push(store);
+		const metadata = store.getSession(sessionId)?.workspaceMetadata;
+		expect(metadata).toMatchObject({ taskId: sessionId, projectId, actualCwd: projectPath, cleanupGeneration: 0, cleanupState: "retained" });
+		store.close();
+		stores.splice(stores.indexOf(store), 1);
+
+		const reopened = DurableStore.open({ stateDir: dir, recover: false });
+		stores.push(reopened);
+		expect(reopened.getSession(sessionId)?.workspaceMetadata).toMatchObject({ taskId: sessionId, projectId, actualCwd: projectPath });
+		reopened.close();
+		stores.splice(stores.indexOf(reopened), 1);
 	});
 
 	it("enforces one host owner across processes and releases after a crash", async () => {

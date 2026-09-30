@@ -10,7 +10,7 @@ What lives here is the workspace identifier graph and the per-item evidence it c
 |---|---|
 | `requirement-graph.json` | The workspace identifier graph: 198 parents, derived from the retired baseline plans. `scripts/ci-validate.mjs` reads it on every gate run and enforces its schema and its evidence links. **Do not move, rename or reshape it.** |
 | `*-evidence.md` | Per-item evidence. Each file cited by a child node in the graph is linked from that node's `evidence` field. |
-| `command-map.md` | The shortcut and conflict policy, with `pending-runtime` markers still open. |
+| `command-map.md` | Historical shortcut/conflict baseline and implementation notes; current policy and open work live in the plan. |
 | `agent-corpus-baseline.json` | Raw rows behind `Q11-agent-baseline-evidence.md`. |
 
 ## Rules

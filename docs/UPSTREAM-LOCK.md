@@ -12,7 +12,7 @@ pinned external source; there is no second lock file anywhere in the repo.
 
 | Component | Repository | Revision | Role | License |
 |---|---|---|---|---|
-| OMP | `can1357/oh-my-pi` | `00085d4e7dfdcfbf302c122fa2682b410a0f43d1` | The harness: execution and transcript owner, RPC and tool contract | MIT |
+| OMP | `can1357/oh-my-pi` | `fc671eba383f2a7208500836673b485c0dc7073d` | The harness: execution and transcript owner, RPC and tool contract | MIT |
 | Cedia Code-OSS fork | `pongsathonkheereekaew/cedia` | `ea1912fd6a05b80a56b2ad9b955075211deea521` | Mac IDE build baseline; `patches/desktop/manifest.json` pins the same revision as `baseRevision` | MIT |
 | Paseo | `getpaseo/paseo` | `d1b705a0cd91617a5707fae25d80cb0be3057950` | Relay E2EE primitives only, via `@getpaseo/relay 0.8.0`; no other Paseo source is vendored | Apache-2.0, per-file with third-party exceptions |
 
@@ -22,8 +22,8 @@ plus `tweetnacl`, `base64-js` and `ws`).
 
 ## Runtime baseline
 
-- OMP baseline: **18.1.18**. `isSupportedOmpVersion()` in `packages/omp-adapter/src/types.ts`
-  accepts the baseline or a newer patch in the same minor line, and rejects other minors, older
+- OMP baseline: **18.4.3** (pin moved 2026-09-29 from 18.1.18; floor stays 18.1.18). `isSupportedOmpVersion()` in `packages/omp-adapter/src/types.ts`
+  accepts the baseline floor or any newer release, and rejects older
   versions and non-version strings. `scripts/prepare-omp-runtime.ts` still pins the exact revision
   because it builds the artifact that ships.
 - Cedia Code-OSS: pinned `ea1912fd…`; `scripts/prepare-desktop.ts` verifies the base revision and

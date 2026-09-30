@@ -5,6 +5,7 @@
 // Exports: SidebarActivityView
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -595,11 +596,20 @@ export function SidebarActivityView({
     () => new Map(),
   );
 
-  const isRealProject = (projectId: ProjectId) => projectById.get(projectId)?.kind === "project";
+  const isRealProject = useCallback(
+    (projectId: ProjectId) => projectById.get(projectId)?.kind === "project",
+    [projectById],
+  );
+  // The feed derivations below are pure and `threads` is reference-stable
+  // across most sidebar renders, so each is memoized on its own inputs instead
+  // of re-running passes and sorts over every activity thread per render.
   // Scope options and the unread sweep intentionally ignore the active scope:
   // the menu must keep offering every project, and "Mark all as read" means all.
-  const scopeOptions = collectActivityScopeOptions(threads, isRealProject);
-  const unreadThreads = collectUnreadActivityThreads(threads);
+  const scopeOptions = useMemo(
+    () => collectActivityScopeOptions(threads, isRealProject),
+    [isRealProject, threads],
+  );
+  const unreadThreads = useMemo(() => collectUnreadActivityThreads(threads), [threads]);
 
   const { scope: activeScope, projectFilterIds } = resolveActivityScope(
     scopeSelection,
@@ -609,26 +619,41 @@ export function SidebarActivityView({
     if (scopeSelection !== activeScope) setScopeSelection(activeScope);
   }, [activeScope, scopeSelection]);
 
-  const model = buildActivityViewModel({
-    threads,
-    pinnedThreadIdSet,
-    settledOverrideByThreadId,
-    projectFilterIds,
-  });
+  const model = useMemo(
+    () =>
+      buildActivityViewModel({
+        threads,
+        pinnedThreadIdSet,
+        settledOverrideByThreadId,
+        projectFilterIds,
+      }),
+    [pinnedThreadIdSet, projectFilterIds, settledOverrideByThreadId, threads],
+  );
   const scopedPinnedThreads = model.pinned;
-  const nowMs = Date.now();
-  const { priority: priorityThreads, seen: seenThreads } = splitPriorityActivityThreads(
-    model.active,
+  // Coarse clock so the date bucketing memo stays effective across renders that
+  // happen within the same minute; buckets are day-granular anyway.
+  const nowMs = Math.floor(Date.now() / 60_000) * 60_000;
+  // Cedia note: this tree splits priority threads before recency (absent
+  // upstream); the split stays pure and memoized on the same terms.
+  const { priority: priorityThreads, seen: seenThreads } = useMemo(
+    () => splitPriorityActivityThreads(model.active),
+    [model.active],
   );
-  const { recent: recentThreads, rest: remainingActiveThreads } = splitRecentActivityThreads(
-    seenThreads,
-    { nowMs },
+  const { recent: recentThreads, rest: remainingActiveThreads } = useMemo(
+    () => splitRecentActivityThreads(seenThreads, { nowMs }),
+    [nowMs, seenThreads],
   );
-  const dateBuckets = splitActivityThreadsByDateBucket(remainingActiveThreads, nowMs);
-  const projectGroups =
-    groupMode === "project"
-      ? groupActivityThreadsByProject(model.active, isRealProject, { nowMs })
-      : EMPTY_PROJECT_GROUPS;
+  const dateBuckets = useMemo(
+    () => splitActivityThreadsByDateBucket(remainingActiveThreads, nowMs),
+    [nowMs, remainingActiveThreads],
+  );
+  const projectGroups = useMemo(
+    () =>
+      groupMode === "project"
+        ? groupActivityThreadsByProject(model.active, isRealProject, { nowMs })
+        : EMPTY_PROJECT_GROUPS,
+    [groupMode, isRealProject, model.active, nowMs],
+  );
 
   const earlierPaging = resolveSidebarThreadListPaging({
     totalCount: dateBuckets.earlier.length,

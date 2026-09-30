@@ -1,7 +1,7 @@
 /**
  * Framing logic adapted from OMP's MIT-licensed
  * `packages/coding-agent/src/modes/rpc/rpc-frame.ts` at
- * `00085d4e7dfdcfbf302c122fa2682b410a0f43d1` (v18.1.18).
+ * `fc671eba383f2a7208500836673b485c0dc7073d` (v18.4.3).
  * The retained upstream notice is recorded in
  * `docs/maintenance/evidence/omp-rpc-2026-09-12/README.md`.
  */

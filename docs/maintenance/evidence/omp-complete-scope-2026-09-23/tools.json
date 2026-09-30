@@ -1,0 +1,75 @@
+{
+  "artifact": "omp-complete-scope-2026-09-23/tools",
+  "source": {
+    "root": "upstream/omp",
+    "revision": "00085d4e7dfdcfbf302c122fa2682b410a0f43d1",
+    "dirty_worktree": true,
+    "registry": "packages/coding-agent/src/tools/builtin-names.ts",
+    "factory": "packages/coding-agent/src/tools/index.ts"
+  },
+  "registry": {
+    "builtin": [
+      {"name":"read","family":"files_documents_media","condition":"always registered; session/read and fetch policy still apply"},
+      {"name":"bash","family":"shell","condition":"bash.enabled"},
+      {"name":"edit","family":"files","condition":"always registered; session policy applies"},
+      {"name":"ast_grep","family":"ast_code_search","condition":"astGrep.enabled and grep is requested/available"},
+      {"name":"ast_edit","family":"ast_code_edit","condition":"astEdit.enabled and edit is requested/available"},
+      {"name":"ask","family":"user_interaction","condition":"ask.enabled and interactive UI/prompt callback exists"},
+      {"name":"debug","family":"debugging","condition":"debug.enabled"},
+      {"name":"eval","family":"javascript_python_execution","condition":"an enabled JS or Python eval backend exists"},
+      {"name":"github","family":"github","condition":"github.enabled and GitHub/gh integration is available"},
+      {"name":"glob","family":"filesystem_search","condition":"glob.enabled"},
+      {"name":"grep","family":"text_search","condition":"grep.enabled"},
+      {"name":"lsp","family":"language_intelligence","condition":"enableLsp and lsp.enabled"},
+      {"name":"checkpoint","family":"session_recovery","condition":"checkpoint.enabled and session depth/request rules allow it"},
+      {"name":"rewind","family":"session_recovery","condition":"checkpoint.enabled and session depth/request rules allow it"},
+      {"name":"context_notes","family":"context_management","condition":"compaction.experimentalContextManagement and valid session manager"},
+      {"name":"new_context","family":"context_management","condition":"compaction.experimentalContextManagement and valid session manager"},
+      {"name":"security_scan","family":"security","condition":"security.enabled"},
+      {"name":"task","family":"subagents","condition":"recursion/agent depth permits spawning"},
+      {"name":"hub","family":"agenthub_peers_processes_jobs","condition":"unrestricted session, IRC/AgentHub enabled"},
+      {"name":"todo","family":"planning_todos","condition":"todo.enabled; prewalk gating may apply while yield is active"},
+      {"name":"web_search","family":"web_search","condition":"web_search.enabled and selected provider/auth can run"},
+      {"name":"write","family":"files","condition":"always registered; device/session transport policy applies"},
+      {"name":"memory_edit","family":"memory","condition":"memory backend is mnemopi"},
+      {"name":"retain","family":"memory","condition":"memory backend is hindsight or mnemopi"},
+      {"name":"recall","family":"memory","condition":"memory backend is hindsight or mnemopi"},
+      {"name":"reflect","family":"memory","condition":"memory backend is hindsight or mnemopi"},
+      {"name":"learn","family":"autolearn_skills","condition":"autolearn.enabled and memory backend is local, hindsight, or mnemopi"},
+      {"name":"manage_skill","family":"autolearn_skills","condition":"autolearn.enabled"}
+    ],
+    "hidden": [
+      {"name":"think","family":"external_thinking","condition":"externalThinking enabled and selected model supports it"},
+      {"name":"yield","family":"session_control","condition":"hidden control tool; injected according to session/steering mode"},
+      {"name":"goal","family":"goal_lifecycle","condition":"goal.enabled, unrestricted, and goal state rules allow it"}
+    ],
+    "aliases": {"search":"grep", "find":"glob"}
+  },
+  "dynamic": [
+    {"name":"browser","kind":"eval_prelude","family":"browser","condition":"eval active and browser.enabled; backend resolves headless/CDP/relay/cmux"},
+    {"name":"computer","kind":"eval_prelude","family":"desktop_computer_use","condition":"eval active and computer.enabled"},
+    {"name":"generate_image","kind":"custom_tool","family":"image_generation","condition":"unrestricted session, generate_image.enabled, requested/allowed, and provider/model returns image tools"},
+    {"name":"tts","kind":"custom_tool","family":"speech_tts","condition":"speechgen.enabled"},
+    {"name":"mcp__<server>_<tool>","kind":"mcp_tool","family":"mcp","condition":"MCP server config discovered, connection/catalog active, and tool is not restricted/deferred"},
+    {"name":"<custom-or-extension-name>","kind":"custom_or_extension","family":"extensions","condition":"discovered from capability providers, .omp/tools, compatible roots, plugin packages, or explicit paths; builtin collisions rejected"}
+  ],
+  "discovery_rule": "BUILTIN_TOOLS/HIDDEN_TOOLS remain the canonical static registry. createTools applies settings, session depth, provider/backend availability, and restricted-session policy. Eval preludes are JS/Python globals and never model tool names. Custom/extension tools are loaded per session/subagent. MCP tools are canonicalized as mcp__<server>_<tool> and may be deferred/presented via xd://. No dynamic surface creates another transcript or execution owner.",
+  "families": {
+    "native_shell_python_ast_lsp": ["bash","eval","ast_grep","ast_edit","lsp"],
+    "native_browser_desktop": ["browser","computer"],
+    "native_documents_media": ["read","write","edit"],
+    "native_search": ["glob","grep","web_search","github"],
+    "native_planning_recovery": ["todo","goal","checkpoint","rewind","context_notes","new_context"],
+    "native_subagents_agenthub_jobs": ["task","hub"],
+    "native_memory_learning": ["memory_edit","retain","recall","reflect","learn","manage_skill"],
+    "dynamic_image_speech": ["generate_image","tts"],
+    "dynamic_mcp_extensions": ["mcp__<server>_<tool>","<custom-or-extension-name>"],
+    "hidden_control": ["think","yield"]
+  },
+  "cedia_boundary": {
+    "omp_owns": ["execution","provider_auth","transcript","tool_registry","subagents","async_jobs","mcp","extensions","hooks","skills"],
+    "cedia_owns": ["Code-OSS_host","editor_dirty_buffer_bridge","workspace_and_project_ui","remote_transport","mobile_continuation","terminal_browser_computer_surfaces"],
+    "integration_seam": "packages/coding-agent/src/modes/rpc/rpc-types.ts plus host-tools.ts, host-uris.ts, and cedia-client-bridge.ts",
+    "rule": "Adapt the existing OMP RPC/session seam; do not add a second harness or duplicate tool/job/transcript ownership."
+  }
+}

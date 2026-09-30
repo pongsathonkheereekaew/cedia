@@ -133,6 +133,66 @@ export function runGitSync(cwd: string, args: readonly string[], options: { inpu
 	});
 }
 
+/**
+ * A read-only git probe for facts a caller needs before it acts.
+ *
+ * Deliberately quiet: a folder that is not a repository is an ordinary answer here, not an
+ * error to print, and the caller only ever sees the trimmed value or `undefined`.
+ */
+export function probeGit(cwd: string, args: readonly string[]): string | undefined {
+	try {
+		const output = execFileSync("git", ["-C", cwd, ...args], {
+			encoding: "utf8",
+			maxBuffer: MAX_SYNC_OUTPUT_BYTES,
+			timeout: GIT_TIMEOUT_MS,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		const value = String(output).trim();
+		return value.length > 0 ? value : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Result of the conservative ancestry proof used by workspace cleanup. */
+export type GitAncestryResult = "proven" | "not_proven" | "unknown";
+
+/** Prove ancestry through Git without treating a command failure as a negative answer. */
+export function gitAncestry(cwd: string, ancestor: string, descendant: string): GitAncestryResult {
+	try {
+		runGitSync(cwd, ["merge-base", "--is-ancestor", ancestor, descendant]);
+		return "proven";
+	} catch (error) {
+		const status = error && typeof error === "object" && "status" in error ? (error as { status?: unknown }).status : undefined;
+		return status === 1 ? "not_proven" : "unknown";
+	}
+}
+
+export interface GitWorkingTreeFacts {
+	readonly tracked: boolean;
+	readonly untracked: boolean;
+	readonly ignored: boolean;
+}
+
+/** Read all user data classes without cleaning or changing the worktree. */
+export function gitWorkingTreeFacts(cwd: string): GitWorkingTreeFacts | undefined {
+	try {
+		const output = runGitSync(cwd, ["status", "--porcelain=v1", "--untracked-files=all", "--ignored"]).toString();
+		let tracked = false;
+		let untracked = false;
+		let ignored = false;
+		for (const line of output.split(/\r?\n/)) {
+			if (!line) continue;
+			if (line.startsWith("!!")) ignored = true;
+			else if (line.startsWith("??")) untracked = true;
+			else tracked = true;
+		}
+		return { tracked, untracked, ignored };
+	} catch {
+		return undefined;
+	}
+}
+
 /** Every directory a git request may name: the projects this host knows, plus its worktrees. */
 export function gitAuthorizedRoots(store: DurableStore): string[] {
 	const roots = store.listProjects({ includeArchived: true }).map(project => project.path);

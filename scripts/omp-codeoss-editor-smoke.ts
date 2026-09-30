@@ -15,6 +15,10 @@ const attestation = attestOmpRuntime(root, executable);
 const dir = await realpath(await mkdtemp(join(tmpdir(), "cedia-codeoss-editor-")));
 const workspace = join(dir, "workspace"); await mkdir(workspace);
 const path = join(workspace, "fixture.txt"); await writeFile(path, "disk original\n");
+const stateDir = join(dir, "host");
+await mkdir(join(workspace, ".vscode"));
+await writeFile(join(workspace, ".vscode", "settings.json"), JSON.stringify({ "cedia.hostStateDir": stateDir }, null, 2) + "\n");
+const interactiveApproval = process.env.CEDIA_INTERACTIVE_APPROVAL === "1";
 const check = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
 let requests = 0;
 let modelFailure: unknown;
@@ -43,12 +47,12 @@ const model = createServer(async (req, res) => {
 await new Promise<void>(resolve => model.listen(0, "127.0.0.1", resolve));
 const address = model.address(); if (!address || typeof address === "string") throw new Error("No fixture port");
 await writeFile(join(dir, "models.yml"), `providers:\n  cedia-fixture:\n    baseUrl: http://127.0.0.1:${address.port}/v1\n    auth: none\n    api: openai-completions\n    models:\n      - id: editor-fixture\n        name: Cedia local editor fixture\n        reasoning: false\n        input: [text]\n        cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0}\n        contextWindow: 128000\n        maxTokens: 4096\n`);
-const stateDir = join(dir, "host");
 const server = await startHostServer({ stateDir, ompExecutable: executable, editorBridge: true,
   ompEnv: { PATH: "/usr/bin:/bin", HOME: dir, PI_CODING_AGENT_DIR: dir, PI_EDIT_VARIANT: "replace", PI_NOTIFICATIONS: "off", TERM: "xterm-256color" },
   ompArgs: ["--no-skills", "--no-rules", "--no-extensions"] });
 const host = server.host;
 let serial = 0, approvals = 0;
+const observedApprovalTokens = new Set<string>();
 const waitMarker = async (name: string) => {
   const deadline = performance.now() + 10 * 60_000;
   while (performance.now() < deadline) {
@@ -64,15 +68,20 @@ try {
   for (const [name, payload] of [["set_model", { provider: "cedia-fixture", modelId: "editor-fixture" }], ["set_auto_retry", { enabled: false }], ["set_auto_compaction", { enabled: false }]] as const)
     check((await command(name, payload)).status === "completed", `Setup ${name} failed`);
   console.log(JSON.stringify({ stage: "prepare-native-ui", fixture: dir, workspace, stateDir, path,
-    instructions: "Open workspace in Cedia with cedia.hostStateDir set above. Type unsaved original plus newline without saving; create ready marker." }));
+    instructions: "Open workspace in Cedia. Type unsaved original plus newline without saving; create ready marker." }));
   const run = async (message: string) => {
     const prompt = await command("prompt", { message });
-    const deadline = performance.now() + 60_000;
+    const deadline = performance.now() + (interactiveApproval ? 5 * 60_000 : 60_000);
     while (performance.now() < deadline && host.store.getCommand(session.id, prompt.commandId)?.status !== "completed") {
       if (modelFailure) throw modelFailure;
       for (const pending of host.pendingUi(session.id) as { token: string; request: { method: string } }[]) {
         check(pending.request.method === "confirm", "Unexpected fixture approval");
-        await host.respond(session.id, "fixture-owner", { commandId: `approve-${++approvals}`, incarnation: session.incarnation, token: pending.token, answer: true });
+        if (!observedApprovalTokens.has(pending.token)) {
+          observedApprovalTokens.add(pending.token);
+          approvals++;
+          if (interactiveApproval) console.log(JSON.stringify({ stage: "approve-in-native-ui", fixture: dir, tokenObserved: true }));
+        }
+        if (!interactiveApproval) await host.respond(session.id, "fixture-owner", { commandId: `approve-${approvals}`, incarnation: session.incarnation, token: pending.token, answer: true });
       }
       await new Promise(resolve => setTimeout(resolve, 20));
     }
@@ -88,7 +97,7 @@ try {
   await run("Read the fixture buffer after native Undo");
   check(requests === 6, "Missing post-Undo read");
   check(JSON.stringify(attestOmpRuntime(root, executable)) === JSON.stringify(attestation), "Runtime changed during acceptance");
-  const receipt = { capturedAt: new Date().toISOString(), realNativeEditor: true, scriptedModelOnly: true, paidModelCalls: 0, modelRequests: requests, ...attestation,
+  const receipt = { capturedAt: new Date().toISOString(), realNativeEditor: true, scriptedModelOnly: true, paidModelCalls: 0, modelRequests: requests, approvalMode: interactiveApproval ? "native-ui" : "fixture-owner", ...attestation,
     checks: ["native-dirty-read", "native-guarded-edit", "native-read-after-edit", "single-permission", "disk-unchanged", "native-undo-restores-dirty-text"] };
   const evidence = join(root, "docs/maintenance/evidence/omp-codeoss-editor-2026-09-13");
   await mkdir(evidence, { recursive: true }); await writeFile(join(evidence, "receipt.json"), JSON.stringify(receipt, null, 2) + "\n");

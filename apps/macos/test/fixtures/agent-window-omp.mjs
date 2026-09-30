@@ -1,14 +1,15 @@
 import readline from "node:readline";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 if (process.argv.includes("--version")) {
-  process.stdout.write("omp/18.1.18\n");
+  process.stdout.write("omp/18.4.3\n");
   process.exit(0);
 }
 const emit = frame => process.stdout.write(`${JSON.stringify(frame)}\n`);
 const model = { id: "fixture-model", name: "Fixture model", provider: "fixture", reasoning: true, thinking: ["low", "medium", "high"], contextWindow: 128000, maxTokens: 4096, input: ["text"] };
 const arg = name => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined;
+const raceGateDir = process.env.CEDIA_SEND_RACE_GATE_DIR;
 const forkSource = arg("--fork");
 const sessionFile = forkSource ? join(arg("--session-dir"), "fixture-fork.jsonl") : arg("--session");
 let messages = [];
@@ -33,7 +34,7 @@ let active;
 let thinkingLevel = "medium";
 const response = (command, data) => emit({ type: "response", command: command.type, id: command.id, success: true, data });
 emit({ type: "ready", protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1024 * 1024, maxReassembledFrameBytes: 64 * 1024 * 1024 });
-readline.createInterface({ input: process.stdin }).on("line", line => {
+readline.createInterface({ input: process.stdin }).on("line", async line => {
   const command = JSON.parse(line);
   switch (command.type) {
     case "negotiate_protocol": return response(command, { protocolVersion: command.protocolVersion });
@@ -65,6 +66,9 @@ readline.createInterface({ input: process.stdin }).on("line", line => {
       }
       return response(command, { model });
     case "set_thinking_level": thinkingLevel = command.level; return response(command, { level: thinkingLevel });
+    // The host treats a scheme it registered but the runtime did not echo as a refusal, so the
+    // fixture answers with the scheme names it installed, mirroring a compliant runtime.
+    case "set_host_uri_schemes": return response(command, { schemes: (command.schemes ?? []).map(entry => entry.scheme) });
     case "abort":
       if (active) clearTimeout(active);
       active = undefined;
@@ -72,7 +76,26 @@ readline.createInterface({ input: process.stdin }).on("line", line => {
       emit({ type: "agent_end", isTerminal: true, messages: [] });
       return;
     case "prompt": {
+      // Packaged race proof only: hold OMP's prompt ACK while a second real
+      // renderer commits a newer shared-draft revision. The gate is opt-in and
+      // lives under that proof's temporary directory.
+      if (raceGateDir && !existsSync(join(raceGateDir, "prompt-ack-released"))) {
+        mkdirSync(raceGateDir, { recursive: true });
+        writeFileSync(join(raceGateDir, "prompt-received.json"), JSON.stringify({
+          id: command.id,
+          text: command.message,
+          at: new Date().toISOString(),
+        }));
+        const waitForRelease = () => new Promise(resolve => {
+          const poll = () => existsSync(join(raceGateDir, "release-prompt-ack"))
+            ? resolve()
+            : setTimeout(poll, 10);
+          poll();
+        });
+        await waitForRelease();
+      }
       response(command, { accepted: true });
+      if (raceGateDir) writeFileSync(join(raceGateDir, "prompt-ack-released"), `${Date.now()}\n`);
       emit({ type: "agent_start" });
       const user = { role: "user", content: [{ type: "text", text: command.message }], timestamp: Date.now() };
       messages.push(user);

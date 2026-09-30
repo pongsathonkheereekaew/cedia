@@ -36,13 +36,20 @@ import {
   createInitialMobileState,
   isCacheFresh,
   parsePairingOffer,
+  isGatewayPairingOffer,
+  isLegacyRelayPairingOffer,
+  pairingTransportLabel,
   readCachedSnapshot,
+  readPairingSecrets,
   readStoredPairingOffer,
   reduceMobileState,
   restoreCachedSnapshot,
   revokePairing,
   savePairingSecrets,
-  createMobileRelayTransport,
+  createNativeGatewayTransport,
+  createWebGatewayTransport,
+  redeemGatewayEnrollment,
+  GatewayEnrollmentError,
   activityInboxBody,
   activityInboxFilterChips,
   activityInboxForSession,
@@ -58,6 +65,7 @@ import {
   type ClientTransport,
   type MobileTaskState,
   type PairingOffer,
+  type CediaGatewayPairingOffer,
   type PairingSecretStore,
   type CediaUiRequest,
   type PendingUiRequest,
@@ -419,7 +427,6 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
   const [showPairing, setShowPairing] = useState(!transport);
   const [pairedOffer, setPairedOffer] = useState<PairingOffer | null>(null);
   const [pairedTransport, setPairedTransport] = useState<ClientTransport | undefined>();
-  const relayClientRef = useRef<ReturnType<typeof createMobileRelayTransport>["client"] | null>(null);
   const [selectedView, setSelectedView] = useState<MobileInboxView>("tasks");
   const [activityInbox, setActivityInbox] = useState<readonly ActivityInboxItem[]>([]);
   const activityInboxRef = useRef(activityInbox);
@@ -431,7 +438,7 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
   const draftPersistPausedRef = useRef(false);
   const [appState, setAppState] = useState(AppState.currentState);
   const [syncing, setSyncing] = useState(false);
-  const [relayState, setRelayState] = useState<RelayReachabilityState | undefined>();
+  const [relayState] = useState<RelayReachabilityState | undefined>();
   const [pairingRevoked, setPairingRevoked] = useState(false);
   const [uiSheetOpen, setUiSheetOpen] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -449,7 +456,8 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [artifactViewer, setArtifactViewer] = useState<ArtifactReceipt | null>(null);
   const [showArtifactCapture, setShowArtifactCapture] = useState(false);
-  const activeTransport = transport ?? pairedTransport;
+  const webTransport = useMemo(() => Platform.OS === "web" ? createWebGatewayTransport() : undefined, []);
+  const activeTransport = transport ?? pairedTransport ?? webTransport;
   const api = useMemo(() => activeTransport ? new CediaApi({ transport: activeTransport }) : null, [activeTransport]);
   const insets = useSafeAreaInsets();
 
@@ -559,53 +567,41 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
     setShowFileEditor(false);
   }, [state.session?.id, state.session?.incarnation]);
 
-  useEffect(() => {
-    if (transport || pairedOffer) return;
-    let cancelled = false;
-    void readStoredPairingOffer(secretStore).then(offer => {
-      if (cancelled || !offer) return;
-      setPairedOffer(offer);
-      setShowPairing(false);
-    });
-    return () => { cancelled = true; };
-  }, [pairedOffer, secretStore, transport]);
-
   const setConnection = useCallback((status: MobileTaskState["connection"], error?: string) => {
     dispatch({ type: "connection", status, error });
   }, []);
 
-  // A pasted/scan offer immediately becomes the real encrypted relay client.
-  // The prop seam remains available for the host app's injected worker, while
-  // an absent prop never pretends that the connection is ready.
   useEffect(() => {
-    if (transport || !pairedOffer) {
-      relayClientRef.current?.close(1000, "Transport replaced");
-      relayClientRef.current = null;
+    if (transport || pairedOffer || Platform.OS === "web") return;
+    let cancelled = false;
+    void readStoredPairingOffer(secretStore).then(async offer => {
+      if (cancelled || !offer) return;
+      setPairedOffer(offer);
+      setShowPairing(false);
+      if (!isGatewayPairingOffer(offer)) return;
+      const secrets = await readPairingSecrets(secretStore, offer.serverId);
+      if (cancelled || !secrets) return;
+      try {
+        setPairedTransport(createNativeGatewayTransport({ endpoint: offer.gatewayOrigin, token: secrets.deviceToken }));
+      } catch (error) {
+        setConnection("offline", error instanceof Error ? error.message : String(error));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pairedOffer, secretStore, transport, setConnection]);
+
+  // Legacy Paseo offers are retained for migration but are never armed. A
+  // gateway offer only becomes active after its one-shot enrollment succeeds.
+  useEffect(() => {
+    if (transport || !pairedOffer || !isGatewayPairingOffer(pairedOffer)) {
       setPairedTransport(undefined);
-      setRelayState(undefined);
       return;
     }
-    let relay: ReturnType<typeof createMobileRelayTransport>;
     try {
-      relay = createMobileRelayTransport({
-        offer: pairedOffer,
-        onStateChange: nextRelayState => {
-          setRelayState(nextRelayState);
-          if (nextRelayState === "connecting") setConnection("reconnecting");
-          else if (nextRelayState === "open") setConnection("connected");
-          else if (nextRelayState === "idle" || nextRelayState === "closed") setConnection("offline");
-        },
-      });
+      if (Platform.OS === "web") setPairedTransport(createWebGatewayTransport());
     } catch (error) {
       setConnection("offline", error instanceof Error ? error.message : String(error));
-      return;
     }
-    relayClientRef.current = relay.client;
-    setPairedTransport(relay.transport);
-    return () => {
-      relay.client.close(1000, "Pairing changed");
-      if (relayClientRef.current === relay.client) relayClientRef.current = null;
-    };
   }, [pairedOffer, transport, setConnection]);
 
   const refreshProjects = useCallback(async (preferredProjectId?: string) => {
@@ -1246,13 +1242,41 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
 
   const importOffer = useCallback(async (offer: PairingOffer) => {
     try {
-      await savePairingSecrets(secretStore, offer);
-      setPairedOffer(offer);
+      if (isLegacyRelayPairingOffer(offer)) {
+        // Migration records are deliberately retained for the owner, but the
+        // selected transport cannot be activated from an old Paseo offer.
+        if (Platform.OS !== "web") await savePairingSecrets(secretStore, offer);
+        setPairedOffer(offer);
+        setPairedTransport(undefined);
+        setPairingRevoked(false);
+        setShowPairing(false);
+        Alert.alert("Legacy relay retained", "This Paseo relay pairing is kept for migration but stays inactive. Pair this Mac again through its Tailscale gateway.");
+        return;
+      }
+      const gateway = offer as CediaGatewayPairingOffer;
+      const enrollment = await redeemGatewayEnrollment({
+        endpoint: gateway.gatewayOrigin,
+        code: gateway.enrollmentCode,
+        pin: gateway.enrollmentPin,
+        name: Platform.OS === "web" ? "Cedia web" : "Cedia iPhone",
+        web: Platform.OS === "web",
+      });
+      if (Platform.OS !== "web") {
+        await savePairingSecrets(secretStore, gateway, {
+          deviceId: enrollment.deviceId,
+          deviceToken: enrollment.deviceToken,
+          gatewayCsrf: enrollment.csrf,
+        });
+      }
+      setPairedOffer({ ...gateway, enrollmentCode: undefined, enrollmentPin: undefined });
+      if (Platform.OS === "web") setPairedTransport(createWebGatewayTransport());
+      else setPairedTransport(createNativeGatewayTransport({ endpoint: gateway.gatewayOrigin, token: enrollment.deviceToken }));
       setPairingRevoked(false);
       setShowPairing(false);
-      Alert.alert("Mac paired", "Your credentials stay protected on this phone. Cedia will keep the same Mac workspace available here.");
+      Alert.alert("Mac paired", `${pairingTransportLabel(gateway)} · ${gateway.gatewayOrigin}. Your controller credential stays protected on this device.`);
     } catch (error) {
-      Alert.alert("Pairing failed", error instanceof Error ? error.message : String(error));
+      const message = error instanceof GatewayEnrollmentError ? error.message : error instanceof Error ? error.message : String(error);
+      Alert.alert("Pairing failed", message);
     }
   }, [secretStore]);
 
@@ -1261,8 +1285,6 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
     if (!offer) return;
     try {
       await revokePairing(secretStore, offer.serverId);
-      relayClientRef.current?.close(1000, "Pairing revoked");
-      relayClientRef.current = null;
       setPairedTransport(undefined);
       setPairedOffer(null);
       setPairingRevoked(true);
@@ -1726,8 +1748,9 @@ function SettingsPanel(props: {
                     {props.pairedOffer ? (
                       <>
                         <Text style={props.styles.cardTitle}>{props.pairedOffer.serverId}</Text>
-                        <Text style={props.styles.cardSubtitle}>{props.pairedOffer.relayEndpoint}</Text>
-                        <Text style={props.styles.cardSubtitle}>Revoke deletes pairing secrets stored on this phone. The Mac is not told — there is no host revoke receipt.</Text>
+                        <Text style={props.styles.cardSubtitle}>{pairingTransportLabel(props.pairedOffer)}</Text>
+                        <Text style={props.styles.cardSubtitle}>{isGatewayPairingOffer(props.pairedOffer) ? props.pairedOffer.gatewayOrigin : props.pairedOffer.relayEndpoint}</Text>
+                        <Text style={props.styles.cardSubtitle}>{isLegacyRelayPairingOffer(props.pairedOffer) ? "Legacy relay records stay inert. Pair again through the Mac's Tailscale gateway to connect." : "Revoke deletes pairing secrets stored on this device. The Mac is not told — there is no host revoke receipt."}</Text>
                         <Pressable onPress={props.onRevokePairing} style={props.styles.denyButton} accessibilityRole="button" accessibilityLabel="Revoke pairing">
                           <Text style={props.styles.denyButtonText}>Revoke</Text>
                         </Pressable>
@@ -2282,7 +2305,7 @@ function PairingSheet(props: { visible: boolean; styles: ReturnType<typeof makeS
     setScan(false);
   };
   const animationType = useModalAnimation("slide");
-  const fingerprint = reviewOffer ? pairingPublicKeyFingerprint(reviewOffer.daemonPublicKeyB64) : "";
+  const fingerprint = reviewOffer && isLegacyRelayPairingOffer(reviewOffer) ? pairingPublicKeyFingerprint(reviewOffer.daemonPublicKeyB64) : "";
   return (
     <Modal visible={props.visible} transparent animationType={animationType} onRequestClose={close}>
       <View style={props.styles.modalBackdrop}>
@@ -2299,10 +2322,11 @@ function PairingSheet(props: { visible: boolean; styles: ReturnType<typeof makeS
           </View>
           {reviewOffer ? (
             <>
-              <Text style={props.styles.uiMessage}>Confirm this is the Mac you scanned. Import stores pairing secrets on this phone only.</Text>
+              <Text style={props.styles.uiMessage}>Confirm this is the Mac you scanned. Import uses the selected private transport and keeps controller credentials on this device only.</Text>
               <Text style={props.styles.cardTitle}>{reviewOffer.serverId}</Text>
-              <Text style={props.styles.cardSubtitle}>Fingerprint {fingerprint}</Text>
-              <Text style={props.styles.cardSubtitle}>{reviewOffer.relayEndpoint}</Text>
+              <Text style={props.styles.cardSubtitle}>{pairingTransportLabel(reviewOffer)}</Text>
+              {isLegacyRelayPairingOffer(reviewOffer) ? <Text style={props.styles.cardSubtitle}>Fingerprint {fingerprint}</Text> : <Text style={props.styles.cardSubtitle}>{reviewOffer.deviceName}</Text>}
+              <Text style={props.styles.cardSubtitle}>{isGatewayPairingOffer(reviewOffer) ? reviewOffer.gatewayOrigin : reviewOffer.relayEndpoint}</Text>
               {error ? <Text style={props.styles.errorText}>{error}</Text> : null}
               <View style={props.styles.uiActions}>
                 <Pressable onPress={() => setReviewOffer(null)} style={props.styles.secondaryButton} accessibilityRole="button" accessibilityLabel="Cancel">
@@ -2315,7 +2339,7 @@ function PairingSheet(props: { visible: boolean; styles: ReturnType<typeof makeS
             </>
           ) : (
             <>
-              <Text style={props.styles.uiMessage}>Scan the private QR from Cedia on your Mac, or paste its offer here. Your credentials stay protected on this phone.</Text>
+              <Text style={props.styles.uiMessage}>Scan the private QR from Cedia on your Mac, or paste its offer here. Legacy Paseo offers remain inert; the selected path is the Tailscale gateway.</Text>
               {scan ? (
                 <View style={props.styles.cameraBox}>
                   {permission?.granted ? (

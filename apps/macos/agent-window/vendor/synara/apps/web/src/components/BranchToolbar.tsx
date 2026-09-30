@@ -40,6 +40,7 @@ import {
   BranchToolbarBranchSelector,
   type BranchSelectorVariant,
 } from "./BranchToolbarBranchSelector";
+import { WorktreeDirtyFilePicker } from "./WorktreeDirtyFilePicker";
 import {
   RUNTIME_AUTO_ACCENT_CLASS_NAME,
   RUNTIME_FULL_ACCESS_ACCENT_CLASS_NAME,
@@ -401,6 +402,7 @@ export default function BranchToolbar({
           branch,
           worktreePath,
           ...nextAssociatedWorktree,
+          ...(patch.dirtyFiles !== undefined ? { dirtyFiles: patch.dirtyFiles } : {}),
         });
         return;
       }
@@ -413,6 +415,7 @@ export default function BranchToolbar({
         branch,
         worktreePath,
         envMode: nextDraftEnvMode,
+        ...(patch.dirtyFiles !== undefined ? { dirtyFiles: patch.dirtyFiles } : {}),
       });
     },
     [
@@ -548,6 +551,18 @@ export default function BranchToolbar({
             variant={variant}
             {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
             {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+          />
+        ) : null}
+        {!hasServerThread && effectiveEnvMode === "worktree" ? (
+          /* Dirty-file selection is a first-worktree-send concern only: live threads carry
+             the worktree they were created with, and the host refuses a selection outside
+             creation. The picker reads the checkout's git status and writes the draft
+             workspace the send pipeline promotes into thread.create. */
+          <WorktreeDirtyFilePicker
+            key={`dirty-${threadId}`}
+            cwd={branchProjectCwd ?? activeProject?.cwd ?? null}
+            selection={draftThread?.dirtyFiles ?? null}
+            onSetThreadWorkspace={setThreadWorkspace}
           />
         ) : null}
       </div>

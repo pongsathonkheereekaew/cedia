@@ -36,6 +36,11 @@ import {
 } from "../ChatView.logic";
 import { toastManager } from "../ui/toast";
 import type { ChatTurnSubmissionInput } from "./chatSendTypes";
+import {
+  clearSelectedSlashCommandAfterSend,
+  selectedSlashCommandForSend,
+  selectedSlashQueueRefusal,
+} from "./chatSendTypes";
 import { handleChatAutomationSend } from "./handleChatAutomationSend";
 import { prepareChatSendWorkspace } from "./prepareChatSendWorkspace";
 import {
@@ -49,6 +54,7 @@ import { getThreadFromState } from "../../threadDerivation";
 
 export function useChatTurnSubmission({
   threadId,
+  selectedSlashCommandRef,
   hasLiveTurn,
   lateComposerSendHandlersRef,
   activeThread,
@@ -319,6 +325,28 @@ export function useChatTurnSubmission({
         queuedChatTurn === null ? (composerEditorRef.current?.readSnapshot() ?? null) : null;
       let promptForSend =
         queuedChatTurn?.prompt ?? liveComposerSnapshot?.value ?? promptRef.current;
+      const selectedSlashCommandName =
+        queuedChatTurn === null
+          ? useComposerDraftStore.getState().draftsByThreadId[activeThread.id]
+              ?.selectedSlashCommand ?? null
+          : null;
+      const selectedSlashCommandForDraft = selectedSlashCommandName
+        ? { threadId: activeThread.id, name: selectedSlashCommandName }
+        : null;
+      // The shared draft is authoritative. This recovers menu intent after reload or
+      // when another Mac window committed the draft, while clearing any stale local ref.
+      selectedSlashCommandRef.current = selectedSlashCommandForDraft;
+      const selectedSlashQueueError = selectedSlashQueueRefusal({
+        selected: selectedSlashCommandForDraft,
+        threadId: activeThread.id,
+        text: promptForSend,
+        hasQueueableLiveTurn,
+        dispatchMode,
+      });
+      if (selectedSlashQueueError) {
+        setThreadError(activeThread.id, selectedSlashQueueError);
+        return false;
+      }
       let composerImagesForSend =
         queuedChatTurn?.images ??
         useComposerDraftStore.getState().draftsByThreadId[activeThread.id]?.images ??
@@ -467,6 +495,11 @@ export function useChatTurnSubmission({
         const handledSlashCommand =
           await lateSendHandlers.handleStandaloneSlashCommand(trimmedPromptForSend);
         if (handledSlashCommand) {
+          // The native UI consumed this draft; its menu provenance must not tag a later draft.
+          if (selectedSlashCommandRef.current?.threadId === activeThread.id) {
+            selectedSlashCommandRef.current = null;
+          }
+          useComposerDraftStore.getState().setSelectedSlashCommand(activeThread.id, null);
           // A slash command (e.g. /clear) consumes the composer, so abandon any in-progress
           // automation setup rather than leaving a stale banner/request behind.
           pendingAutomationConversationRef.current = null;
@@ -736,6 +769,11 @@ export function useChatTurnSubmission({
         effort: selectedPromptEffortForSend,
         text: outgoingTextSeed,
       });
+      const selectedSlashCommand = selectedSlashCommandForSend(
+        selectedSlashCommandForDraft,
+        threadIdForSend,
+        outgoingMessageText,
+      );
       const mentionedSkillsForSend = filterPromptSkillReferences(
         outgoingMessageText,
         selectedComposerSkillsForSend,
@@ -837,7 +875,7 @@ export function useChatTurnSubmission({
         scheduleComposerFocus();
       }
 
-      return executePreparedTurn({
+      const sent = await executePreparedTurn({
         nextThreadEnvMode,
         nextThreadBranch,
         nextThreadWorktreePath,
@@ -867,6 +905,7 @@ export function useChatTurnSubmission({
         messageIdForSend,
         providerOptionsForDispatchForSend,
         outgoingMessageText,
+        ...(selectedSlashCommand ? { cediaSelectedSlashCommand: selectedSlashCommand } : {}),
         mentionedSkillsForSend,
         mentionedPluginMentionsForSend,
         dispatchMode,
@@ -886,6 +925,16 @@ export function useChatTurnSubmission({
         composerSkillsSnapshot,
         composerMentionsSnapshot,
       });
+      clearSelectedSlashCommandAfterSend(
+        selectedSlashCommandRef,
+        threadIdForSend,
+        selectedSlashCommand,
+        sent,
+      );
+      if (sent && selectedSlashCommand !== undefined) {
+        useComposerDraftStore.getState().setSelectedSlashCommand(threadIdForSend, null);
+      }
+      return sent;
     },
     [
       threadId,

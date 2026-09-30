@@ -1,0 +1,7882 @@
+{
+  "schemaVersion": "omp-complete-scope-v1",
+  "inspectedAt": "2026-09-23",
+  "source": {
+    "repo": "upstream/omp",
+    "commit": "00085d4e7dfdcfbf302c122fa2682b410a0f43d1",
+    "workingTree": "dirty because the pinned CEDIA OMP manifest patch is applied; parent verification found tracked/untracked non-ignored tree 112ad5eee1cc236b5382a691ccf3202b2ced5c1e exactly equal to the pinned revision plus that manifest patch",
+    "verifiedSourceTree": "112ad5eee1cc236b5382a691ccf3202b2ced5c1e",
+    "paths": {
+      "settings": "packages/coding-agent/src/config/settings-schema.ts#SETTINGS_SCHEMA",
+      "settingsRuntime": "packages/coding-agent/src/config/settings.ts#Settings",
+      "configCli": "packages/coding-agent/src/cli/config-cli.ts#runConfigCommand",
+      "slashRegistry": "packages/coding-agent/src/slash-commands/builtin-registry.ts#BUILTIN_SLASH_COMMAND_REGISTRY",
+      "cliRegistry": "packages/coding-agent/src/cli-commands.ts#commands"
+    }
+  },
+  "counts": {
+    "settings": 498,
+    "builtinSlashCommands": 79,
+    "tuiOnlySlashCommands": 38,
+    "cliCommands": 41,
+    "settingsFamilies": {
+      "runtime": 13,
+      "auth": 2,
+      "interaction": 50,
+      "models": 54,
+      "shell": 25,
+      "tools-and-extensions": 56,
+      "providers": 47,
+      "appearance": 56,
+      "context": 33,
+      "tasks-and-workflows": 51,
+      "workspace-and-review": 9,
+      "memory": 73,
+      "files": 29
+    }
+  },
+  "settingsWriteContract": {
+    "effectivePrecedence": [
+      "defaults",
+      "global config.yml/config.yaml",
+      "project capability settings (.omp/config.yml and compatible provider files)",
+      "--config overlays",
+      "runtime overrides"
+    ],
+    "read": "Settings.get(path) returns merged effective value or schema default; Settings.loadReadOnly avoids migration and writes",
+    "write": "Settings.set(path,value) persists global config asynchronously; config CLI flushes; only model role assignment has a dedicated project writer when modelRoleStorage=project",
+    "reset": "config reset writes the schema default (it does not delete the key)",
+    "credentials": "credential markers/ui.secret are masked in config list JSON/human output; explicit get can return a value, so CEDIA must keep redaction at its bridge boundary",
+    "source": [
+      "docs/settings.md",
+      "config/settings.ts:590-682",
+      "config/settings.ts:1244-1258",
+      "cli/config-cli.ts:280-422"
+    ]
+  },
+  "settings": [
+    {
+      "path": "setupVersion",
+      "family": "runtime",
+      "type": "number",
+      "defaultExpr": "0",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "setupVersion"
+    },
+    {
+      "path": "auth.broker.url",
+      "family": "auth",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "auth"
+    },
+    {
+      "path": "auth.broker.token",
+      "family": "auth",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "auth"
+    },
+    {
+      "path": "autoResume",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "autoResume"
+    },
+    {
+      "path": "power.sleepPrevention",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"idle\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Power"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "power"
+    },
+    {
+      "path": "advisor.enabled",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Advisor"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "advisor"
+    },
+    {
+      "path": "prewalk.enabled",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Prewalk"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "prewalk"
+    },
+    {
+      "path": "advisor.syncBacklog",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"off\"",
+      "ui": {
+        "tab": "model",
+        "group": "Advisor"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "advisor"
+    },
+    {
+      "path": "advisor.immuneTurns",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "3",
+      "ui": {
+        "tab": "model",
+        "group": "Advisor"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "advisor"
+    },
+    {
+      "path": "advisor.maxNotesPerUpdate",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "ADVISOR_DEFAULT_BUDGET_PER_UPDATE",
+      "ui": {
+        "tab": "model",
+        "group": "Advisor"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "advisor"
+    },
+    {
+      "path": "shellPath",
+      "family": "shell",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellPath"
+    },
+    {
+      "path": "git.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Git"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "git"
+    },
+    {
+      "path": "extensions",
+      "family": "tools-and-extensions",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "extensions"
+    },
+    {
+      "path": "enabledModels",
+      "family": "models",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "enabledModels"
+    },
+    {
+      "path": "enabledProviders",
+      "family": "providers",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "enabledProviders"
+    },
+    {
+      "path": "disabledProviders",
+      "family": "providers",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "disabledProviders"
+    },
+    {
+      "path": "providers.maxInFlightRequests",
+      "family": "providers",
+      "type": "record",
+      "defaultExpr": "EMPTY_NUMBER_RECORD",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.openai-codex.codeMode",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"off\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.openai-codex.codeModeDirectTools",
+      "family": "providers",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "disabledExtensions",
+      "family": "tools-and-extensions",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "disabledExtensions"
+    },
+    {
+      "path": "modelRoleStorage",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"global\"",
+      "ui": {
+        "tab": "model",
+        "group": "Prompt"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "modelRoleStorage"
+    },
+    {
+      "path": "modelRoles",
+      "family": "models",
+      "type": "record",
+      "defaultExpr": "EMPTY_STRING_RECORD",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "modelRoles"
+    },
+    {
+      "path": "modelTags",
+      "family": "models",
+      "type": "record",
+      "defaultExpr": "EMPTY_MODEL_TAGS_RECORD",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "modelTags"
+    },
+    {
+      "path": "modelProviderOrder",
+      "family": "models",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "modelProviderOrder"
+    },
+    {
+      "path": "cycleOrder",
+      "family": "models",
+      "type": "array",
+      "defaultExpr": "DEFAULT_CYCLE_ORDER",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "cycleOrder"
+    },
+    {
+      "path": "theme.dark",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "\"titanium\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Theme"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "theme"
+    },
+    {
+      "path": "theme.light",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "\"light\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Theme"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "theme"
+    },
+    {
+      "path": "symbolPreset",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"unicode\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Theme"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "symbolPreset"
+    },
+    {
+      "path": "colorBlindMode",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Theme"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "colorBlindMode"
+    },
+    {
+      "path": "composer.shape",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "\"band\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Composer"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "composer"
+    },
+    {
+      "path": "statusLine.preset",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.separator",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"powerline-thin\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.contextLine",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"embedded\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.sessionAccent",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.transparent",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.compactThinkingLevel",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "tools.artifactSpillThreshold",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "50",
+      "ui": {
+        "tab": "tools",
+        "group": "Output Limits"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.artifactTailBytes",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "20",
+      "ui": {
+        "tab": "tools",
+        "group": "Output Limits"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.artifactHeadBytes",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "20",
+      "ui": {
+        "tab": "tools",
+        "group": "Output Limits"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.outputMaxColumns",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "768",
+      "ui": {
+        "tab": "tools",
+        "group": "Output Limits"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.artifactTailLines",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "500",
+      "ui": {
+        "tab": "tools",
+        "group": "Output Limits"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "statusLine.showHookStatus",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Status Line"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.leftSegments",
+      "family": "appearance",
+      "type": "array",
+      "defaultExpr": "[] as StatusLineSegmentId[]",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.rightSegments",
+      "family": "appearance",
+      "type": "array",
+      "defaultExpr": "[] as StatusLineSegmentId[]",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "statusLine.segmentOptions",
+      "family": "appearance",
+      "type": "record",
+      "defaultExpr": "{} as Record<string, unknown>",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "statusLine"
+    },
+    {
+      "path": "terminal.showImages",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Images"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "terminal"
+    },
+    {
+      "path": "images.autoResize",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Images"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.blockImages",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Images"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.describeForTextModels",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.enabled",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.backends",
+      "family": "appearance",
+      "type": "array",
+      "defaultExpr": "[\"provider-files\", \"tailscale\", \"cloudflared\", \"litterbox\"] as BlobDestinationId[]",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.options",
+      "family": "appearance",
+      "type": "record",
+      "defaultExpr": "{} as Partial<Record<BlobDestinationId, Record<string, unknown>>>",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.credentials",
+      "family": "appearance",
+      "type": "record",
+      "defaultExpr": "{} as Partial<Record<BlobDestinationId, Record<string, string>>>",
+      "ui": null,
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.command",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.publicBaseUrl",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.ttlHours",
+      "family": "appearance",
+      "type": "number",
+      "defaultExpr": "72",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.bindHost",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "\"127.0.0.1\"",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.sshTarget",
+      "family": "appearance",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "images.urls.sshRemotePort",
+      "family": "appearance",
+      "type": "number",
+      "defaultExpr": "8787",
+      "ui": {
+        "tab": "model",
+        "group": "Vision"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "tui.maxInlineImageColumns",
+      "family": "appearance",
+      "type": "number",
+      "defaultExpr": "100",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.maxInlineImageRows",
+      "family": "appearance",
+      "type": "number",
+      "defaultExpr": "20",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.maxInlineImages",
+      "family": "appearance",
+      "type": "number",
+      "defaultExpr": "8",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.resizeScrollback",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"rebuild\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "terminal.showProgress",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "terminal"
+    },
+    {
+      "path": "tui.textSizing",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.renderMermaid",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.reactions",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.codexResetFireworks",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.titleState",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.hyperlinks",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.mouse",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.tight",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "display.shimmer",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"classic\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.pinnedAgents",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"collapsed\"",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.smoothStreaming",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.hideToolActivity",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.showTokenUsage",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.showTurnTime",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.cacheMissMarker",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "display.collapseCompacted",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "display"
+    },
+    {
+      "path": "showHardwareCursor",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "showHardwareCursor"
+    },
+    {
+      "path": "tui.imeSafeCursor",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "defaultThinkingLevel",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"high\"",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "defaultThinkingLevel"
+    },
+    {
+      "path": "hideThinkingBlock",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hideThinkingBlock"
+    },
+    {
+      "path": "proseOnlyThinking",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "proseOnlyThinking"
+    },
+    {
+      "path": "omitThinking",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "omitThinking"
+    },
+    {
+      "path": "externalThinking",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "externalThinking"
+    },
+    {
+      "path": "model.loopGuard.enabled",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "model"
+    },
+    {
+      "path": "model.loopGuard.checkAssistantContent",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "model"
+    },
+    {
+      "path": "model.loopGuard.toolCallReminder",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "model"
+    },
+    {
+      "path": "model.toolCallLoopGuard.enabled",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "model"
+    },
+    {
+      "path": "model.toolCallLoopGuard.threshold",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "5",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "model"
+    },
+    {
+      "path": "model.toolCallLoopGuard.exemptTools",
+      "family": "models",
+      "type": "array",
+      "defaultExpr": "DEFAULT_TOOL_CALL_LOOP_EXEMPT_TOOLS",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "model"
+    },
+    {
+      "path": "inlineToolDescriptors",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "model",
+        "group": "Prompt"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "inlineToolDescriptors"
+    },
+    {
+      "path": "includeModelInPrompt",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Prompt"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "includeModelInPrompt"
+    },
+    {
+      "path": "includeWorkspaceTree",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Prompt"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "includeWorkspaceTree"
+    },
+    {
+      "path": "skillful",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Prompt"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skillful"
+    },
+    {
+      "path": "workspace.additionalDirectories",
+      "family": "context",
+      "type": "array",
+      "defaultExpr": "[] as string[]",
+      "ui": {
+        "tab": "context",
+        "group": "General"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "workspace"
+    },
+    {
+      "path": "personality",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "model",
+        "group": "Prompt"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "personality"
+    },
+    {
+      "path": "temperature",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "temperature"
+    },
+    {
+      "path": "topP",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "topP"
+    },
+    {
+      "path": "topK",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "topK"
+    },
+    {
+      "path": "minP",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "minP"
+    },
+    {
+      "path": "presencePenalty",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "presencePenalty"
+    },
+    {
+      "path": "repetitionPenalty",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "repetitionPenalty"
+    },
+    {
+      "path": "textVerbosity",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"medium\"",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "textVerbosity"
+    },
+    {
+      "path": "tier.openai",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"none\"",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tier"
+    },
+    {
+      "path": "tier.anthropic",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"none\"",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tier"
+    },
+    {
+      "path": "tier.google",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"none\"",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tier"
+    },
+    {
+      "path": "tier.subagent",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"inherit\"",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tier"
+    },
+    {
+      "path": "tier.advisor",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"none\"",
+      "ui": {
+        "tab": "model",
+        "group": "Sampling"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tier"
+    },
+    {
+      "path": "retry.enabled",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.maxRetries",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "10",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.baseDelayMs",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "500",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.maxDelayMs",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "5 * 60 * 1000",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.waitForUsageReset",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.modelFallback",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.usageAwareFallback",
+      "family": "models",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.usageReservePct",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "10",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.usageReservePolicy",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"confirm\"",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.fallbackChains",
+      "family": "models",
+      "type": "record",
+      "defaultExpr": "{} as Record<string, string[]>",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "retry.fallbackRevertPolicy",
+      "family": "models",
+      "type": "enum",
+      "defaultExpr": "\"cooldown-expiry\"",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "retry"
+    },
+    {
+      "path": "providers.anthropic.serverSideFallback",
+      "family": "providers",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "model",
+        "group": "Retry & Fallback"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "steeringMode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"one-at-a-time\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "steeringMode"
+    },
+    {
+      "path": "followUpMode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"one-at-a-time\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "followUpMode"
+    },
+    {
+      "path": "interruptMode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"immediate\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "interruptMode"
+    },
+    {
+      "path": "tui.vimMode",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "tui.vimModeDisplay",
+      "family": "appearance",
+      "type": "enum",
+      "defaultExpr": "\"text\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tui"
+    },
+    {
+      "path": "loop.mode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"prompt\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "loop"
+    },
+    {
+      "path": "loop.conditionTimeoutMs",
+      "family": "interaction",
+      "type": "number",
+      "defaultExpr": "30_000",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "loop"
+    },
+    {
+      "path": "composer.recallClearedDrafts",
+      "family": "appearance",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "composer"
+    },
+    {
+      "path": "doubleEscapeAction",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"rewind\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "doubleEscapeAction"
+    },
+    {
+      "path": "treeFilterMode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "treeFilterMode"
+    },
+    {
+      "path": "autocompleteMaxVisible",
+      "family": "interaction",
+      "type": "number",
+      "defaultExpr": "10",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "autocompleteMaxVisible"
+    },
+    {
+      "path": "spelling.typoDetection",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "spelling"
+    },
+    {
+      "path": "spelling.autocomplete",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "spelling"
+    },
+    {
+      "path": "spelling.autocorrect",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "spelling"
+    },
+    {
+      "path": "emojiAutocomplete",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "emojiAutocomplete"
+    },
+    {
+      "path": "paste.largeMenuThreshold",
+      "family": "interaction",
+      "type": "number",
+      "defaultExpr": "100",
+      "ui": {
+        "tab": "interaction",
+        "group": "Input"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "paste"
+    },
+    {
+      "path": "startup.quiet",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "startup"
+    },
+    {
+      "path": "startup.showSplash",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "startup"
+    },
+    {
+      "path": "startup.setupWizard",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "startup"
+    },
+    {
+      "path": "startup.checkUpdate",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "startup"
+    },
+    {
+      "path": "update.channel",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"stable\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "update"
+    },
+    {
+      "path": "marketplace.autoUpdate",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"notify\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "marketplace"
+    },
+    {
+      "path": "startup.changelogMode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"summary\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Startup & Updates"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "startup"
+    },
+    {
+      "path": "magicKeywords.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Magic Keywords"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "magicKeywords"
+    },
+    {
+      "path": "magicKeywords.ultrathink",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Magic Keywords"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "magicKeywords"
+    },
+    {
+      "path": "magicKeywords.orchestrate",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Magic Keywords"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "magicKeywords"
+    },
+    {
+      "path": "magicKeywords.workflow",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Magic Keywords"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "magicKeywords"
+    },
+    {
+      "path": "completion.notify",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"on\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Notifications"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "completion"
+    },
+    {
+      "path": "error.notify",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"off\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Notifications"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "error"
+    },
+    {
+      "path": "ask.timeout",
+      "family": "interaction",
+      "type": "number",
+      "defaultExpr": "0",
+      "ui": {
+        "tab": "interaction",
+        "group": "Notifications"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ask"
+    },
+    {
+      "path": "ask.notify",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"on\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Notifications"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ask"
+    },
+    {
+      "path": "recap.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Notifications"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "recap"
+    },
+    {
+      "path": "recap.idleSeconds",
+      "family": "interaction",
+      "type": "number",
+      "defaultExpr": "240",
+      "ui": {
+        "tab": "interaction",
+        "group": "Notifications"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "recap"
+    },
+    {
+      "path": "collab.relayUrl",
+      "family": "interaction",
+      "type": "string",
+      "defaultExpr": "DEFAULT_RELAY_URL",
+      "ui": {
+        "tab": "interaction",
+        "group": "Collab"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "collab"
+    },
+    {
+      "path": "collab.webUrl",
+      "family": "interaction",
+      "type": "string",
+      "defaultExpr": "\"\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Collab"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "collab"
+    },
+    {
+      "path": "collab.displayName",
+      "family": "interaction",
+      "type": "string",
+      "defaultExpr": "\"\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Collab"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "collab"
+    },
+    {
+      "path": "share.serverUrl",
+      "family": "interaction",
+      "type": "string",
+      "defaultExpr": "DEFAULT_SHARE_URL",
+      "ui": {
+        "tab": "interaction",
+        "group": "Collab"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "share"
+    },
+    {
+      "path": "share.store",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"blob\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Collab"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "share"
+    },
+    {
+      "path": "share.redactSecrets",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "interaction",
+        "group": "Collab"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "share"
+    },
+    {
+      "path": "stt.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "interaction",
+        "group": "Speech"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "stt"
+    },
+    {
+      "path": "stt.language",
+      "family": "interaction",
+      "type": "string",
+      "defaultExpr": "\"en\"",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "stt"
+    },
+    {
+      "path": "stt.modelName",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "DEFAULT_STT_MODEL_KEY",
+      "ui": {
+        "tab": "interaction",
+        "group": "Speech"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "stt"
+    },
+    {
+      "path": "stt.submitTrigger",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"never\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Speech"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "stt"
+    },
+    {
+      "path": "contextPromotion.enabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "General"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "contextPromotion"
+    },
+    {
+      "path": "extendedContext",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "General"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "extendedContext"
+    },
+    {
+      "path": "compaction.enabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.experimentalContextManagement",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.midTurnEnabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.methodOrder",
+      "family": "context",
+      "type": "array",
+      "defaultExpr": "[...DEFAULT_COMPACTION_METHOD_ORDER]",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.thresholdPercent",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.thresholdTokens",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.handoffSaveToDisk",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.remoteStreamingV2Enabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.asyncEnabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.reserveTokens",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.keepRecentTokens",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "20000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.autoContinue",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.remoteEndpoint",
+      "family": "context",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.v2RetainedMessageBudget",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "64000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.idleEnabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.idleThresholdTokens",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "200000",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.idleTimeoutSeconds",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "300",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.supersedeReads",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "compaction.dropUseless",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Compaction"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "compaction"
+    },
+    {
+      "path": "snapcompact.systemPrompt",
+      "family": "context",
+      "type": "enum",
+      "defaultExpr": "\"none\"",
+      "ui": {
+        "tab": "context",
+        "group": "Experimental"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "snapcompact"
+    },
+    {
+      "path": "snapcompact.toolResults",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "Experimental"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "snapcompact"
+    },
+    {
+      "path": "tools.format",
+      "family": "tools-and-extensions",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "context",
+        "group": "Experimental"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "snapcompact.shape",
+      "family": "context",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "context",
+        "group": "Experimental"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "snapcompact"
+    },
+    {
+      "path": "branchSummary.enabled",
+      "family": "workspace-and-review",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "context",
+        "group": "General"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "branchSummary"
+    },
+    {
+      "path": "branchSummary.reserveTokens",
+      "family": "workspace-and-review",
+      "type": "number",
+      "defaultExpr": "16384",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "branchSummary"
+    },
+    {
+      "path": "memories.enabled",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.maxRolloutsPerStartup",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "64",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.maxRolloutAgeDays",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "30",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.minRolloutIdleHours",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "12",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.threadScanLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "300",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.maxRawMemoriesForGlobal",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "200",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.stage1Concurrency",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "8",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.stage1LeaseSeconds",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "120",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.stage1RetryDelaySeconds",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "120",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.phase2LeaseSeconds",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "180",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.phase2RetryDelaySeconds",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "180",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.phase2HeartbeatSeconds",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "30",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.rolloutPayloadPercent",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "0.7",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.phase1InputTokenLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "4000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.fallbackTokenLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "16000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memories.summaryInjectionTokenLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "5000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memories"
+    },
+    {
+      "path": "memory.backend",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"off\"",
+      "ui": {
+        "tab": "memory",
+        "group": "General"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "memory"
+    },
+    {
+      "path": "sharpshooter.model",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Sharpshooter"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "sharpshooter"
+    },
+    {
+      "path": "sharpshooter.intervalMinutes",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "5",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "sharpshooter"
+    },
+    {
+      "path": "sharpshooter.injectionTokenLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "15000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "sharpshooter"
+    },
+    {
+      "path": "autolearn.enabled",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "memory",
+        "group": "Auto-Learn"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "autolearn"
+    },
+    {
+      "path": "autolearn.autoContinue",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "memory",
+        "group": "Auto-Learn"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "autolearn"
+    },
+    {
+      "path": "autolearn.minToolCalls",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "5",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "autolearn"
+    },
+    {
+      "path": "mnemopi.dbPath",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.bank",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.scoping",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"per-project\"",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.embeddingVariant",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"en\"",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.autoRecall",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.autoRetain",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.polyphonicRecall",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.enhancedRecall",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.proactiveLinking",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.noEmbeddings",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.embeddingModel",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.embeddingApiUrl",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.embeddingApiKey",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.llmMode",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"smol\"",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.llmBaseUrl",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.llmApiKey",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.llmModel",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Mnemopi"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.retainEveryNTurns",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "4",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.recallLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "8",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.recallContextTurns",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "3",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.recallMaxQueryChars",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "4000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.injectionTokenLimit",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "5000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "mnemopi.debug",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mnemopi"
+    },
+    {
+      "path": "hindsight.apiUrl",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "\"http://localhost:8888\"",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.apiToken",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.bankId",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.bankIdPrefix",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.scoping",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"per-project-tagged\"",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.bankMission",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.retainMission",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.autoRecall",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.autoRetain",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.retainMode",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"full-session\"",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.retainEveryNTurns",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "3",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.retainOverlapTurns",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "2",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.retainContext",
+      "family": "memory",
+      "type": "string",
+      "defaultExpr": "\"omp\"",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.recallBudget",
+      "family": "memory",
+      "type": "enum",
+      "defaultExpr": "\"mid\"",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.recallMaxTokens",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "1024",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.recallContextTurns",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "1",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.recallMaxQueryChars",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "800",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.recallTypes",
+      "family": "memory",
+      "type": "array",
+      "defaultExpr": "HINDSIGHT_RECALL_TYPES_DEFAULT",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.debug",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.requestTimeoutMs",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "30_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.reflectTimeoutMs",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "120_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.recallTimeoutMs",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "30_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.retainTimeoutMs",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "60_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.mentalModelsEnabled",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.mentalModelAutoSeed",
+      "family": "memory",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "memory",
+        "group": "Hindsight"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.mentalModelRefreshIntervalMs",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "5 * 60 * 1000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "hindsight.mentalModelMaxRenderChars",
+      "family": "memory",
+      "type": "number",
+      "defaultExpr": "16_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "hindsight"
+    },
+    {
+      "path": "ttsr.enabled",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "ttsr.contextMode",
+      "family": "context",
+      "type": "enum",
+      "defaultExpr": "\"discard\"",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "ttsr.interruptMode",
+      "family": "context",
+      "type": "enum",
+      "defaultExpr": "\"always\"",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "ttsr.repeatMode",
+      "family": "context",
+      "type": "enum",
+      "defaultExpr": "\"once\"",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "ttsr.repeatGap",
+      "family": "context",
+      "type": "number",
+      "defaultExpr": "10",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "ttsr.builtinRules",
+      "family": "context",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "ttsr.disabledRules",
+      "family": "context",
+      "type": "array",
+      "defaultExpr": "[] as string[]",
+      "ui": {
+        "tab": "context",
+        "group": "Rules (TTSR)"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ttsr"
+    },
+    {
+      "path": "edit.mode",
+      "family": "files",
+      "type": "enum",
+      "defaultExpr": "\"hashline\"",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.fuzzyMatch",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.fuzzyThreshold",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "0.95",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.streamingAbort",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.recoverInlineEdits",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.blockAutoGenerated",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.enforceSeenLines",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.blackbox.enabled",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "edit.autoRepair.enabled",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Editing"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "edit"
+    },
+    {
+      "path": "readLineNumbers",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Reading"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "readLineNumbers"
+    },
+    {
+      "path": "read.defaultLimit",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "300",
+      "ui": {
+        "tab": "files",
+        "group": "Reading"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.renderMarkdown",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Reading"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.enabled",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.prose",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.minBodyLines",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "4",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.minCommentLines",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "6",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.minTotalLines",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "100",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.unfoldUntil",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "50",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.summarize.unfoldLimit",
+      "family": "files",
+      "type": "number",
+      "defaultExpr": "100",
+      "ui": {
+        "tab": "files",
+        "group": "Read Summaries"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "read.toolResultPreview",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "Reading"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "read"
+    },
+    {
+      "path": "lsp.enabled",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "lsp.lazy",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "lsp.shared",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "lsp.formatOnWrite",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "lsp.diagnosticsOnWrite",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "lsp.diagnosticsOnEdit",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "lsp.diagnosticsDeduplicate",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "files",
+        "group": "LSP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "lsp"
+    },
+    {
+      "path": "bash.enabled",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "bash.allowCompoundCommands",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "bash.autoBackground.enabled",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "bash.patterns",
+      "family": "shell",
+      "type": "array",
+      "defaultExpr": "[]",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "bashInterceptor.enabled",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bashInterceptor"
+    },
+    {
+      "path": "bashInterceptor.patterns",
+      "family": "shell",
+      "type": "array",
+      "defaultExpr": "DEFAULT_BASH_INTERCEPTOR_RULES",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bashInterceptor"
+    },
+    {
+      "path": "bash.direnv",
+      "family": "shell",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "bash.direnvLoadTimeoutMs",
+      "family": "shell",
+      "type": "number",
+      "defaultExpr": "30_000",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "shellMinimizer.enabled",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "shellMinimizer.settingsPath",
+      "family": "shell",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "shellMinimizer.only",
+      "family": "shell",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "shellMinimizer.except",
+      "family": "shell",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "shellMinimizer.maxCaptureBytes",
+      "family": "shell",
+      "type": "number",
+      "defaultExpr": "4 * 1024 * 1024",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "shellMinimizer.sourceOutlineLevel",
+      "family": "shell",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "shell",
+        "group": "Bash"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "shellMinimizer.legacyFilters",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "shellMinimizer"
+    },
+    {
+      "path": "eval.py",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "eval"
+    },
+    {
+      "path": "eval.js",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "eval"
+    },
+    {
+      "path": "eval.tools.enabled",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "eval"
+    },
+    {
+      "path": "eval.workpool.freshAgents",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "eval"
+    },
+    {
+      "path": "eval.autoBackground.enabled",
+      "family": "shell",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "eval"
+    },
+    {
+      "path": "eval.autoBackground.thresholdMs",
+      "family": "shell",
+      "type": "number",
+      "defaultExpr": "60_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "eval"
+    },
+    {
+      "path": "python.kernelMode",
+      "family": "shell",
+      "type": "enum",
+      "defaultExpr": "\"session\"",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "python"
+    },
+    {
+      "path": "python.interpreter",
+      "family": "shell",
+      "type": "string",
+      "defaultExpr": "\"\"",
+      "ui": {
+        "tab": "shell",
+        "group": "Eval & Runtimes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "python"
+    },
+    {
+      "path": "tools.approval",
+      "family": "tools-and-extensions",
+      "type": "record",
+      "defaultExpr": "{",
+      "ui": {
+        "tab": "interaction",
+        "group": "Approvals"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.approvalMode",
+      "family": "tools-and-extensions",
+      "type": "enum",
+      "defaultExpr": "\"yolo\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Approvals"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "todo.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "todo"
+    },
+    {
+      "path": "todo.reminders",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Todos"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "todo"
+    },
+    {
+      "path": "todo.remindersMax",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "3",
+      "ui": {
+        "tab": "tools",
+        "group": "Todos"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "todo"
+    },
+    {
+      "path": "todo.eager",
+      "family": "tools-and-extensions",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "tools",
+        "group": "Todos"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "todo"
+    },
+    {
+      "path": "glob.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "glob"
+    },
+    {
+      "path": "grep.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "grep"
+    },
+    {
+      "path": "grep.contextBefore",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "1",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "grep"
+    },
+    {
+      "path": "grep.contextAfter",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "3",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "grep"
+    },
+    {
+      "path": "astGrep.enabled",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "astGrep"
+    },
+    {
+      "path": "astEdit.enabled",
+      "family": "files",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "astEdit"
+    },
+    {
+      "path": "debug.enabled",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "debug"
+    },
+    {
+      "path": "launch.enabled",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "launch"
+    },
+    {
+      "path": "speechgen.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "speechgen"
+    },
+    {
+      "path": "generate_image.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "generate_image"
+    },
+    {
+      "path": "computer.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "computer"
+    },
+    {
+      "path": "computer.display",
+      "family": "tools-and-extensions",
+      "type": "string",
+      "defaultExpr": "\"all\"",
+      "ui": {
+        "tab": "tools",
+        "group": "Computer"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "computer"
+    },
+    {
+      "path": "computer.maxWidth",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "3840",
+      "ui": {
+        "tab": "tools",
+        "group": "Computer"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "computer"
+    },
+    {
+      "path": "computer.maxHeight",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "2400",
+      "ui": {
+        "tab": "tools",
+        "group": "Computer"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "computer"
+    },
+    {
+      "path": "images.questionTimeoutMs",
+      "family": "appearance",
+      "type": "number",
+      "defaultExpr": "300_000",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "images"
+    },
+    {
+      "path": "checkpoint.enabled",
+      "family": "workspace-and-review",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "checkpoint"
+    },
+    {
+      "path": "fetch.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "fetch"
+    },
+    {
+      "path": "vault.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "vault"
+    },
+    {
+      "path": "github.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "github"
+    },
+    {
+      "path": "github.cache.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "GitHub"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "github"
+    },
+    {
+      "path": "github.cache.softTtlSec",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "300",
+      "ui": {
+        "tab": "tools",
+        "group": "GitHub"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "github"
+    },
+    {
+      "path": "github.cache.hardTtlSec",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "604800",
+      "ui": {
+        "tab": "tools",
+        "group": "GitHub"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "github"
+    },
+    {
+      "path": "web_search.enabled",
+      "family": "providers",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "web_search"
+    },
+    {
+      "path": "security.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "security"
+    },
+    {
+      "path": "ask.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "ask"
+    },
+    {
+      "path": "browser.enabled",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Available Tools"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.cdpUrl",
+      "family": "tools-and-extensions",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.relay",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.relayUrl",
+      "family": "tools-and-extensions",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.headless",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.cmux",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.freezeOnTurnEnd",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.idleCloseSec",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "1800",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "browser.screenshotDir",
+      "family": "tools-and-extensions",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "tools",
+        "group": "Grep & Browser"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "browser"
+    },
+    {
+      "path": "tools.intentTracing",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.abortOnFabricatedResult",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.maxTimeout",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "0",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "async.enabled",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "async"
+    },
+    {
+      "path": "async.maxJobs",
+      "family": "runtime",
+      "type": "number",
+      "defaultExpr": "100",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "async"
+    },
+    {
+      "path": "async.pollWaitDuration",
+      "family": "runtime",
+      "type": "enum",
+      "defaultExpr": "\"smart\"",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "async"
+    },
+    {
+      "path": "irc.timeoutMs",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "120_000",
+      "ui": {
+        "tab": "tools",
+        "group": "Execution"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "irc"
+    },
+    {
+      "path": "bash.autoBackground.thresholdMs",
+      "family": "shell",
+      "type": "number",
+      "defaultExpr": "60_000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "bash"
+    },
+    {
+      "path": "tools.xdev",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.xdevDocs",
+      "family": "tools-and-extensions",
+      "type": "enum",
+      "defaultExpr": "\"builtins\"",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "tools.xdevInlineDevices",
+      "family": "tools-and-extensions",
+      "type": "array",
+      "defaultExpr": "EMPTY_STRING_ARRAY",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tools"
+    },
+    {
+      "path": "mcp.enableProjectConfig",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mcp"
+    },
+    {
+      "path": "mcp.renderMarkdownResults",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mcp"
+    },
+    {
+      "path": "mcp.notifications",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mcp"
+    },
+    {
+      "path": "mcp.notificationDebounceMs",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "500",
+      "ui": {
+        "tab": "tools",
+        "group": "Discovery & MCP"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "mcp"
+    },
+    {
+      "path": "plan.enabled",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "plan"
+    },
+    {
+      "path": "plan.defaultOnStartup",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "plan"
+    },
+    {
+      "path": "plan.autosave",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "plan"
+    },
+    {
+      "path": "plan.autosaveDir",
+      "family": "tasks-and-workflows",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "plan"
+    },
+    {
+      "path": "goal.enabled",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "goal"
+    },
+    {
+      "path": "goal.statusInFooter",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "goal"
+    },
+    {
+      "path": "goal.continuationModes",
+      "family": "tasks-and-workflows",
+      "type": "array",
+      "defaultExpr": "[\"interactive\"]",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "goal"
+    },
+    {
+      "path": "title.refreshOnReplan",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Modes"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "title"
+    },
+    {
+      "path": "task.isolation.enabled",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "isolation.backend",
+      "family": "tasks-and-workflows",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "isolation"
+    },
+    {
+      "path": "worktree.clone",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "worktree"
+    },
+    {
+      "path": "worktree.cleanSource",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "worktree"
+    },
+    {
+      "path": "task.isolation.apply",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.isolation.merge",
+      "family": "tasks-and-workflows",
+      "type": "enum",
+      "defaultExpr": "\"patch\"",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.isolation.commits",
+      "family": "tasks-and-workflows",
+      "type": "enum",
+      "defaultExpr": "\"generic\"",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "worktree.base",
+      "family": "tasks-and-workflows",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "tasks",
+        "group": "Isolation"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "worktree"
+    },
+    {
+      "path": "task.eager",
+      "family": "tasks-and-workflows",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.batch",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.enableEffort",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.maxConcurrency",
+      "family": "tasks-and-workflows",
+      "type": "number",
+      "defaultExpr": "32",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.enableLsp",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.maxRecursionDepth",
+      "family": "tasks-and-workflows",
+      "type": "number",
+      "defaultExpr": "2",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.maxRuntimeMs",
+      "family": "tasks-and-workflows",
+      "type": "number",
+      "defaultExpr": "0",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.agentIdleTtlMs",
+      "family": "tasks-and-workflows",
+      "type": "number",
+      "defaultExpr": "420_000",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.softRequestBudget",
+      "family": "tasks-and-workflows",
+      "type": "number",
+      "defaultExpr": "200",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.softRequestBudgetNotice",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.maxEffort",
+      "family": "tasks-and-workflows",
+      "type": "enum",
+      "defaultExpr": "\"max\"",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.disabledAgents",
+      "family": "tasks-and-workflows",
+      "type": "array",
+      "defaultExpr": "[] as string[]",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.agentModelOverrides",
+      "family": "tasks-and-workflows",
+      "type": "record",
+      "defaultExpr": "DEFAULT_AGENT_MODEL_OVERRIDES",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.agentPrewalk",
+      "family": "tasks-and-workflows",
+      "type": "record",
+      "defaultExpr": "{} as Record<string, string>",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.agentAdvisor",
+      "family": "tasks-and-workflows",
+      "type": "record",
+      "defaultExpr": "{} as Record<string, string>",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "task.prewalk",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Subagents"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "tasks.todoClearDelay",
+      "family": "tasks-and-workflows",
+      "type": "number",
+      "defaultExpr": "60",
+      "ui": {
+        "tab": "tools",
+        "group": "Todos"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tasks"
+    },
+    {
+      "path": "task.showResolvedModelBadge",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "appearance",
+        "group": "Display"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "task"
+    },
+    {
+      "path": "skills.enabled",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enableSkillCommands",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Commands & Skills"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enableCodexUser",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enableClaudeUser",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enableClaudeProject",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enablePiUser",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enablePiProject",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enableAgentsUser",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.enableAgentsProject",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.customDirectories",
+      "family": "tasks-and-workflows",
+      "type": "array",
+      "defaultExpr": "[] as string[]",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.ignoredSkills",
+      "family": "tasks-and-workflows",
+      "type": "array",
+      "defaultExpr": "[] as string[]",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "skills.includeSkills",
+      "family": "tasks-and-workflows",
+      "type": "array",
+      "defaultExpr": "[] as string[]",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "skills"
+    },
+    {
+      "path": "commands.enableClaudeUser",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Commands & Skills"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commands"
+    },
+    {
+      "path": "commands.enableClaudeProject",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Commands & Skills"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commands"
+    },
+    {
+      "path": "commands.enableOpencodeUser",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "tasks",
+        "group": "Commands & Skills"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commands"
+    },
+    {
+      "path": "commands.enableOpencodeProject",
+      "family": "tasks-and-workflows",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tasks",
+        "group": "Commands & Skills"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commands"
+    },
+    {
+      "path": "secrets.enabled",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "providers",
+        "group": "Privacy"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "secrets"
+    },
+    {
+      "path": "providers.ollama-cloud.maxConcurrency",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "3",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.webSearchOrder",
+      "family": "providers",
+      "type": "array",
+      "defaultExpr": "[] as SearchProviderId[]",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.webSearchExclude",
+      "family": "providers",
+      "type": "array",
+      "defaultExpr": "[] as SearchProviderId[]",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.webSearchTimeoutSeconds",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "DEFAULT_WEB_SEARCH_TIMEOUT_SECONDS",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.webSearchGeminiModel",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.antigravityEndpoint",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.imageOrder",
+      "family": "providers",
+      "type": "array",
+      "defaultExpr": "[] as ImageProvider[]",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.fireworksTier",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"standard\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Fireworks"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "live.voice",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "DEFAULT_LIVE_VOICE",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "live"
+    },
+    {
+      "path": "providers.tts",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "tts.localModel",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "DEFAULT_TTS_LOCAL_MODEL_KEY",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tts"
+    },
+    {
+      "path": "tts.localVoice",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "DEFAULT_TTS_VOICE",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "tts"
+    },
+    {
+      "path": "speech.enabled",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "speech"
+    },
+    {
+      "path": "speech.mode",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "\"assistant\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "speech"
+    },
+    {
+      "path": "speech.enhanced",
+      "family": "interaction",
+      "type": "boolean",
+      "defaultExpr": "false",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "speech"
+    },
+    {
+      "path": "speech.voice",
+      "family": "interaction",
+      "type": "enum",
+      "defaultExpr": "DEFAULT_TTS_VOICE",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "speech"
+    },
+    {
+      "path": "providers.tinyModel",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "ONLINE_TINY_TITLE_MODEL_KEY",
+      "ui": {
+        "tab": "providers",
+        "group": "Tiny Model"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.tinyModelDevice",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "TINY_MODEL_DEVICE_DEFAULT",
+      "ui": {
+        "tab": "providers",
+        "group": "Tiny Model"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.tinyModelDtype",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "TINY_MODEL_DTYPE_DEFAULT",
+      "ui": {
+        "tab": "providers",
+        "group": "Tiny Model"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.memoryModel",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "ONLINE_MEMORY_MODEL_KEY",
+      "ui": {
+        "tab": "memory",
+        "group": "General"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.autoThinkingModel",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "ONLINE_AUTO_THINKING_MODEL_KEY",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.autoThinkingMaxEffort",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"xhigh\"",
+      "ui": {
+        "tab": "model",
+        "group": "Thinking"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "features.unexpectedStopDetection",
+      "family": "tools-and-extensions",
+      "type": "enum",
+      "defaultExpr": "\"mechanical\"",
+      "ui": {
+        "tab": "interaction",
+        "group": "Agent"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "features"
+    },
+    {
+      "path": "providers.unexpectedStopModel",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "ONLINE_MEMORY_MODEL_KEY",
+      "ui": {
+        "tab": "providers",
+        "group": "Tiny Model"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.kimiApiFormat",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Protocol"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.openaiWebsockets",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Protocol"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.cacheRetention",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Protocol"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.streamFirstEventTimeoutSeconds",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "providers",
+        "group": "Timeouts"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.streamIdleTimeoutSeconds",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "-1",
+      "ui": {
+        "tab": "providers",
+        "group": "Timeouts"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.openrouterVariant",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"default\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Protocol"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "providers.fetch",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "providers"
+    },
+    {
+      "path": "codexResets.autoRedeem",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"unset\" as const",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "codexResets"
+    },
+    {
+      "path": "codexResets.minBlockedMinutes",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "60",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "codexResets"
+    },
+    {
+      "path": "codexResets.keepCredits",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "0",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "codexResets"
+    },
+    {
+      "path": "codexResets.salvageHorizonHours",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "12",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "codexResets"
+    },
+    {
+      "path": "provider.appendOnlyContext",
+      "family": "providers",
+      "type": "enum",
+      "defaultExpr": "\"auto\"",
+      "ui": {
+        "tab": "providers",
+        "group": "Protocol"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "provider"
+    },
+    {
+      "path": "exa.enabled",
+      "family": "providers",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "exa"
+    },
+    {
+      "path": "exa.searchDelayMs",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "1_000",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "exa"
+    },
+    {
+      "path": "searxng.endpoint",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": {
+        "tab": "providers",
+        "group": "Services"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.token",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.basicUsername",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.basicPassword",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.categories",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.engines",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.language",
+      "family": "providers",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "searxng.safesearch",
+      "family": "providers",
+      "type": "number",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "searxng"
+    },
+    {
+      "path": "commit.mapReduceEnabled",
+      "family": "workspace-and-review",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commit"
+    },
+    {
+      "path": "commit.mapReduceThreshold",
+      "family": "workspace-and-review",
+      "type": "number",
+      "defaultExpr": "5000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commit"
+    },
+    {
+      "path": "commit.mapBatchTokenBudget",
+      "family": "workspace-and-review",
+      "type": "number",
+      "defaultExpr": "16000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commit"
+    },
+    {
+      "path": "commit.cacheEnabled",
+      "family": "workspace-and-review",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commit"
+    },
+    {
+      "path": "commit.cacheTtlDays",
+      "family": "workspace-and-review",
+      "type": "number",
+      "defaultExpr": "14",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commit"
+    },
+    {
+      "path": "commit.changelogMaxDiffChars",
+      "family": "workspace-and-review",
+      "type": "number",
+      "defaultExpr": "120000",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "commit"
+    },
+    {
+      "path": "extensionHandlers.toolCallTimeoutMs",
+      "family": "tools-and-extensions",
+      "type": "number",
+      "defaultExpr": "30_000",
+      "ui": {
+        "tab": "tools",
+        "group": "Extensions"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "extensionHandlers"
+    },
+    {
+      "path": "dev.autoqa",
+      "family": "tools-and-extensions",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": {
+        "tab": "tools",
+        "group": "Developer"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "dev"
+    },
+    {
+      "path": "dev.autoqaPush.endpoint",
+      "family": "tools-and-extensions",
+      "type": "string",
+      "defaultExpr": "\"https://qa.omp.sh/v1/grievances\" as const",
+      "ui": {
+        "tab": "tools",
+        "group": "Developer"
+      },
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "dev"
+    },
+    {
+      "path": "dev.autoqaPush.token",
+      "family": "tools-and-extensions",
+      "type": "string",
+      "defaultExpr": "undefined",
+      "ui": null,
+      "credential": true,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "dev"
+    },
+    {
+      "path": "dev.autoqaConsent",
+      "family": "tools-and-extensions",
+      "type": "enum",
+      "defaultExpr": "\"unset\" as const",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "dev"
+    },
+    {
+      "path": "gc.blobs",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "gc"
+    },
+    {
+      "path": "gc.archive",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "gc"
+    },
+    {
+      "path": "gc.wal",
+      "family": "runtime",
+      "type": "boolean",
+      "defaultExpr": "true",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "gc"
+    },
+    {
+      "path": "gc.coldArchiveAfterDays",
+      "family": "runtime",
+      "type": "number",
+      "defaultExpr": "30",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "gc"
+    },
+    {
+      "path": "gc.retainNewestGlobal",
+      "family": "runtime",
+      "type": "number",
+      "defaultExpr": "20",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "gc"
+    },
+    {
+      "path": "gc.retainNewestPerCwd",
+      "family": "runtime",
+      "type": "number",
+      "defaultExpr": "10",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "gc"
+    },
+    {
+      "path": "thinkingBudgets.minimal",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "1024",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "thinkingBudgets"
+    },
+    {
+      "path": "thinkingBudgets.low",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "2048",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "thinkingBudgets"
+    },
+    {
+      "path": "thinkingBudgets.medium",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "8192",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "thinkingBudgets"
+    },
+    {
+      "path": "thinkingBudgets.high",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "16384",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "thinkingBudgets"
+    },
+    {
+      "path": "thinkingBudgets.xhigh",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "32768",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "thinkingBudgets"
+    },
+    {
+      "path": "thinkingBudgets.max",
+      "family": "models",
+      "type": "number",
+      "defaultExpr": "32768",
+      "ui": null,
+      "credential": false,
+      "source": "settings-schema:SETTINGS_SCHEMA",
+      "root": "thinkingBudgets"
+    }
+  ],
+  "slashCommands": [
+    {
+      "name": "security",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [
+        "plan",
+        "scan",
+        "status",
+        "cancel",
+        "scans",
+        "show",
+        "import",
+        "export",
+        "validate",
+        "compare",
+        "disposition"
+      ],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "settings",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "setup",
+      "aliases": [
+        "providers"
+      ],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "plan",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "plan-review",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "vibe",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "goal",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [
+        "set",
+        "show",
+        "pause",
+        "resume",
+        "drop",
+        "budget"
+      ],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "guided-goal",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "loop",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "queue",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "model",
+      "aliases": [
+        "models"
+      ],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "switch",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "fast",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [
+        "on",
+        "off",
+        "status"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "skillful",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [
+        "on",
+        "off",
+        "status"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "extended-context",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [
+        "on",
+        "off",
+        "status"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "computer",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [
+        "on",
+        "off",
+        "status"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "prewalk",
+      "aliases": [],
+      "family": "modes",
+      "subcommands": [],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-modes:BUILTIN_MODE_SLASH_COMMANDS"
+    },
+    {
+      "name": "advisor",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [
+        "on",
+        "off",
+        "status",
+        "dump",
+        "configure"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "export",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "trace",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "dump",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "share",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "collab",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [
+        "view",
+        "status",
+        "stop"
+      ],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "join",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "leave",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "browser",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [
+        "headless",
+        "visible"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "copy",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "open",
+      "aliases": [],
+      "family": "collaboration",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS"
+    },
+    {
+      "name": "todo",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [
+        "edit",
+        "copy",
+        "expand",
+        "collapse",
+        "export",
+        "import",
+        "append",
+        "start",
+        "done",
+        "drop",
+        "rm"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "session",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [
+        "info",
+        "delete",
+        "pin"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "jobs",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "usage",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [
+        "show",
+        "reset"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "stats",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "changelog",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "hotkeys",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "tools",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "context",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "extensions",
+      "aliases": [
+        "status"
+      ],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "agents",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "git",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "hub",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "branch",
+      "aliases": [
+        "rewind"
+      ],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "fork",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "tree",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "login",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "logout",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "mcp",
+      "aliases": [],
+      "family": "session",
+      "subcommands": [
+        "add",
+        "list",
+        "remove",
+        "test",
+        "reauth",
+        "unauth",
+        "enable",
+        "disable",
+        "smithery-search",
+        "smithery-login",
+        "smithery-logout",
+        "reconnect",
+        "reload",
+        "resources",
+        "prompts",
+        "notifications",
+        "help"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS"
+    },
+    {
+      "name": "ssh",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [
+        "add",
+        "list",
+        "remove",
+        "help"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "new",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "fresh",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "clear",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "drop",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "compact",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "shake",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [
+        "elide",
+        "images",
+        "thinking"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "handoff",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "resume",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "pin",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "btw",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "tan",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "omfg",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "cleanse",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "retry",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "debug",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "memory",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [
+        "view",
+        "stats",
+        "diagnose",
+        "queue",
+        "sync",
+        "clear",
+        "reset",
+        "enqueue",
+        "rebuild",
+        "mm list",
+        "mm show",
+        "mm refresh",
+        "mm history",
+        "mm seed",
+        "mm delete",
+        "mm reload"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "rename",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "move",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "wt",
+      "aliases": [
+        "worktree"
+      ],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "add-dir",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "remove-dir",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "dirs",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui-adapter",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "exit",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "restart",
+      "aliases": [],
+      "family": "lifecycle",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-lifecycle:BUILTIN_LIFECYCLE_SLASH_COMMANDS"
+    },
+    {
+      "name": "marketplace",
+      "aliases": [],
+      "family": "marketplace",
+      "subcommands": [
+        "add",
+        "remove",
+        "update",
+        "list",
+        "discover",
+        "install",
+        "uninstall",
+        "installed",
+        "upgrade",
+        "help"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-marketplace:BUILTIN_MARKETPLACE_SLASH_COMMANDS"
+    },
+    {
+      "name": "plugins",
+      "aliases": [],
+      "family": "marketplace",
+      "subcommands": [
+        "list",
+        "enable",
+        "disable"
+      ],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-marketplace:BUILTIN_MARKETPLACE_SLASH_COMMANDS"
+    },
+    {
+      "name": "reload-plugins",
+      "aliases": [],
+      "family": "marketplace",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-marketplace:BUILTIN_MARKETPLACE_SLASH_COMMANDS"
+    },
+    {
+      "name": "force",
+      "aliases": [
+        "force:"
+      ],
+      "family": "control",
+      "subcommands": [],
+      "surfaces": [
+        "tui",
+        "rpc",
+        "acp"
+      ],
+      "tuiOnly": false,
+      "source": "builtin-control:BUILTIN_CONTROL_SLASH_COMMANDS"
+    },
+    {
+      "name": "live",
+      "aliases": [],
+      "family": "control",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-control:BUILTIN_CONTROL_SLASH_COMMANDS"
+    },
+    {
+      "name": "pause",
+      "aliases": [],
+      "family": "control",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-control:BUILTIN_CONTROL_SLASH_COMMANDS"
+    },
+    {
+      "name": "quit",
+      "aliases": [
+        "q"
+      ],
+      "family": "control",
+      "subcommands": [],
+      "surfaces": [
+        "tui"
+      ],
+      "tuiOnly": true,
+      "source": "builtin-control:BUILTIN_CONTROL_SLASH_COMMANDS"
+    }
+  ],
+  "dynamicSlashSources": [
+    {
+      "id": "builtin",
+      "source": "builtin-registry:BUILTIN_SLASH_COMMAND_REGISTRY",
+      "reload": "static registry; built into TUI/RPC/ACP discovery"
+    },
+    {
+      "id": "file-commands",
+      "source": "extensibility/slash-commands.ts#loadSlashCommands",
+      "roots": "native/user/project capability providers; .omp/commands and provider-compatible command roots",
+      "reload": "refreshSlashCommandState; RPC emits available_commands_update"
+    },
+    {
+      "id": "skills",
+      "source": "extensibility/skills.ts",
+      "names": "skill:<name>",
+      "reload": "refreshSkillState then command metadata update"
+    },
+    {
+      "id": "extensions-hooks-mcp",
+      "source": "extensions/get-commands-handler.ts + mcp manager + hook capability",
+      "reload": "reload plugins/capabilities and re-emit available command metadata"
+    },
+    {
+      "id": "bundled-workflow",
+      "source": "task/commands.ts#EMBEDDED_COMMAND_TEMPLATES",
+      "names": [
+        "init"
+      ],
+      "reload": "static bundled command; file command wins on name collision"
+    }
+  ],
+  "tuiOnlySlashCommands": [
+    "settings",
+    "setup",
+    "plan",
+    "plan-review",
+    "vibe",
+    "goal",
+    "guided-goal",
+    "loop",
+    "queue",
+    "collab",
+    "join",
+    "leave",
+    "copy",
+    "open",
+    "hotkeys",
+    "extensions",
+    "agents",
+    "git",
+    "hub",
+    "branch",
+    "fork",
+    "tree",
+    "login",
+    "logout",
+    "new",
+    "clear",
+    "drop",
+    "resume",
+    "btw",
+    "tan",
+    "omfg",
+    "cleanse",
+    "debug",
+    "exit",
+    "restart",
+    "live",
+    "pause",
+    "quit"
+  ],
+  "cliCommands": [
+    {
+      "name": "launch",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "acp",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "auth-broker",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "auth-gateway",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "agents",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "bench",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "browser-relay",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "cleanse",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "commit",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "completions",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "__complete",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "compress",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "config",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "dry-balance",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "gc",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "grep",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "gallery",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "git",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "grievances",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "images",
+      "aliases": [
+        "img"
+      ],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "if-bench",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "install",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "join",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "models",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "plugin",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "ps",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "say",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "share",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "setup",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "shell",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "read",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "render",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "ssh",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "stats",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "update",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "usage",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "tiny-models",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "token",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "ttsr",
+      "aliases": [],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "worktree",
+      "aliases": [
+        "wt"
+      ],
+      "source": "cli-commands:commands"
+    },
+    {
+      "name": "search",
+      "aliases": [
+        "q"
+      ],
+      "source": "cli-commands:commands"
+    }
+  ],
+  "launchFlags": {
+    "string": [
+      "--cwd",
+      "--config",
+      "--add-dir",
+      "--mode",
+      "--fork",
+      "--provider",
+      "--model",
+      "--smol",
+      "--slow",
+      "--plan",
+      "--prewalk-into",
+      "--plan-yolo-into",
+      "--max-time",
+      "--service-tier",
+      "--api-key",
+      "--system-prompt",
+      "--append-system-prompt",
+      "--provider-session-id",
+      "--prompt-cache-key",
+      "--session-dir",
+      "--models",
+      "--tools",
+      "--thinking",
+      "--export",
+      "--hook",
+      "--extension",
+      "--trusted-extension",
+      "--plugin-dir",
+      "--skills",
+      "--approval-mode",
+      "-e",
+      "--profile",
+      "--alias"
+    ],
+    "optional": [
+      "--resume",
+      "--session",
+      "-r"
+    ],
+    "boolean": [
+      "--help",
+      "--version",
+      "--allow-home",
+      "--continue",
+      "--from-claude",
+      "--from-codex",
+      "--no-session",
+      "--no-tools",
+      "--no-lsp",
+      "--no-pty",
+      "--hide-thinking",
+      "--advisor",
+      "--external-thinking",
+      "--prewalk",
+      "--no-prewalk",
+      "--plan-yolo",
+      "--print",
+      "--print-thoughts",
+      "--no-extensions",
+      "--no-skills",
+      "--no-rules",
+      "--no-title",
+      "--auto-approve",
+      "--yolo",
+      "-h",
+      "-v",
+      "-c",
+      "-p"
+    ],
+    "source": [
+      "cli/flag-tables.ts:STRING_SETTERS",
+      "cli/flag-tables.ts:OPTIONAL_FLAGS",
+      "cli/flag-tables.ts:VALUELESS_FLAGS",
+      "cli/args.ts"
+    ]
+  },
+  "features": [
+    {
+      "id": "settings",
+      "family": "settings",
+      "surface": "settings panel + omp config",
+      "source": [
+        "settings-schema:SETTINGS_SCHEMA",
+        "config-cli:runConfigCommand",
+        "settings:Settings"
+      ]
+    },
+    {
+      "id": "model-roles",
+      "family": "models",
+      "surface": "model selector + model settings",
+      "source": [
+        "model-roles:MODEL_ROLES",
+        "settings-schema:modelRoles/modelTags/cycleOrder/modelRoleStorage"
+      ]
+    },
+    {
+      "id": "auth-and-provider-accounts",
+      "family": "auth",
+      "surface": "/login /logout /session pin / RPC login",
+      "source": [
+        "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS",
+        "agent-session:listCurrentProviderOAuthAccounts/pinCurrentProviderOAuthAccount",
+        "rpc-types:login/get_login_providers"
+      ]
+    },
+    {
+      "id": "codex-reset-credits",
+      "family": "auth",
+      "surface": "/usage reset + status/auto-redeem",
+      "source": [
+        "agent-session:listResetCredits/redeemResetCredit",
+        "settings-schema:codexResets.*"
+      ]
+    },
+    {
+      "id": "custom-models-providers",
+      "family": "providers",
+      "surface": "models.yml + ModelRegistry + extension registerProvider",
+      "source": [
+        "docs/models.md",
+        "config/model-registry.ts",
+        "extensions:registerProvider"
+      ]
+    },
+    {
+      "id": "session-import-resume",
+      "family": "sessions",
+      "surface": "--continue/--resume/--fork/--from-claude/--from-codex + SessionManager",
+      "source": [
+        "cli/args.ts",
+        "docs/session-operations-export-share-fork-resume.md",
+        "session/session-manager.ts"
+      ]
+    },
+    {
+      "id": "plugins",
+      "family": "extensions",
+      "surface": "plugin CLI + marketplace slash commands + reload",
+      "source": [
+        "commands/plugin.ts",
+        "builtin-marketplace:BUILTIN_MARKETPLACE_SLASH_COMMANDS",
+        "docs/marketplace.md"
+      ]
+    },
+    {
+      "id": "extensions",
+      "family": "extensions",
+      "surface": "native/user/project/configured TS/JS modules",
+      "source": [
+        "extensibility/extensions/loader.ts",
+        "docs/extension-loading.md",
+        "cli/flag-tables.ts"
+      ]
+    },
+    {
+      "id": "mcp",
+      "family": "tools",
+      "surface": "/mcp + mcp config/manager + RPC command metadata",
+      "source": [
+        "mcp/config.ts",
+        "mcp/manager.ts",
+        "builtin-session:BUILTIN_SESSION_SLASH_COMMANDS",
+        "docs/mcp-config.md"
+      ]
+    },
+    {
+      "id": "skills",
+      "family": "tasks",
+      "surface": "/skill:<name> + discovery and --skills filtering",
+      "source": [
+        "extensibility/skills.ts",
+        "docs/skills.md",
+        "cli/flag-tables.ts"
+      ]
+    },
+    {
+      "id": "hooks",
+      "family": "extensions",
+      "surface": "hook discovery, tool wrappers, lifecycle",
+      "source": [
+        "extensibility/hooks/loader.ts",
+        "extensibility/hooks/runner.ts",
+        "docs/hooks.md"
+      ]
+    },
+    {
+      "id": "instructions-rules",
+      "family": "context",
+      "surface": "AGENTS.md/.omp rules/context providers",
+      "source": [
+        "discovery/context-file.ts",
+        "docs/context-files.md",
+        "docs/system-prompt-customization.md"
+      ]
+    },
+    {
+      "id": "prompt-files-templates",
+      "family": "context",
+      "surface": "@file attachments, prompt templates, .omp/commands",
+      "source": [
+        "cli/file-processor.ts",
+        "config/prompt-templates.ts",
+        "task/commands.ts",
+        "docs/context-files.md"
+      ]
+    },
+    {
+      "id": "cli-attach",
+      "family": "transport",
+      "surface": "--mode rpc/rpc-ui/acp over stdio; CEDIA bridge",
+      "source": [
+        "modes/rpc/rpc-types.ts",
+        "modes/rpc/rpc-mode.ts",
+        "modes/acp/acp-agent.ts",
+        "docs/rpc.md",
+        "docs/approval-mode.md"
+      ]
+    },
+    {
+      "id": "collab",
+      "family": "collaboration",
+      "surface": "/collab /join /leave relay with host-owned execution",
+      "source": [
+        "collab/host.ts",
+        "collab/guest.ts",
+        "builtin-collaboration:BUILTIN_COLLABORATION_SLASH_COMMANDS",
+        "docs/collab.md"
+      ]
+    },
+    {
+      "id": "browser",
+      "family": "tools",
+      "surface": "Eval browser, browser-relay, visible/headless mode",
+      "source": [
+        "tools/browser",
+        "commands/browser-relay.ts",
+        "builtin-collaboration:browser",
+        "docs/computer-use.md"
+      ]
+    },
+    {
+      "id": "terminal-and-shell",
+      "family": "tools",
+      "surface": "bash PTY, hub jobs, shell command, RPC bash/abort_bash",
+      "source": [
+        "tools/bash.ts",
+        "launch/broker.ts",
+        "rpc-types.ts",
+        "docs/bash-tool-runtime.md"
+      ]
+    },
+    {
+      "id": "review-git-worktree",
+      "family": "workspace",
+      "surface": "git TUI, worktree CLI, commit/review flows",
+      "source": [
+        "commands/git.ts",
+        "commands/worktree.ts",
+        "builtin-session:git/branch/fork/tree",
+        "docs/session-tree-plan.md"
+      ]
+    },
+    {
+      "id": "excluded-speech",
+      "family": "deferred",
+      "surface": "speech-to-text and Thai quality are intentionally deferred",
+      "source": [
+        "CEDIA direction decision: 2026-09-23 user instruction"
+      ]
+    }
+  ],
+  "nativeAccountActions": {
+    "providerOAuth": [
+      "/login",
+      "/logout",
+      "/session pin",
+      "RPC get_login_providers/login",
+      "AgentSession.listCurrentProviderOAuthAccounts",
+      "AgentSession.pinCurrentProviderOAuthAccount"
+    ],
+    "codexResetCredits": [
+      "/usage reset",
+      "AgentSession.listResetCredits",
+      "AgentSession.redeemResetCredit",
+      "codexResets.* settings"
+    ],
+    "boundary": "These are OMP-native provider-account/credit APIs owned by OMP AuthStorage; do not substitute a second Codex/Synara harness or expose unrelated account UI."
+  },
+  "bridgeRequirements": [
+    {
+      "id": "versioned-rpc",
+      "rule": "CEDIA uses OMP RPC/RPC-UI/ACP transports and negotiates protocol versions; it does not start another agent loop.",
+      "source": [
+        "docs/rpc.md",
+        "modes/rpc/rpc-types.ts"
+      ]
+    },
+    {
+      "id": "tui-only",
+      "rule": "Slash specs with handleTui but no handle are TUI-only. CEDIA must expose them through an explicit versioned host/UI bridge or retain a TUI-compatible surface; ACP cannot invoke them as ordinary text commands.",
+      "source": [
+        "slash-commands/types.ts#SlashCommandSpec",
+        "modes/rpc/rpc-mode.ts:1326-1342"
+      ]
+    },
+    {
+      "id": "dynamic-refresh",
+      "rule": "Remote clients must consume available_commands_update after startup, extension initialization, /move, and plugin/MCP/skill reloads; never cache one command list forever.",
+      "source": [
+        "modes/rpc/rpc-mode.ts:1326-1372",
+        "extensibility/slash-commands.ts"
+      ]
+    },
+    {
+      "id": "session-owner",
+      "rule": "OMP owns execution, transcript, auth, and provider account state; CEDIA owns presentation/transport only.",
+      "source": [
+        "AGENTS.md",
+        "docs/rpc.md",
+        "docs/collab.md"
+      ]
+    }
+  ],
+  "caveats": [
+    "This is a source inventory and bridge contract, not proof that CEDIA has implemented every surface.",
+    "Speech-to-text/Thai quality is explicitly deferred by the current user request.",
+    "Some settings are feature/config-file-only or runtime-only despite appearing in the schema; UI metadata is the source for TUI exposure.",
+    "The inspected tree is the pinned OMP revision plus the verified CEDIA manifest patch; re-run this inventory if that source contract changes."
+  ],
+  "inventoryChecks": {
+    "settingsPathsUnique": true,
+    "slashNamesUnique": true,
+    "cliNamesUnique": true,
+    "expectedSurface": {
+      "settings": 498,
+      "builtinSlashCommands": 79,
+      "tuiOnlySlashCommands": 38,
+      "cliCommands": 41
+    }
+  }
+}

@@ -37,7 +37,10 @@ export function buildOmpNative(source: string, sourceTree: string): string {
   if (!existsSync(built)) throw new Error("Patched OMP native build did not produce its addon");
   mkdirSync(dirname(target), { recursive: true });
   const temporary = `${target}.tmp-${process.pid}`;
-  copyFileSync(built, temporary); renameSync(temporary, target);
+  // Post-link version stamp: crates/pi-natives links a fixed-size placeholder slot that
+  // `__piNativesBuildVersion()` reads at runtime; embed-native.ts refuses an unstamped addon.
+  // `packages/natives/package.json#version` is the stamp source (18.4.3 here).
+  execFileSync(process.execPath, ["scripts/stamp-native-version.ts", target], { cwd: source, stdio: "inherit" });
   // Probe the actual ABI in an isolated process before recording the build.
   execFileSync(process.execPath, ["-e", "const n=require(process.argv[1]); if(typeof n.EditSession.prototype.setFileOverlay!=='function'||typeof n.EditSession.prototype.clearFileOverlays!=='function') throw Error('Missing Cedia native editor overlay ABI')", target], { cwd: source, stdio: "inherit" });
   mkdirSync(dirname(receiptPath), { recursive: true });

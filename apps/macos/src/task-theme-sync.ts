@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { resolve } from "node:path";
 import { writeAgentThemeSnapshot } from "./agent-theme.ts";
-import { AGENTS_WINDOW_WORKSPACE, allThemeProvidingExtensionIds, isAgentsWindow, mergeAgentsWindowWorkspaceSettings, resolveSnapshotThemeName } from "./workbench-mode.ts";
+import { AGENTS_WINDOW_WORKSPACE, isAgentsWindow, mergeAgentsWindowWorkspaceSettings, resolveSnapshotThemeName, themeProvidingExtensionIds } from "./workbench-mode.ts";
 
 /** Item 66: activation wiring extracted from extension.ts. */
 
@@ -79,10 +79,13 @@ export async function syncAgentsWindowTheme(globalStorage: vscode.Uri, stateDir?
 	const support: Record<string, boolean> = {
 		...(vscode.workspace.getConfiguration("extensions").get<Record<string, boolean>>("supportAgentsWindow") ?? {}),
 	};
-	// The Agents window has its own extension host. Register every installed
-	// theme provider there so the theme picker exposes the same catalogue as the
-	// IDE, while the selected theme keys above still determine the active theme.
-	for (const id of allThemeProvidingExtensionIds(vscode.extensions.all)) support[id] = true;
+	// The Agents window has its own extension host, and it disables every extension that
+	// ships code. Register the providers that paint the themes handed over above - by id or by
+	// the label the picker shows, because Cedia does not know the extension's name. Registering
+	// only those keeps that window's no-extension-code boundary while the two windows still
+	// paint the same theme; a theme picked in either window reaches the other through the
+	// shared application-theme owner, not through this list.
+	for (const id of themeProvidingExtensionIds([colorTheme, preferredDark, preferredLight], vscode.extensions.all)) support[id] = true;
 	if (Object.keys(support).length === 0) return;
 	const file = vscode.Uri.file(resolve(globalStorage.fsPath, "..", "..", AGENTS_WINDOW_WORKSPACE));
 	let existing: string | undefined;

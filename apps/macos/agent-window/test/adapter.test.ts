@@ -4,6 +4,7 @@ import { OrchestrationShellSnapshot, OrchestrationThreadDetailSnapshot, ThreadId
 import { resolveLatestTailUserMessageEditTarget } from "@synara/shared/conversationEdit";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
 import { useComposerFocusRequestStore } from "../vendor/synara/apps/web/src/composerFocusRequestStore";
+import { buildThreadErrorToastOptions } from "../vendor/synara/apps/web/src/components/chat/useThreadErrorToast";
 
 import {
 	createCediaNativeApi,
@@ -35,6 +36,9 @@ const session = {
 	sessionFile: "/state/session-1.json",
 	incarnation: "inc-1",
 	status: "idle" as const,
+	// The host stamps its turn projection on every session row; a task with no turn in flight
+	// reports an empty list.
+	turns: [] as readonly { state: string }[],
 	archived: false,
 	createdAt: "2026-09-19T00:01:00.000Z",
 	updatedAt: "2026-09-19T00:02:00.000Z",
@@ -61,7 +65,12 @@ function fakeBridge(
 	eventFrames = frames,
 	// A caller can hand the fixture another answer for a command, or another session row, without
 	// restating the routes the rest of the suite depends on.
-	options: { commands?: Record<string, unknown>; session?: Record<string, unknown> } = {},
+	options: {
+    commands?: Record<string, unknown>;
+    session?: Record<string, unknown>;
+    sessionCreateError?: string;
+    uiRequests?: unknown;
+  } = {},
 ) {
 	const calls: Request[] = [];
 	// One mutable row, so the fixture behaves like the host: a PATCH changes what the
@@ -69,7 +78,11 @@ function fakeBridge(
 	let row: Record<string, unknown> = { ...session, ...(options.session ?? {}) };
 	const bridge = {
 		invoke: async (_channel: string, request: Request) => {
-			calls.push(request);
+			// The adapter also asks the main-process bridge for the shared draft before a send.
+			// Those rows carry no path, so they stay out of this list and cannot make a
+			// `path`-based assertion lie.
+			const requestKind = (request as Request & { kind?: string }).kind;
+			if (requestKind !== "uiDraft") calls.push(request);
 			if ((request as Request & { kind?: string }).kind === "bootstrap") return { platform: "darwin", homeDir: "/Users/tester", worktreesDir: "/Users/tester/Library/Application Support/Cedia/host/worktrees", version: "test-host" };
 			if ((request as Request & { kind?: string }).kind === "keybindings") {
 				const action = (request as unknown as { action?: string }).action;
@@ -95,11 +108,65 @@ function fakeBridge(
 			if (request.path === `/v1/sessions/${session.id}` && request.method === "DELETE") return { deleted: true };
 			if (request.path === `/v1/sessions/${session.id}`) return row;
 			if (request.path === `/v1/sessions/${session.id}/fork`) return { ...session, id: "side-1", sidechatSourceThreadId: session.id };
+			if (request.path === `/v1/sessions/${session.id}/pending-model` && request.method === "POST") {
+				const body = request.body as { revision?: number; provider?: string; modelId?: string; thinkingLevel?: string | null };
+				// A runtime with a turn boundary holds the revision; the record says so.
+				return {
+					revision: body.revision,
+					state: "awaiting",
+					requested: { ...(body.provider === undefined ? {} : { provider: body.provider }), ...(body.modelId === undefined ? {} : { modelId: body.modelId }) },
+					acceptedAt: "2026-09-19T00:03:02.000Z",
+				};
+			}
+			if (request.path === `/v1/sessions/${session.id}/goal` && request.method === "GET") {
+				return options.commands?.goalSnapshot ?? { state: "available", revision: 1, enabled: true, goal: {
+					id: "goal-1",
+					objective: "Ship the goal surface",
+					status: "active",
+					tokenBudget: 12000,
+					tokensUsed: 340,
+					timeUsedSeconds: 23,
+					createdAt: 1790000000000,
+					updatedAt: 1790000000000,
+				} };
+			}
+			if (request.path === `/v1/sessions/${session.id}/goal` && request.method === "POST") {
+				return { status: "acknowledged", commandId: (request.body as { commandId: string }).commandId };
+			}
+			if (request.path.startsWith(`/v1/sessions/${session.id}/advisor/config`) && request.method === "GET" && request.path.endsWith("?scope=project")) {
+				return { state: "available", revision: 2, scope: "project", path: "/task/WATCHDOG.yml", exists: true, text: "advisors:\n  - name: probe\n", advisors: 1 };
+			}
+			if (request.path === `/v1/sessions/${session.id}/advisor/config` && request.method === "POST") {
+				return { status: "acknowledged", commandId: (request.body as { commandId: string }).commandId };
+			}
+			if (request.path === `/v1/sessions/${session.id}/pause` && request.method === "GET") {
+				return { state: "available", revision: 2, paused: false };
+			}
+			if (request.path === `/v1/sessions/${session.id}/pause` && request.method === "POST") {
+				return { status: "acknowledged", commandId: (request.body as { commandId: string }).commandId };
+			}
+			if (request.path === `/v1/sessions/${session.id}/bash/exec` && request.method === "POST") {
+				return { state: "available", revision: 2, exitCode: 0, output: "hi\n", outputTruncated: false, cancelled: false, timedOut: false, images: 0 };
+			}
+			if (request.path === `/v1/sessions/${session.id}/bash/abort` && request.method === "POST") {
+				return { state: "available", revision: 3, aborted: true };
+			}
+			if (request.path === `/v1/sessions/${session.id}/python/exec` && request.method === "POST") {
+				return { state: "available", revision: 2, exitCode: 0, output: "3\n", outputTruncated: false, cancelled: false, displayOutputs: 0 };
+			}
+			if (request.path === `/v1/sessions/${session.id}/python/abort` && request.method === "POST") {
+				return { state: "available", revision: 3, aborted: true };
+			}
 			if (request.path === `/v1/sessions/${session.id}/start` && request.method === "POST") return { ...row, status: "running", incarnation: "inc-2", updatedAt: "2026-09-19T00:03:00.000Z" };
+			if (request.path === `/v1/sessions/${session.id}/ui`) {
+				if (options.uiRequests === undefined) throw new Error(`Unexpected ${request.method} ${request.path}`);
+				return options.uiRequests;
+			}
 			if (request.path.startsWith(`/v1/sessions/${session.id}/events`)) {
 				return { events: eventFrames, cursor: eventFrames.at(-1)?.sequence ?? 0, hasMore: false };
 			}
 			if (request.path === "/v1/sessions" && request.method === "POST") {
+				if (options.sessionCreateError) throw new Error(options.sessionCreateError);
 				return { ...session, id: "session-created", title: (request.body as { title?: string }).title ?? "New task" };
 			}
 			if (request.path.endsWith("/commands") && request.method === "POST") {
@@ -139,7 +206,110 @@ function sentCommands(calls: readonly Request[]): Array<{ command: string; paylo
 		});
 }
 
-describe("Cedia Agent Window native adapter", () => {
+	describe("Cedia Agent Window native adapter", () => {
+	it("projects live goal details and routes budget changes to OMP", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		expect(await api.cedia.getGoalDetails(session.id)).toEqual({
+			available: true,
+			status: "active",
+			tokenBudget: 12000,
+			tokensUsed: 340,
+			timeUsedSeconds: 23,
+		});
+		await api.cedia.setGoalBudget(session.id, 24000);
+
+		const budget = calls.find((call) => call.path.endsWith("/goal") && call.method === "POST");
+		expect(budget?.body).toMatchObject({ op: "budget", tokenBudget: 24000, incarnation: session.incarnation });
+	});
+
+	it("reads advisor config text and routes validated writes to OMP", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		expect(await api.cedia.getAdvisorConfig(session.id, "project")).toEqual({
+			state: "available",
+			revision: 2,
+			scope: "project",
+			path: "/task/WATCHDOG.yml",
+			exists: true,
+			text: "advisors:\n  - name: probe\n",
+			advisors: 1,
+		});
+		await api.cedia.setAdvisorConfig(session.id, { scope: "project", text: "advisors:\n  - name: probe\n" });
+
+		const write = calls.find((call) => call.path.endsWith("/advisor/config") && call.method === "POST");
+		expect(write?.body).toMatchObject({ scope: "project", text: "advisors:\n  - name: probe\n", incarnation: session.incarnation });
+		await expect(api.cedia.getAdvisorConfig(session.id, "global" as never)).rejects.toThrow("Advisor config scope must be project or user");
+		await expect(api.cedia.setAdvisorConfig(session.id, { scope: "project" } as never)).rejects.toThrow("Advisor config text must be a string");
+	});
+
+	it("reads the run-pause gate and routes pause writes to OMP", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		expect(await api.cedia.getRunPause(session.id)).toEqual({
+			state: "available",
+			revision: 2,
+			paused: false,
+		});
+		await api.cedia.setRunPause(session.id, { paused: true });
+
+		const write = calls.find((call) => call.path.endsWith("/pause") && call.method === "POST");
+		expect(write?.body).toMatchObject({ paused: true, incarnation: session.incarnation });
+		await expect(api.cedia.setRunPause(session.id, { paused: "yes" as unknown as boolean })).rejects.toThrow("Run pause must be a boolean");
+	});
+
+	it("runs shell commands and aborts through OMP without inventing output", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		expect(await api.cedia.execBash(session.id, { command: "printf hi" })).toEqual({
+			state: "available",
+			revision: 2,
+			exitCode: 0,
+			output: "hi\n",
+			outputTruncated: false,
+			cancelled: false,
+			timedOut: false,
+			images: 0,
+		});
+		expect(await api.cedia.abortBash(session.id, {})).toEqual({
+			state: "available",
+			revision: 3,
+			aborted: true,
+		});
+
+		const run = calls.find((call) => call.path.endsWith("/bash/exec") && call.method === "POST");
+		expect(run?.body).toMatchObject({ command: "printf hi", incarnation: session.incarnation });
+		await expect(api.cedia.execBash(session.id, { command: "  " })).rejects.toThrow("Shell command must be a non-empty string");
+	});
+
+	it("runs Python code and aborts through OMP without inventing output", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+
+		expect(await api.cedia.execPython(session.id, { code: "print(1 + 2)" })).toEqual({
+			state: "available",
+			revision: 2,
+			exitCode: 0,
+			output: "3\n",
+			outputTruncated: false,
+			cancelled: false,
+			displayOutputs: 0,
+		});
+		expect(await api.cedia.abortPython(session.id, {})).toEqual({
+			state: "available",
+			revision: 3,
+			aborted: true,
+		});
+
+		const run = calls.find((call) => call.path.endsWith("/python/exec") && call.method === "POST");
+		expect(run?.body).toMatchObject({ code: "print(1 + 2)", incarnation: session.incarnation });
+		await expect(api.cedia.execPython(session.id, { code: "  " })).rejects.toThrow("Python code must be a non-empty string");
+	});
+
 	it("shows no terminal transport rows in the chat transcript", async () => {
 		// The visible symptom: a turn's virtual-terminal repaints arrived as activity
 		// rows whose summary was a raw escape sequence, so the chat read as garbage.
@@ -175,6 +345,197 @@ describe("Cedia Agent Window native adapter", () => {
 		const rendered = JSON.stringify(activities);
 		expect(rendered).not.toContain("\u001b[");
 		expect(rendered).not.toContain("cedia_terminal_");
+	});
+
+	it("projects pending UI requests without forwarding rich approval payloads", async () => {
+		// #1305, CEDIA disposition: our tree has no approval-parameter display
+		// path (the reducer models no approval kinds and the panel falls back
+		// without detail), so the projection must never forward rich payloads
+		// to display surfaces. A raw request carrying secret-bearing params,
+		// nested headers, and explicit detail/profile fields projects to the
+		// token shape only; the journal keeps the canonical frames.
+		const secret = "sk-live-fixture-secret-value";
+		const { bridge } = fakeBridge(frames, { uiRequests: { requests: [{
+			requestId: "req-1",
+			receivedAt: "2026-09-19T00:05:00.000Z",
+			method: "confirm",
+			request: {
+				method: "confirm",
+				requestKind: "permissions",
+				detail: `run deploy with api_key ${secret}`,
+				permissionProfile: { headers: { authorization: `Bearer ${secret}` }, max_tokens: 4096 },
+				params: { api_key: secret, token: secret, max_tokens: 4096 },
+			},
+		}] } });
+		const api = createCediaNativeApi({ bridge });
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: session.id });
+		const interactions = detail.thread.pendingInteractions as ReadonlyArray<Record<string, unknown>>;
+		expect(interactions).toHaveLength(1);
+		expect(new Set(Object.keys(interactions[0] ?? {}))).toEqual(new Set([
+			"interactionKind", "requestId", "threadId", "turnId", "lifecycleGeneration",
+			"status", "decision", "responseCommandId", "responseRequestedAt", "createdAt", "resolvedAt",
+		]));
+		const rendered = JSON.stringify(interactions);
+		expect(rendered).not.toContain(secret);
+		expect(rendered).not.toContain("permissionProfile");
+		expect(rendered).not.toContain("requestKind");
+	});
+
+	it("synthesizes user-input.requested activities from broker select frames", async () => {
+		// Probe 10 gap: the settlement rows above stay token-only by design, and the
+		// bundle's pending-input derivation replays `user-input.requested`
+		// activities — which the projection never emitted — so a broker `select`
+		// frame (OMP's permission gate) rendered nothing clickable. The
+		// synthesized activity carries only the decision surface (title + option
+		// labels); rich params stay in the broker journal per the test above.
+		const secret = "sk-live-fixture-secret-value";
+		const { bridge } = fakeBridge(frames, { uiRequests: { requests: [{
+			token: "tok-1",
+			requestId: "req-1",
+			receivedAt: "2026-09-19T00:05:00.000Z",
+			request: {
+				id: "req-1",
+				method: "select",
+				title: "Allow tool: write / Path: hello.txt",
+				options: ["Approve", "Deny"],
+				params: { api_key: secret },
+			},
+		}] } });
+		const api = createCediaNativeApi({ bridge });
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: session.id });
+		const activities = detail.thread.activities as ReadonlyArray<Record<string, unknown>>;
+		const synthesized = activities.filter(activity => activity.kind === "user-input.requested");
+		expect(synthesized).toHaveLength(1);
+		const payload = synthesized[0]?.payload as Record<string, unknown>;
+		expect(payload.requestId).toBe("tok-1");
+		expect(payload.lifecycleGeneration).toBe(session.incarnation);
+		const questions = payload.questions as ReadonlyArray<Record<string, unknown>>;
+		expect(questions).toHaveLength(1);
+		expect(questions[0]?.question).toBe("Allow tool: write / Path: hello.txt");
+		const options = questions[0]?.options as ReadonlyArray<Record<string, unknown>>;
+		expect(options.map(option => option.label)).toEqual(["Approve", "Deny"]);
+		// The settlement row still carries no decision content.
+		const interactions = detail.thread.pendingInteractions as ReadonlyArray<Record<string, unknown>>;
+		expect(interactions).toHaveLength(1);
+		expect(interactions[0]?.interactionKind).toBe("userInput");
+		expect(interactions[0]?.requestId).toBe("tok-1");
+		const rendered = JSON.stringify(detail.thread);
+		expect(rendered).not.toContain(secret);
+	});
+
+	it("synthesizes approval.requested activities from broker confirm frames", async () => {
+		// o11 paid-probe gap: the settlement rows above classify `confirm` frames
+		// as token-only `approval` interactions, and the bundle's pending-approval
+		// derivation replays `approval.requested` activities — which the projection
+		// never emitted — so a broker `confirm` frame (the native editor bridge's
+		// "Allow this editor change?") rendered nothing clickable and the turn
+		// stalled with no path to an answer. The synthesized activity carries only
+		// the decision surface (title plus bounded message); nothing else leaves
+		// the broker journal, and the existing `thread.approval.respond` boolean
+		// path answers it with no respond-side change.
+		const secret = "sk-live-fixture-secret-value";
+		const { bridge } = fakeBridge(frames, { uiRequests: { requests: [{
+			token: "tok-9",
+			requestId: "req-9",
+			receivedAt: "2026-09-19T00:05:00.000Z",
+			request: {
+				id: "req-9",
+				method: "confirm",
+				title: "Allow this editor change?",
+				message: JSON.stringify({ path: "hello.txt", edits: 1 }),
+				timeout: 30000,
+				params: { api_key: secret },
+			},
+		}] } });
+		const api = createCediaNativeApi({ bridge });
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: session.id });
+		const activities = detail.thread.activities as ReadonlyArray<Record<string, unknown>>;
+		const synthesized = activities.filter(activity => activity.kind === "approval.requested");
+		expect(synthesized).toHaveLength(1);
+		expect(synthesized[0]?.id).toBe("pending-approval-tok-9");
+		expect(synthesized[0]?.summary).toBe("Allow this editor change?");
+		const payload = synthesized[0]?.payload as Record<string, unknown>;
+		expect(payload.requestId).toBe("tok-9");
+		expect(payload.lifecycleGeneration).toBe(session.incarnation);
+		expect(payload.requestKind).toBe("file-change");
+		expect(payload.detail as string).toContain("Allow this editor change?");
+		expect(payload.detail as string).toContain("hello.txt");
+		// The approval settlement still carries no decision content or secrets.
+		const interactions = detail.thread.pendingInteractions as ReadonlyArray<Record<string, unknown>>;
+		expect(interactions).toHaveLength(1);
+		expect(interactions[0]?.interactionKind).toBe("approval");
+		expect(interactions[0]?.requestId).toBe("tok-9");
+		const rendered = JSON.stringify(detail.thread);
+		expect(rendered).not.toContain(secret);
+		expect(rendered).not.toContain("api_key");
+	});
+
+	it("replays the synthesized confirm approval through the bundle derivation", async () => {
+		// End to end of the same gap without a provider: the adapter's projected
+		// activities plus its token-only settlements run through the vendor's own
+		// `derivePendingApprovals`, which must yield one pending file-change
+		// approval the window can render and answer.
+		const { derivePendingApprovals } = await import("../vendor/synara/apps/web/src/pendingInteractionDerivation.ts");
+		const { bridge } = fakeBridge(frames, { uiRequests: { requests: [{
+			token: "tok-9",
+			requestId: "req-9",
+			receivedAt: "2026-09-19T00:05:00.000Z",
+			request: {
+				id: "req-9",
+				method: "confirm",
+				title: "Allow this editor change?",
+				message: JSON.stringify({ path: "hello.txt", edits: 1 }),
+				timeout: 30000,
+			},
+		}] } });
+		const api = createCediaNativeApi({ bridge });
+		const detail = await api.orchestration.getThreadDetailSnapshot({ threadId: session.id });
+		const activities = detail.thread.activities as ReadonlyArray<Record<string, unknown>>;
+		const settlements = detail.thread.pendingInteractions as ReadonlyArray<Record<string, unknown>>;
+		const pending = derivePendingApprovals(
+			activities as unknown as Parameters<typeof derivePendingApprovals>[0],
+			settlements as unknown as Parameters<typeof derivePendingApprovals>[1],
+		);
+		expect(pending).toHaveLength(1);
+		expect(pending[0]?.requestKind).toBe("file-change");
+		expect(String(pending[0]?.requestId)).toContain("tok-9");
+	});
+
+	it("projects a pending confirm while a context refresh for the same running task is blocked", async () => {
+		let releaseGetState: (() => void) | undefined;
+		const blockedGetState = new Promise(resolve => {
+			releaseGetState = () => resolve({ status: "completed", result: { data: {} } });
+		});
+		const runningSession = { ...session, status: "running" as const };
+		const eventFrames = [...frames, {
+			sessionId: session.id,
+			incarnation: session.incarnation,
+			sequence: 3,
+			timestamp: "2026-09-27T00:05:00.000Z",
+			frame: { type: "message_end", messageId: "assistant-1" },
+		}];
+		const { bridge, calls } = fakeBridge(eventFrames, {
+			session: runningSession,
+			uiRequests: { requests: [{
+				token: "confirm-for-running-task",
+				receivedAt: "2026-09-27T00:05:01.000Z",
+				request: { method: "confirm", title: "Allow this editor change?", message: "fixture.txt" },
+			}] },
+			commands: { get_state: blockedGetState },
+		});
+		const api = createCediaNativeApi({ bridge });
+		try {
+			const detail = await Promise.race([
+				api.orchestration.getThreadDetailSnapshot({ threadId: session.id }),
+				new Promise<never>((_, reject) => setTimeout(() => reject(new Error("thread snapshot waited on context refresh")), 50)),
+			]);
+			const approvals = (detail.thread.activities as ReadonlyArray<Record<string, unknown>>).filter(activity => activity.kind === "approval.requested");
+			expect(approvals).toHaveLength(1);
+			expect((approvals[0]?.payload as Record<string, unknown>).requestId).toBe("confirm-for-running-task");
+			expect(calls.some(call => call.path.endsWith("/commands") && (call.body as { command?: string }).command === "get_state")).toBe(false);
+		} finally {
+			releaseGetState?.();
+		}
 	});
 
 	it("refreshes OMP context occupancy after messages without polling its own state replies", async () => {
@@ -250,7 +611,7 @@ describe("Cedia Agent Window native adapter", () => {
 			isPinned: true,
 		});
 		expect(snapshot.threads[0]).toMatchObject({ id: session.id, projectId: project.id, title: session.title });
-		expect(snapshot.threads[0]?.session).toMatchObject({ threadId: session.id, status: "idle" });
+		// A stored `idle` session still owns its folder, so it presents as vendor `ready`, never legacy `closed`.
 	});
 
 	it("loads the shell without replaying every task transcript", async () => {
@@ -282,7 +643,7 @@ describe("Cedia Agent Window native adapter", () => {
 		status = "idle";
 		calls.length = 0;
 		const completed = await api.orchestration.getShellSnapshot();
-		expect(completed.threads[0]?.session?.status).toBe("idle");
+		expect(completed.threads[0]?.session?.status).toBe("ready");
 		expect(completed.threads[0]?.session?.activeTurnId).toBeNull();
 		expect(completed.threads[0]?.latestTurn).toBeNull();
 		expect(calls.some(call => call.path?.includes("/events"))).toBe(false);
@@ -838,6 +1199,130 @@ describe("Cedia Agent Window native adapter", () => {
 		});
 		expect(calls.some(call => call.path === "/v1/models")).toBe(true);
 	});
+	it("defers a model change while a turn is running instead of restating that turn's model", async () => {
+		const { bridge, calls } = fakeBridge(frames, { session: { status: "running", turns: [{ state: "running", turnIntentId: "turn-1", commandId: "cmd-1" }] } });
+		const api = createCediaNativeApi({ bridge });
+
+		await api.orchestration.dispatchCommand({ type: "thread.meta.update", commandId: "pick-model-running", threadId: session.id,
+			modelSelection: { provider: "omp", model: "fixture/fixture-model", options: { thinkingLevel: "high" } } });
+		expect(calls.find(call => call.path === `/v1/sessions/${session.id}/pending-model`)).toMatchObject({
+			method: "POST",
+			body: { revision: 1, provider: "fixture", modelId: "fixture-model", thinkingLevel: "high" },
+		});
+		// The running turn keeps the model it started with: nothing is applied immediately.
+		expect(calls.some(call => (call.body as { command?: string })?.command === "set_model")).toBe(false);
+		expect(calls.some(call => (call.body as { command?: string })?.command === "set_thinking_level")).toBe(false);
+
+		// Revisions are monotonic per task, so a second change is distinguishable from the first.
+		await api.orchestration.dispatchCommand({ type: "thread.meta.update", commandId: "pick-model-running-2", threadId: session.id,
+			modelSelection: { provider: "omp", model: "fixture/fixture-model" } });
+		const pendingCalls = calls.filter(call => call.path === `/v1/sessions/${session.id}/pending-model`);
+		expect(pendingCalls.map(call => (call.body as { revision?: number }).revision)).toEqual([1, 2]);
+	});
+
+	it("forwards a selected baseRef only when creating a worktree task", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+		await api.orchestration.dispatchCommand({
+			type: "thread.create",
+			commandId: "create-worktree",
+			threadId: "draft-worktree",
+			projectId: project.id,
+			title: "Worktree task",
+			modelSelection: { provider: "omp", model: "fixture/fixture-model" },
+			runtimeMode: "approval-required",
+			interactionMode: "default",
+			envMode: "worktree",
+			branch: "feature",
+			worktreePath: null,
+			baseRef: "feature",
+			createdAt: "2026-09-19T00:04:00.000Z",
+		} as never);
+		await api.orchestration.dispatchCommand({
+			type: "thread.create",
+			commandId: "create-local",
+			threadId: "draft-local",
+			projectId: project.id,
+			title: "Local task",
+			modelSelection: { provider: "omp", model: "fixture/fixture-model" },
+			runtimeMode: "approval-required",
+			interactionMode: "default",
+			envMode: "local",
+			branch: null,
+			worktreePath: null,
+			baseRef: "ignored-for-local",
+			createdAt: "2026-09-19T00:04:00.000Z",
+		} as never);
+		const creates = calls.filter((call) => call.path === "/v1/sessions" && call.method === "POST");
+		expect(creates).toHaveLength(2);
+		expect(creates[0]?.body).toMatchObject({ workspaceMode: "worktree", baseRef: "feature" });
+		expect(creates[1]?.body).toMatchObject({ workspaceMode: "local" });
+		expect(creates[1]?.body).not.toHaveProperty("baseRef");
+	});
+
+	it("forwards a dirty-file selection only when creating a worktree task", async () => {
+		const { bridge, calls } = fakeBridge();
+		const api = createCediaNativeApi({ bridge });
+		const base = {
+			type: "thread.create",
+			projectId: project.id,
+			title: "Dirty task",
+			modelSelection: { provider: "omp", model: "fixture/fixture-model" },
+			runtimeMode: "approval-required",
+			interactionMode: "default",
+			branch: "feature",
+			worktreePath: null,
+			createdAt: "2026-09-19T00:04:00.000Z",
+		} as const;
+		await api.orchestration.dispatchCommand({ ...base, commandId: "create-dirty", threadId: "draft-dirty",
+			envMode: "worktree", dirtyFiles: ["hello.txt", "src/app.ts"] } as never);
+		await api.orchestration.dispatchCommand({ ...base, commandId: "create-dirty-empty", threadId: "draft-dirty-empty",
+			envMode: "worktree", dirtyFiles: [] } as never);
+		await api.orchestration.dispatchCommand({ ...base, commandId: "create-dirty-local", threadId: "draft-dirty-local",
+			envMode: "local", branch: null, dirtyFiles: ["hello.txt"] } as never);
+		const creates = calls.filter((call) => call.path === "/v1/sessions" && call.method === "POST");
+		expect(creates).toHaveLength(3);
+		expect(creates[0]?.body).toMatchObject({ workspaceMode: "worktree", dirtyFiles: ["hello.txt", "src/app.ts"] });
+		expect(creates[1]?.body).toMatchObject({ workspaceMode: "worktree", dirtyFiles: [] });
+		expect(creates[2]?.body).toMatchObject({ workspaceMode: "local" });
+		expect(creates[2]?.body).not.toHaveProperty("dirtyFiles");
+	});
+
+	it("surfaces host workspace refusals as actionable rendered error state", async () => {
+		for (const [code, action] of [
+			["unknown_base_ref", "Refresh the local branch list"],
+			["worktree_required", "Select Worktree and a base branch"],
+			["shared_folder_busy", "Stop or archive the other CEDIA task"],
+		] as const) {
+			const { bridge } = fakeBridge(frames, { sessionCreateError: `${code}: host detail` });
+			const api = createCediaNativeApi({ bridge });
+			await expect(
+				api.orchestration.dispatchCommand({
+					type: "thread.create",
+					commandId: `create-${code}`,
+					threadId: `draft-${code}`,
+					projectId: project.id,
+					title: "Blocked task",
+					modelSelection: { provider: "omp", model: "fixture/fixture-model" },
+					runtimeMode: "approval-required",
+					interactionMode: "default",
+					envMode: "local",
+					branch: null,
+					worktreePath: null,
+				} as never),
+			).rejects.toThrow(code);
+			const toast = buildThreadErrorToastOptions({
+				error: `${code}: host detail`,
+				onClose: () => undefined,
+				onUnblock: () => undefined,
+				threadId: `draft-${code}` as never,
+				unblocking: false,
+			});
+			expect(toast.description).toContain(action);
+			expect(toast.timeout).toBe(0);
+		}
+	});
+
 	it("creates the project through host POST /v1/projects (item 59)", async () => {
 		const { bridge, calls } = fakeBridge();
 		const api = createCediaNativeApi({ bridge });
@@ -961,6 +1446,28 @@ describe("attachments, mentions and skills reach OMP (Cedia §10 items 61-62)", 
 		).toHaveLength(2);
 	});
 
+	it("projects pushed command catalogs into live task events and observes removals", async () => {
+		const catalog = { type: "available_commands_update", commands: [{ name: "fixture", source: "extension" }, { name: "baseline", source: "builtin" }] };
+		const eventFrames = [...frames, { sessionId: session.id, incarnation: session.incarnation, sequence: 3, timestamp: "2026-09-19T00:04:00.000Z", frame: catalog }];
+		const { bridge } = fakeBridge(eventFrames);
+		const api = createCediaNativeApi({ bridge });
+		const events: Array<{ kind?: string; snapshot?: { thread?: { cediaSlashCommands?: { name: string }[] } } }> = [];
+		const unsubscribe = api.orchestration.onThreadEvent(event => events.push(event));
+		await api.orchestration.subscribeThread({ threadId: session.id });
+		await api.orchestration.unsubscribeThread({ threadId: session.id });
+		unsubscribe();
+		expect(events[0]?.snapshot?.thread?.cediaSlashCommands?.map(row => row.name)).toEqual(["fixture", "baseline"]);
+
+		const removedFrames = [...frames, { sessionId: session.id, incarnation: session.incarnation, sequence: 3, timestamp: "2026-09-19T00:05:00.000Z", frame: { type: "available_commands_update", commands: [{ name: "baseline", source: "builtin" }] } }];
+		const removed = createCediaNativeApi({ bridge: fakeBridge(removedFrames).bridge });
+		const removedEvents: Array<{ kind?: string; snapshot?: { thread?: { cediaSlashCommands?: { name: string }[] } } }> = [];
+		const stop = removed.orchestration.onThreadEvent(event => removedEvents.push(event));
+		await removed.orchestration.subscribeThread({ threadId: session.id });
+		await removed.orchestration.unsubscribeThread({ threadId: session.id });
+		stop();
+		expect(removedEvents[0]?.snapshot?.thread?.cediaSlashCommands?.map(row => row.name)).toEqual(["baseline"]);
+	});
+
 	it("asks no OMP catalogue without a host session, and compaction runs on OMP", async () => {
 		const { bridge, calls } = fakeBridge();
 		const api = createCediaNativeApi({ bridge });
@@ -977,3 +1484,107 @@ describe("attachments, mentions and skills reach OMP (Cedia §10 items 61-62)", 
 		await expect(api.provider.compactThread({ threadId: "session-missing" })).rejects.toThrow();
 	});
 });
+
+	it("repaints the task when only its held model change moved", async () => {
+		const held = {
+			revision: 1,
+			state: "awaiting",
+			requested: { provider: "fixture", modelId: "fixture-model" },
+			acceptedAt: "2026-09-19T00:03:02.000Z",
+		};
+		const { bridge } = fakeBridge(frames, { session: { pendingModel: held } });
+		const api = createCediaNativeApi({ bridge });
+		const snapshots: Array<Record<string, unknown>> = [];
+		const unsubscribe = api.orchestration.onThreadEvent(item => {
+			const thread = (item as { snapshot?: { thread?: Record<string, unknown> } }).snapshot?.thread;
+			if (thread) snapshots.push(thread);
+		});
+		const sessionOf = (snapshot: Record<string, unknown> | undefined) => snapshot?.session as { pendingModel?: unknown } | undefined;
+
+		await api.orchestration.subscribeThread({ threadId: session.id });
+		await api.orchestration.unsubscribeThread({ threadId: session.id });
+		expect(snapshots).toHaveLength(1);
+		expect(sessionOf(snapshots[0])?.pendingModel).toMatchObject({ revision: 1, state: "awaiting" });
+
+		// An unchanged poll is silent: this is the same task, not a new repaint.
+		await api.orchestration.subscribeThread({ threadId: session.id });
+		await api.orchestration.unsubscribeThread({ threadId: session.id });
+		expect(snapshots).toHaveLength(1);
+
+		// The host commits the change. It is recorded against the task, not the OMP session, so
+		// nothing else in the row has to move for the window to learn about it.
+		await bridge.invoke("vscode:cediaAgent", {
+			kind: "request",
+			method: "PATCH",
+			path: `/v1/sessions/${session.id}`,
+			body: { pendingModel: { ...held, state: "in-effect", applied: { model: "fixture/fixture-model", at: "2026-09-19T00:03:05.000Z", via: "turn-boundary" } } },
+		});
+		await api.orchestration.subscribeThread({ threadId: session.id });
+		await api.orchestration.unsubscribeThread({ threadId: session.id });
+		unsubscribe();
+		expect(snapshots).toHaveLength(2);
+		expect(sessionOf(snapshots[1])?.pendingModel).toMatchObject({ state: "in-effect" });
+	});
+
+	it("carries what an archive kept, and how Continue resumed, onto the task", async () => {
+		const archive = {
+			state: "restored",
+			ref: "refs/cedia/archive/task-1/1",
+			commit: "0123456789abcdef0123456789abcdef01234567",
+			branch: "cedia/task-1",
+			worktree: "/tmp/task-1",
+			dirty: false,
+			ignored: true,
+			recordedAt: "2026-09-24T10:00:00.000Z",
+			reason: "Cleanup is inactive, so the worktree and its branch were kept.",
+			restored: { at: "2026-09-24T10:05:00.000Z", worktree: "/tmp/task-1", branch: "cedia/task-1", reattached: true, reason: "The task branch still pointed at the archived commit." },
+		};
+		const { bridge } = fakeBridge(frames, { session: { archived: true, archive } });
+		const api = createCediaNativeApi({ bridge });
+		const snapshots: Array<Record<string, unknown>> = [];
+		const unsubscribe = api.orchestration.onThreadEvent(item => {
+			const thread = (item as { snapshot?: { thread?: Record<string, unknown> } }).snapshot?.thread;
+			if (thread) snapshots.push(thread);
+		});
+		await api.orchestration.subscribeThread({ threadId: session.id });
+		await api.orchestration.unsubscribeThread({ threadId: session.id });
+		unsubscribe();
+		expect((snapshots[0]!.session as { archive?: unknown }).archive).toEqual(archive);
+
+		// A receipt that is not the host's own shape is dropped rather than half-shown.
+		const malformed = fakeBridge(frames, { session: { archive: { state: "retained", dirty: "yes" } } });
+		const second = createCediaNativeApi({ bridge: malformed.bridge });
+		const secondSnapshots: Array<Record<string, unknown>> = [];
+		const stop = second.orchestration.onThreadEvent(item => {
+			const thread = (item as { snapshot?: { thread?: Record<string, unknown> } }).snapshot?.thread;
+			if (thread) secondSnapshots.push(thread);
+		});
+		await second.orchestration.subscribeThread({ threadId: session.id });
+		await second.orchestration.unsubscribeThread({ threadId: session.id });
+		stop();
+		expect((secondSnapshots[0]!.session as { archive?: unknown }).archive).toBeNull();
+	});
+
+	it("carries the bounded turn projection onto the task, without this device's identity", async () => {
+		const turns = [
+			{ turnIntentId: "intent-1", commandId: "cmd-1", deviceId: "device-secret", incarnation: "inc-1", payloadHash: "sha256:secret", acceptedSequence: 1, state: "running", queuePosition: 0, model: "anthropic/claude-sonnet-5", createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:01.000Z" },
+			{ turnIntentId: "intent-2", commandId: "cmd-2", deviceId: "device-secret", incarnation: "inc-1", payloadHash: "sha256:secret-2", acceptedSequence: 2, state: "queued", queuePosition: 1, reason: "waiting for OMP", createdAt: "2026-09-24T00:00:02.000Z", updatedAt: "2026-09-24T00:00:02.000Z" },
+		];
+		const { bridge } = fakeBridge(frames, { session: { status: "running", turns } });
+		const api = createCediaNativeApi({ bridge });
+		const snapshots: Array<Record<string, unknown>> = [];
+		const unsubscribe = api.orchestration.onThreadEvent(item => {
+			const thread = (item as { snapshot?: { thread?: Record<string, unknown> } }).snapshot?.thread;
+			if (thread) snapshots.push(thread);
+		});
+		await api.orchestration.subscribeThread({ threadId: session.id });
+		await api.orchestration.unsubscribeThread({ threadId: session.id });
+		unsubscribe();
+		const projected = (snapshots[0]!.session as { turns?: unknown[] }).turns;
+		// What a surface may draw travels; this device's identity and the payload hash do not.
+		expect(projected).toEqual([
+			{ turnIntentId: "intent-1", state: "running", queuePosition: 0, model: "anthropic/claude-sonnet-5" },
+			{ turnIntentId: "intent-2", state: "queued", queuePosition: 1, reason: "waiting for OMP" },
+		]);
+		expect(JSON.stringify(projected)).not.toContain("device-secret");
+	});

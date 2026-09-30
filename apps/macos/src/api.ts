@@ -109,6 +109,8 @@ export function validateHostDescriptor(value: unknown): HostDescriptor {
 		url: parsed.toString(),
 		token: value.token,
 		pid: value.pid,
+		...(typeof value.processStartedAt === "string" ? { processStartedAt: value.processStartedAt } : {}),
+		...(typeof value.appGeneration === "string" ? { appGeneration: value.appGeneration } : {}),
 	};
 }
 
@@ -220,6 +222,14 @@ export class CediaHostClient {
 	}
 
 	health(): Promise<unknown> { return this.request("GET", "health"); }
+	adoptHost(body: unknown): Promise<unknown> { return this.request("POST", "lifecycle/adopt", body); }
+	lifecycle(): Promise<unknown> { return this.request("GET", "lifecycle"); }
+	quitHost(): Promise<unknown> { return this.request("POST", "lifecycle/quit"); }
+	/** Close admission without stopping the host, for the pre-quit decision (plan §2.7). */
+	fenceLifecycle(): Promise<unknown> { return this.request("POST", "lifecycle/fence"); }
+	/** Reopen admission after a cancelled quit decision. */
+	resumeLifecycle(): Promise<unknown> { return this.request("POST", "lifecycle/resume"); }
+	capabilities(): Promise<unknown> { return this.request("GET", "capabilities"); }
 	/** Main-process application bridge; keeps authentication and chunk verification in this client. */
 	requestApplication<T = unknown>(method: string, relative: string, body?: unknown): Promise<T> {
 		return this.request<T>(method, relative, body);

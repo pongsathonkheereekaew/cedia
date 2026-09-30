@@ -22,6 +22,7 @@ import { isSplitRoute } from "../splitViewRoute";
 import { selectSplitView, useSplitViewStore } from "../splitViewStore";
 import { useStore } from "../store";
 import { createThreadExistsSelector, createThreadProjectIdSelector } from "../storeSelectors";
+import { BrowserSteeringGuard } from "../components/BrowserSteeringGuard";
 import { SingleChatSurface } from "../components/chat/SingleChatSurface";
 import { SplitChatSurface } from "../components/chat/SplitChatSurface";
 import { resolveSingleProjectId } from "./-chatThreadRoute.logic";
@@ -177,14 +178,24 @@ function ChatThreadRouteView() {
   }
 
   if (splitView && search.splitViewId) {
-    return <SplitChatSurface splitViewId={search.splitViewId} routeThreadId={threadId} />;
+    return (
+      <>
+        <BrowserSteeringGuard threadId={threadId} split />
+        <SplitChatSurface splitViewId={search.splitViewId} routeThreadId={threadId} />
+      </>
+    );
   }
 
   if (!routeThreadExists) {
     return null;
   }
 
-  return <SingleChatSurface threadId={threadId} search={search} projectId={activeProjectId} />;
+  return (
+    <>
+      <BrowserSteeringGuard threadId={threadId} split={false} />
+      <SingleChatSurface threadId={threadId} search={search} projectId={activeProjectId} />
+    </>
+  );
 }
 
 export const Route = createFileRoute("/_chat/$threadId")({

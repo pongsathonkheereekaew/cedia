@@ -5,7 +5,9 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startHostServer } from "../../host/src/server.ts";
-import { createAgentHostGateway, createAgentWindowHandler } from "../src/agent-window-main.ts";
+import { HostHttpError } from "../src/api.ts";
+import { agentUiStateDir, importLegacyExtensionDrafts, legacyDraftMigrationFromExtensionState, readAgentUiState, writeAgentUiState } from "../src/agent-ui-state.ts";
+import { createAgentHostGateway, createAgentWindowHandler, parseAgentHostRequestTimeoutMs } from "../src/agent-window-main.ts";
 
 let fixtureStateDirCounter = 0;
 function fixture() {
@@ -30,6 +32,13 @@ function fixture() {
 }
 
 describe("Agent Window main-process boundary", () => {
+  it("keeps the normal host request deadline and bounds explicit overrides", () => {
+    expect(parseAgentHostRequestTimeoutMs(undefined)).toBe(30_000);
+    expect(parseAgentHostRequestTimeoutMs("180000")).toBe(180_000);
+    expect(() => parseAgentHostRequestTimeoutMs("0")).toThrow(/1 to 300000/);
+    expect(() => parseAgentHostRequestTimeoutMs("300001")).toThrow(/1 to 300000/);
+  });
+
   it("scopes native panels to trusted Agent Window senders", async () => {
     const { handler, trusted, calls } = fixture();
     const request = { kind: "panel", surface: "terminal", method: "open", input: { cwd: "/tmp" } };
@@ -39,6 +48,21 @@ describe("Agent Window main-process boundary", () => {
     await expect(handler(trusted, { ...request, surface: "arbitrary" })).rejects.toThrow();
     expect(calls).toHaveLength(1);
   });
+  it("finds a host this process never talked to, so a quit stops it instead of guessing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cedia-agent-window-peek-"));
+    const stateDir = join(directory, "state");
+    const server = await startHostServer({ stateDir });
+    try {
+      // No `ensure()`: the main process has no client yet, which is the packaged case where the
+      // window's host traffic goes through another client. The read-only probe must still see it.
+      const gateway = createAgentHostGateway({ appRoot: join(directory, "missing-app"), parentPid: process.pid, stateDir });
+      expect(await gateway.peek()).toMatchObject({ phase: "ready", accepting: true });
+      expect(await gateway.quit()).toMatchObject({ accepted: true });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("shares the existing host and its durable session IDs without an IDE or provider call", async () => {
     const directory = await mkdtemp(join(tmpdir(), "cedia-agent-window-"));
     const stateDir = join(directory, "state");
@@ -49,6 +73,25 @@ describe("Agent Window main-process boundary", () => {
       // A missing appRoot proves that a healthy shared host is reused instead of launching another.
       const gateway = createAgentHostGateway({ appRoot: join(directory, "missing-app"), parentPid: process.pid, stateDir });
       await Promise.all([gateway.ensure(), gateway.ensure()]);
+      expect(await gateway.capabilities()).toMatchObject({ protocolVersion: 1, capabilities: expect.any(Array) });
+      expect(await gateway.lifecycleStatus()).toMatchObject({ phase: "ready", accepting: true });
+      const trusted = {};
+      const bridge = createAgentWindowHandler({
+        stateDir,
+        authorize: event => event === trusted,
+        ensure: gateway.ensure,
+        request: gateway.request,
+        pickFolder: async () => "/tmp",
+        openIde: async () => {},
+        openExternal: async () => {},
+      });
+      expect(await bridge(trusted, { kind: "request", method: "GET", path: "/v1/capabilities" })).toMatchObject({ capabilities: expect.any(Array) });
+      expect(await bridge(trusted, { kind: "request", method: "GET", path: "/v1/lifecycle" })).toMatchObject({ phase: "ready", accepting: true });
+      await expect(bridge(trusted, { kind: "request", method: "GET", path: "/v1/not-allowlisted" })).rejects.toThrow("Unsupported application route");
+      // A typed host refusal travels as a tagged message: Electron's IPC keeps only the message,
+      // so the renderer would otherwise receive an anonymous error with no code to act on.
+      await expect(bridge(trusted, { kind: "request", method: "POST", path: "/v1/sessions", body: { projectId: "missing-project" } }))
+        .rejects.toThrow("[cedia-code:not_found] Project not found");
       const project = await gateway.request("POST", "projects", { id: "project-from-renderer", path: projectPath }) as { id: string };
       const task = await gateway.request("POST", "sessions", { id: "task-from-renderer", projectId: project.id, title: "Shared task" }) as { id: string; status: string };
       expect(project.id).toBe("project-from-renderer");
@@ -60,6 +103,138 @@ describe("Agent Window main-process boundary", () => {
       const same = await gateway.request("GET", `sessions/${task.id}`);
       expect(same).toEqual({ ...task, sidechatSourceThreadId: null });
       expect(server.stats().runningSessions).toBe(0);
+    } finally {
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it("imports an app-side draft file into the real host with its source label", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cedia-agent-window-draft-import-"));
+    const stateDir = join(directory, "state");
+    const server = await startHostServer({ stateDir });
+    const trusted = {};
+    const gateway = createAgentHostGateway({ appRoot: join(directory, "missing-app"), parentPid: process.pid, stateDir });
+    const bridge = createAgentWindowHandler({
+      stateDir,
+      authorize: event => event === trusted,
+      ensure: gateway.ensure,
+      request: gateway.request,
+      pickFolder: async () => null,
+      openIde: async () => {},
+      openExternal: async () => {},
+    });
+    const legacy = { draft: { prompt: "recover this unsent text" }, draftThread: { projectId: "project-1" } };
+    try {
+      await writeAgentUiState(agentUiStateDir(stateDir), "draft:task-legacy", legacy);
+
+      expect(await bridge(trusted, { kind: "uiDraft", action: "read", threadId: "task-legacy" }))
+        .toEqual({ revision: 1, payload: legacy });
+      const owner = server.auth.list().find(device => device.role === "owner");
+      expect(owner).toBeDefined();
+      expect(server.host.store.readDraft(owner!.id, "task-legacy"))
+        .toMatchObject({ revision: 1, text: "recover this unsent text", content: legacy, source: "agent-ui-import" });
+    } finally {
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it("preserves a conflicting cedia.drafts copy as a labeled, recoverable host draft", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cedia-legacy-drafts-"));
+    const stateDir = join(directory, "state");
+    let server = await startHostServer({ stateDir });
+    const trusted = {};
+    const gateway = createAgentHostGateway({ appRoot: join(directory, "missing-app"), parentPid: process.pid, stateDir });
+    const extensionDraft = "older extension composer text";
+    const state = new Map<string, unknown>([["cedia.drafts", { "task-legacy": extensionDraft }]]);
+    const extensionState = {
+      get<T>(key: string): T | undefined { return state.get(key) as T | undefined; },
+      async update(key: string, value: unknown): Promise<void> { state.set(key, value); },
+    };
+    const bridge = createAgentWindowHandler({
+      stateDir,
+      authorize: event => event === trusted,
+      ensure: gateway.ensure,
+      request: gateway.request,
+      pickFolder: async () => null,
+      openIde: async () => {},
+      openExternal: async () => {},
+    });
+    const appDraft = { draft: { prompt: "newer app-side text" }, draftThread: { projectId: "project-1" } };
+    try {
+      await importLegacyExtensionDrafts(
+        (method, path, body) => gateway.request(method, path, body),
+        legacyDraftMigrationFromExtensionState(extensionState),
+      );
+      await writeAgentUiState(agentUiStateDir(stateDir), "draft:task-legacy", appDraft);
+
+      expect(await bridge(trusted, { kind: "uiDraft", action: "read", threadId: "task-legacy" }))
+        .toEqual({ revision: 1, payload: appDraft });
+      const owner = server.auth.list().find(device => device.role === "owner");
+      expect(owner).toBeDefined();
+      expect(server.host.store.readDraft(owner!.id, "task-legacy"))
+        .toMatchObject({ text: "newer app-side text", source: "agent-ui-import" });
+      const marker = state.get("cedia.drafts.migration") as { version: number; importedIds: string[] };
+      expect(marker).toEqual({ version: 1, importedIds: [expect.any(String)] });
+      expect(state.get("cedia.drafts")).toEqual({ "task-legacy": extensionDraft });
+      expect(server.host.store.readDraft(owner!.id, marker.importedIds[0]!))
+        .toMatchObject({ text: extensionDraft, source: "cedia.drafts", content: { draft: { prompt: extensionDraft } } });
+
+      await bridge(trusted, { kind: "uiDraft", action: "read", threadId: "task-legacy" });
+      expect(state.get("cedia.drafts.migration")).toEqual(marker);
+
+      await server.close();
+      server = await startHostServer({ stateDir });
+      const restartedGateway = createAgentHostGateway({ appRoot: join(directory, "missing-app"), parentPid: process.pid, stateDir });
+      const afterRestart = createAgentWindowHandler({
+        stateDir,
+        authorize: event => event === trusted,
+        ensure: restartedGateway.ensure,
+        request: restartedGateway.request,
+        pickFolder: async () => null,
+        openIde: async () => {},
+        openExternal: async () => {},
+      });
+      const restartedOwner = server.auth.list().find(device => device.role === "owner");
+      expect(restartedOwner).toBeDefined();
+      expect(await afterRestart(trusted, { kind: "uiDraft", action: "read", threadId: "task-legacy" }))
+        .toEqual({ revision: 1, payload: appDraft });
+      expect(server.host.store.readDraft(restartedOwner!.id, marker.importedIds[0]!))
+        .toMatchObject({ text: extensionDraft, source: "cedia.drafts" });
+    } finally {
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it("preserves an app-side draft file when the host already has a different draft", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cedia-host-draft-conflict-"));
+    const stateDir = join(directory, "state");
+    const server = await startHostServer({ stateDir });
+    const gateway = createAgentHostGateway({ appRoot: join(directory, "missing-app"), parentPid: process.pid, stateDir });
+    const trusted = {};
+    const bridge = createAgentWindowHandler({
+      stateDir,
+      authorize: event => event === trusted,
+      ensure: gateway.ensure,
+      request: gateway.request,
+      pickFolder: async () => null,
+      openIde: async () => {},
+      openExternal: async () => {},
+    });
+    const hostDraft = { draft: { prompt: "host revision" }, draftThread: { projectId: "project-1" } };
+    const oldAppDraft = { draft: { prompt: "recoverable local revision" }, draftThread: { projectId: "project-1" } };
+    try {
+      await gateway.request("PATCH", "drafts/task-conflict", { expectedRevision: 0, text: "host revision", content: hostDraft });
+      await writeAgentUiState(agentUiStateDir(stateDir), "draft:task-conflict", oldAppDraft);
+
+      expect(await bridge(trusted, { kind: "uiDraft", action: "read", threadId: "task-conflict" }))
+        .toEqual({ revision: 1, payload: hostDraft });
+      const owner = server.auth.list().find(device => device.role === "owner");
+      expect(owner).toBeDefined();
+      const marker = await readAgentUiState(agentUiStateDir(stateDir), "draft-import:task-conflict") as { draftId?: unknown } | null;
+      expect(typeof marker?.draftId).toBe("string");
+      expect(server.host.store.readDraft(owner!.id, marker!.draftId as string))
+        .toMatchObject({ text: "recoverable local revision", source: "agent-ui-import-conflict", content: oldAppDraft });
+      expect(await readAgentUiState(agentUiStateDir(stateDir), "draft:task-conflict")).toEqual(hostDraft);
     } finally {
       await server.close();
       await rm(directory, { recursive: true, force: true });
@@ -123,7 +298,7 @@ describe("Agent Window main-process boundary", () => {
 
   it("refuses URL escapes, credential management and editor impersonation", async () => {
     const { handler, calls, trusted } = fixture();
-    for (const path of ["https://evil.test/v1/projects", "//evil.test/v1/projects", "/v1/sessions/../devices", "/v1/sessions/%2e%2e/devices", "/v1/sessions/%2fdevices", "/v1/devices", "/v1/remote/pair", "/v1/editors/spoof", "/v1/health#fragment"]) {
+    for (const path of ["https://evil.test/v1/projects", "//evil.test/v1/projects", "/v1/sessions/../devices", "/v1/sessions/%2e%2e/devices", "/v1/sessions/%2fdevices", "/v1/remote/pair", "/v1/remote/disable", "/v1/editors/spoof", "/v1/health#fragment"]) {
       await expect(handler(trusted, { kind: "request", method: "GET", path })).rejects.toThrow();
     }
     expect(calls).toEqual([]);
@@ -156,11 +331,28 @@ describe("Agent Window main-process boundary", () => {
     for (const path of ["/v1/provider-logins", "/v1/providers/openai/credentials", "/v1/providers/openai/api-keys", "/v1/providers/openai/logins", "/v1/providers/openai/api-key/extra", "/v1/provider-logins/login-1/input/extra", "/v1/providers//api-key", "/v1/providers/"]) {
       await expect(handler(trusted, { kind: "request", method: "GET", path })).rejects.toThrow("Unsupported application route");
     }
-    // Traversal and a neighbour route that stays native.
-    for (const path of ["/v1/providers/../devices", "/v1/provider-logins/%2e%2e/input", "/v1/providers/%2fdevices", "/v1/devices"]) {
+    // Traversal and neighbour shapes outside the allowlist.
+    for (const path of ["/v1/providers/../devices", "/v1/provider-logins/%2e%2e/input", "/v1/providers/%2fdevices", "/v1/remote/gateway/extra", "/v1/remote/other", "/v1/devices/x/revoke/extra", "/v1/devices//revoke"]) {
       await expect(handler(trusted, { kind: "request", method: "GET", path })).rejects.toThrow();
     }
     expect(calls).toEqual([]);
+  });
+
+  it("forwards the selected remote-path routes the Remote panel drives to the host", async () => {
+    const { handler, calls, trusted } = fixture();
+    const requests = [
+      { method: "GET", path: "/v1/remote/gateway" },
+      { method: "POST", path: "/v1/remote/enrollment", body: { name: "Laptop" } },
+      { method: "GET", path: "/v1/devices" },
+      { method: "POST", path: "/v1/devices/00597ac2-ea19-4e59-a72d-8936619415f7/revoke", body: {} },
+    ];
+    for (const request of requests) expect(await handler(trusted, { kind: "request", ...request })).toEqual({ projects: [] });
+    expect(calls).toEqual([
+      { method: "GET", path: "remote/gateway", body: undefined },
+      { method: "POST", path: "remote/enrollment", body: { name: "Laptop" } },
+      { method: "GET", path: "devices", body: undefined },
+      { method: "POST", path: "devices/00597ac2-ea19-4e59-a72d-8936619415f7/revoke", body: {} },
+    ]);
   });
 
   it("routes an IDE request with the selected workspace and file", async () => {
@@ -198,5 +390,68 @@ describe("Agent Window main-process boundary", () => {
     expect(action).toBe("in");
     await expect(handler(trusted, { kind: "zoom", action: "sideways" })).rejects.toThrow("Invalid desktop zoom action");
     await expect(handler({}, { kind: "getZoomFactor" })).rejects.toThrow("Untrusted");
+  });
+});
+
+describe("the CEDIA preference owner across the renderer boundary (§6.4)", () => {
+  // These rows assert the gateway's relative path shape. A full `/v1/settings` looked right in a
+  // fixture with a fake request function and asked the real host for `/v1/v1/settings`; the
+  // end-to-end fixture in `host-preferences-end-to-end.test.ts` is what proves the real route.
+  it("reaches the host settings route through the application allowlist", async () => {
+    const { handler, calls, trusted } = fixture();
+    await handler(trusted, { kind: "uiSettings", action: "read" });
+    expect(calls).toEqual([{ method: "GET", path: "/settings", body: undefined }]);
+    // The allowlist admits exactly this root: an unrelated one is still refused.
+    await expect(handler(trusted, { kind: "request", method: "GET", path: "/v1/not-allowlisted" })).rejects.toThrow("Unsupported application route");
+  });
+
+  it("writes with the revision it was handed and publishes the committed snapshot to the other window", async () => {
+    const published: unknown[] = [];
+    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const handler = createAgentWindowHandler({
+      stateDir: join(tmpdir(), `cedia-test-settings-${process.pid}`),
+      authorize: event => event === "trusted",
+      request: async (method, path, body) => {
+        calls.push({ method, path, ...(body === undefined ? {} : { body }) });
+        return { revision: 4, values: { uiDensity: "compact" }, fields: [] };
+      },
+      ensure: async () => {},
+      pickFolder: async () => null,
+      openIde: async () => {},
+      openExternal: async () => {},
+      broadcastPreferences: (event, update) => { published.push({ event, update }); },
+    });
+
+    const answer = await handler("trusted", { kind: "uiSettings", action: "write", expectedRevision: 3, category: "appearance", patch: { uiDensity: "compact" } });
+    expect(answer).toEqual({ status: "saved", revision: 4, values: { uiDensity: "compact" } });
+    expect(calls).toEqual([{ method: "PATCH", path: "/settings", body: { expectedRevision: 3, category: "appearance", patch: { uiDensity: "compact" } } }]);
+    expect(published).toEqual([{ event: "trusted", update: { revision: 4, values: { uiDensity: "compact" } } }]);
+
+    // The same boundary refuses a category and a revision the host would never accept.
+    await expect(handler("trusted", { kind: "uiSettings", action: "write", expectedRevision: 3, category: "voice", patch: {} })).rejects.toThrow("Unsupported settings category");
+    await expect(handler("trusted", { kind: "uiSettings", action: "write", expectedRevision: -1, category: "appearance", patch: {} })).rejects.toThrow("Invalid settings revision");
+    await expect(handler("trusted", { kind: "uiSettings", action: "delete" })).rejects.toThrow("Unsupported settings action");
+  });
+
+  it("answers a stale revision with the record that won instead of an anonymous failure", async () => {
+    const published: unknown[] = [];
+    const handler = createAgentWindowHandler({
+      stateDir: join(tmpdir(), `cedia-test-settings-conflict-${process.pid}`),
+      authorize: event => event === "trusted",
+      request: async (method) => {
+        if (method === "PATCH") throw new HostHttpError(409, "/v1/settings", "Settings changed elsewhere");
+        return { revision: 7, values: { uiDensity: "comfortable" }, fields: [] };
+      },
+      ensure: async () => {},
+      pickFolder: async () => null,
+      openIde: async () => {},
+      openExternal: async () => {},
+      broadcastPreferences: (event, update) => { published.push(update); },
+    });
+
+    expect(await handler("trusted", { kind: "uiSettings", action: "write", expectedRevision: 3, category: "appearance", patch: { uiDensity: "compact" } }))
+      .toEqual({ status: "conflict", revision: 7, values: { uiDensity: "comfortable" } });
+    // A refused write is not a committed one: nothing is published to the other window.
+    expect(published).toEqual([]);
   });
 });

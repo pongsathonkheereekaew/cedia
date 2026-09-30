@@ -253,7 +253,7 @@ try {
     implementationSourceHashes[path] = createHash("sha256").update(await readFile(new URL(`../${path}`, import.meta.url))).digest("hex");
   }
   const receipt = { date: new Date().toISOString(), hostRuntime: { name: process.versions.bun ? "bun" : "node", version: process.versions.bun ?? process.versions.node },
-    version, binarySha256, sourceReference: "00085d4e7dfdcfbf302c122fa2682b410a0f43d1", implementationSourceHashes,
+    version, binarySha256, sourceReference: "fc671eba383f2a7208500836673b485c0dc7073d", implementationSourceHashes,
     checks, eventCounts, sentFrames, authorizations, hostEffects, uriWrites, modelRequests, cancellableToolAborted,
     limitations: "Deterministic loopback completions, not external model inference. Hook block uses a fixture path, not editor dirty-buffer integration or universal policy. No UI visual, PTY, durable host, iPhone or full OMP conformance." };
   if (process.env.CEDIA_SMOKE_RECEIPT) {

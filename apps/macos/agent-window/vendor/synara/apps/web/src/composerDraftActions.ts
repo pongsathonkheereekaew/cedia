@@ -576,9 +576,14 @@ export const createComposerDraftStoreState =
       }
       set((state) => {
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
+        const previousToken = existing.prompt.trimStart().match(/^\/([^\s]+)/)?.[1] ?? null;
+        const nextToken = prompt.trimStart().match(/^\/([^\s]+)/)?.[1] ?? null;
         const nextDraft: ComposerThreadDraftState = {
           ...existing,
           prompt,
+          ...(existing.selectedSlashCommand !== null && previousToken !== nextToken
+            ? { selectedSlashCommand: null }
+            : {}),
         };
         const nextDraftsByThreadId = { ...state.draftsByThreadId };
         if (shouldRemoveDraft(nextDraft)) {
@@ -586,6 +591,21 @@ export const createComposerDraftStoreState =
         } else {
           nextDraftsByThreadId[threadId] = nextDraft;
         }
+        return { draftsByThreadId: nextDraftsByThreadId };
+      });
+    },
+    setSelectedSlashCommand: (threadId, name) => {
+      if (threadId.length === 0) return;
+      set((state) => {
+        const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
+        const token = existing.prompt.trimStart().match(/^\/([^\s]+)/)?.[1] ?? null;
+        const selectedSlashCommand =
+          name !== null && name.length > 0 && token === name ? name : null;
+        if (existing.selectedSlashCommand === selectedSlashCommand) return state;
+        const nextDraft: ComposerThreadDraftState = { ...existing, selectedSlashCommand };
+        const nextDraftsByThreadId = { ...state.draftsByThreadId };
+        if (shouldRemoveDraft(nextDraft)) delete nextDraftsByThreadId[threadId];
+        else nextDraftsByThreadId[threadId] = nextDraft;
         return { draftsByThreadId: nextDraftsByThreadId };
       });
     },
@@ -2010,6 +2030,7 @@ export const createComposerDraftStoreState =
         const nextDraft: ComposerThreadDraftState = {
           ...current,
           prompt: "",
+          selectedSlashCommand: null,
           promptHistorySavedDraft: null,
           images: [],
           files: [],

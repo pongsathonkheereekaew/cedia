@@ -47,8 +47,33 @@ export interface NativeBrowserApi {
 	closeTab(input: BrowserTabInput): Promise<ThreadBrowserState>;
 	selectTab(input: BrowserTabInput): Promise<ThreadBrowserState>;
 	openDevTools(input: BrowserTabInput): Promise<void>;
+	agentAttach(input: BrowserTabInput): Promise<BrowserAgentAttachResult>;
+	agentDetach(input: BrowserThreadInput & { tabId?: string }): Promise<BrowserAgentDetachResult>;
+	agentEndpoint(input: BrowserThreadInput): Promise<BrowserAgentEndpointResult>;
 	onState(listener: (state: ThreadBrowserState) => void): () => void;
 	onBrowserCopyLink(listener: (event: { threadId: string; url: string }) => void): () => void;
+}
+
+export interface BrowserAgentAttachResult {
+	readonly cdpUrl: string;
+	readonly tabId: string;
+}
+
+export interface BrowserAgentDetachResult {
+	readonly attached: boolean;
+	readonly cdpUrl?: string;
+}
+
+export interface BrowserAgentEndpointTab {
+	readonly tabId: string;
+	readonly url: string;
+	readonly title: string;
+}
+
+export interface BrowserAgentEndpointResult {
+	readonly attached: boolean;
+	readonly cdpUrl?: string;
+	readonly tabs: BrowserAgentEndpointTab[];
 }
 
 function panelRequest(method: string, input: unknown): { kind: "panel"; surface: "browser"; method: string; input: unknown } {
@@ -84,6 +109,9 @@ export function createNativeBrowserApi(bridge: NativeBrowserBridge): NativeBrows
 		closeTab: (input) => invoke<ThreadBrowserState>("closeTab", input),
 		selectTab: (input) => invoke<ThreadBrowserState>("selectTab", input),
 		openDevTools: async (input) => { await invoke("openDevTools", input); },
+		agentAttach: (input) => invoke<BrowserAgentAttachResult>("agentAttach", input),
+		agentDetach: (input) => invoke<BrowserAgentDetachResult>("agentDetach", input),
+		agentEndpoint: (input) => invoke<BrowserAgentEndpointResult>("agentEndpoint", input),
 		onState: (listener) => {
 			if (!bridge.on) return () => undefined;
 			const handler = (_event: unknown, ...args: unknown[]) => {

@@ -15,6 +15,7 @@ import {
   type ThreadId,
 } from "@synara/contracts";
 import { resolveSelectableModel } from "@synara/shared/model";
+import { useQuery } from "@tanstack/react-query";
 import {
   useDeferredValue,
   useEffect,
@@ -83,6 +84,8 @@ import {
 } from "./pickerPanelStyles";
 import { resolveProviderModelLabel, resolveVisibleProviderOptions } from "./ProviderModelPicker";
 import { resolveRuntimeModelDescriptor } from "./runtimeModelCapabilities";
+import { CediaRuntimeModelStateNotice } from "./CediaRuntimeModelState";
+import { serverModelStateQueryOptions } from "~/lib/serverReactQuery";
 import { moveProviderInOrder } from "../../providerOrdering";
 import * as Schema from "effect/Schema";
 import { useMemo } from "react";
@@ -124,6 +127,8 @@ type ComposerModelPickerProps = {
 
   threadId: ThreadId;
   runtimeModel?: ProviderModelDescriptor | undefined;
+  /** Cedia session id used to show the runtime's own model/effort selection. */
+  runtimeSessionId?: string | null;
   runtimeModelsByProvider?: Partial<
     Record<ProviderKind, ReadonlyArray<ProviderModelDescriptor> | null | undefined>
   >;
@@ -171,6 +176,12 @@ export function ComposerModelPicker(props: ComposerModelPickerProps) {
   const activeProvider = lockedProvider ?? props.provider;
   const effortControl = props.effortControl ?? "menu";
   const usesEffortSlider = effortControl === "slider";
+  const runtimeStateQuery = useQuery(
+    serverModelStateQueryOptions(
+      props.runtimeSessionId ?? "",
+      activeProvider === "omp" && isMenuOpen && Boolean(props.runtimeSessionId),
+    ),
+  );
 
   // Cedia runs every model through OMP. OMP's live catalog still carries the
   // actual upstream vendor, so expose those vendors as the picker tabs while
@@ -522,6 +533,17 @@ export function ComposerModelPicker(props: ComposerModelPickerProps) {
           )}
           data-model-picker-content="true"
         >
+          {runtimeStateQuery.isPending ? (
+            <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+              Checking runtime selection…
+            </div>
+          ) : runtimeStateQuery.isError ? (
+            <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+              Runtime model state unavailable: {runtimeStateQuery.error instanceof Error ? runtimeStateQuery.error.message : "The host request failed."}
+            </div>
+          ) : runtimeStateQuery.data ? (
+            <CediaRuntimeModelStateNotice state={runtimeStateQuery.data} sentModel={props.model} />
+          ) : null}
           <ComposerModelPickerTabs
             tab={effectiveTab}
             providerTabs={providerTabs}

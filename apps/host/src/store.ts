@@ -14,10 +14,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
 	chmodSync,
+	copyFileSync,
 	existsSync,
 	lstatSync,
 	mkdirSync,
 	realpathSync,
+	renameSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -25,19 +27,29 @@ import { DatabaseSync } from "node:sqlite";
 import type {
 	Command,
 	CommandStatus,
+	DraftAttachment,
+	DraftSnapshot,
+	DraftSubmission,
 	EventPage,
 	Json,
 	Project,
 	Session,
+	SessionCleanupState,
+	SessionWorkspaceMetadata,
 	SessionEvent,
+	TurnIntent,
+	TurnState,
 } from "../../../packages/protocol/src/index.ts";
 
 /** Current on-disk schema. Newer versions are refused rather than guessed. */
-export const DURABLE_STORE_SCHEMA_VERSION = 2 as const;
+export const DURABLE_STORE_SCHEMA_VERSION = 6 as const;
 export const DEFAULT_EVENT_PAGE_SIZE = 200 as const;
 export const MAX_EVENT_PAGE_SIZE = 1_000 as const;
 export const DEFAULT_COMMAND_PAGE_SIZE = 100 as const;
 export const MAX_COMMAND_PAGE_SIZE = 10_000 as const;
+/** Turn intents are bookkeeping; the view carries a bounded recent window of them. */
+export const DEFAULT_TURN_PAGE_SIZE = 20 as const;
+export const MAX_TURN_PAGE_SIZE = 1_000 as const;
 
 /**
  * Per-session journal retention.
@@ -69,6 +81,18 @@ const DEVICE_ID_MAX_BYTES = 512;
 const INCARNATION_MAX_BYTES = 512;
 const KIND_MAX_BYTES = 512;
 const ERROR_MAX_BYTES = 16_384;
+const TURN_INTENT_COLUMNS = "session_id, turn_intent_id, command_id, device_id, incarnation, payload_hash, accepted_sequence, state, queue_position, evidence_sequence, model, thinking_level, reason, created_at, updated_at";
+const DRAFT_ID_MAX_BYTES = 512;
+const DRAFT_TEXT_MAX_CHARS = 262_144;
+const DRAFT_ATTACHMENT_MAX_COUNT = 32;
+const DRAFT_ATTACHMENT_ID_MAX_BYTES = 512;
+const DRAFT_ATTACHMENT_NAME_MAX_BYTES = 1_024;
+const DRAFT_SOURCE_MAX_BYTES = 512;
+const DRAFT_SESSION_ID_MAX_BYTES = 512;
+/** The renderer's serialized composer draft; the same 2 MiB the bridge accepts. */
+const DRAFT_CONTENT_MAX_CHARS = 2 * 1024 * 1024;
+/** Columns read for every task row, including the durable workspace/cleanup projection. */
+const SESSION_COLUMNS = "id, project_id, title, cwd, session_file, incarnation, status, pinned, archived, created_at, updated_at, workspace_task_id, workspace_project_id, workspace_repository_id, workspace_root, workspace_actual_cwd, workspace_source_commit, workspace_task_branch, integration_target_ref, integration_target_commit, integration_observed_commit, restoration_ref, restoration_sha, cleanup_generation, cleanup_state, cleanup_last_failure";
 
 type Row = Record<string, unknown>;
 type StoreStatus = Session["status"];
@@ -120,6 +144,25 @@ export interface UpdateSessionPatch {
 	archived?: boolean;
 }
 
+/** Durable workspace facts and cleanup state written with the task row. */
+export interface SessionWorkspaceMetadataPatch {
+	taskId?: string;
+	projectId?: string;
+	repositoryId?: string | null;
+	worktreeRoot?: string | null;
+	actualCwd?: string;
+	sourceCommit?: string | null;
+	taskBranch?: string | null;
+	integrationTargetRef?: string | null;
+	integrationTargetCommit?: string | null;
+	integrationObservedCommit?: string | null;
+	restorationRef?: string | null;
+	restorationSha?: string | null;
+	cleanupGeneration?: number;
+	cleanupState?: SessionCleanupState;
+	lastFailure?: string | null;
+}
+
 export interface ListSessionsOptions {
 	includeArchived?: boolean;
 }
@@ -136,6 +179,67 @@ export interface ClaimCommandInput {
 export interface ClaimCommandResult {
 	command: Command;
 	created: boolean;
+}
+
+export interface BeginTurnIntentInput {
+	sessionId: string;
+	turnIntentId: string;
+	commandId: string;
+	deviceId: string;
+	incarnation: string;
+	payloadHash: string;
+}
+
+export interface TurnTransitionFields {
+	queuePosition?: number;
+	evidenceSequence?: number;
+	model?: string;
+	thinkingLevel?: string;
+	reason?: string;
+}
+
+export interface WriteDraftInput {
+	deviceId: string;
+	draftId: string;
+	expectedRevision: number;
+	text: string;
+	attachments: readonly DraftAttachment[];
+	content?: Json;
+	sessionId?: string;
+	source?: string;
+}
+
+export type DraftWriteResult =
+	| { outcome: "written"; draft: DraftSnapshot }
+	| { outcome: "conflict"; draft?: DraftSnapshot }
+	| { outcome: "created"; draft: DraftSnapshot };
+
+export interface ClaimDraftSubmissionInput {
+	deviceId: string;
+	draftId: string;
+	revision: number;
+	commandId: string;
+	payloadHash: string;
+}
+
+export interface ClaimDraftSubmissionResult {
+	submission: DraftSubmission;
+	created: boolean;
+}
+
+export interface ClearDraftInput {
+	deviceId: string;
+	draftId: string;
+	revision: number;
+}
+
+export interface ImportDraftEntry {
+	draftId: string;
+	text: string;
+	attachments?: readonly DraftAttachment[];
+	content?: Json;
+	sessionId?: string;
+	source: string;
 }
 
 export interface CommandTransitionFields {
@@ -223,6 +327,20 @@ export class DurableStoreCommandTransitionError extends DurableStoreError {
 	constructor(message: string) {
 		super("command-transition", message);
 		this.name = "DurableStoreCommandTransitionError";
+	}
+}
+
+export class DurableStoreTurnNotFoundError extends DurableStoreError {
+	constructor(sessionId: string, turnIntentId: string) {
+		super("turn-not-found", `Turn intent not found: ${sessionId}/${turnIntentId}`);
+		this.name = "DurableStoreTurnNotFoundError";
+	}
+}
+
+export class DurableStoreDraftConflictError extends DurableStoreError {
+	constructor(message: string) {
+		super("draft-conflict", message);
+		this.name = "DurableStoreDraftConflictError";
 	}
 }
 
@@ -376,6 +494,13 @@ function validateStatus(value: unknown): StoreStatus {
 	return value;
 }
 
+function validateCleanupState(value: unknown): SessionCleanupState {
+	if (value !== "retained" && value !== "archive_requested" && value !== "prepared" && value !== "removed") {
+		throw new DurableStoreSchemaError(`Invalid cleanup state: ${String(value)}`);
+	}
+	return value;
+}
+
 function validateCommandStatus(value: unknown): CommandStatus {
 	if (
 		value !== "claimed" &&
@@ -392,6 +517,20 @@ function validatePage(value: number, label: string, maximum: number): number {
 	if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
 		throw new RangeError(`${label} must be an integer between 1 and ${maximum}`);
 	}
+	return value;
+}
+
+function validateTurnState(value: unknown): TurnState {
+	if (
+		value !== "prepared" &&
+		value !== "queued" &&
+		value !== "running" &&
+		value !== "completed" &&
+		value !== "failed" &&
+		value !== "cancelled" &&
+		value !== "needs_continue" &&
+		value !== "outcome_unknown"
+	) throw new DurableStoreSchemaError(`Invalid turn state: ${String(value)}`);
 	return value;
 }
 
@@ -440,7 +579,7 @@ function projectFromRow(row: Row): Project {
 }
 
 function sessionFromRow(row: Row): Session {
-	return {
+	const session: Session = {
 		id: getRowString(row, "id"),
 		projectId: getRowString(row, "project_id"),
 		title: getRowString(row, "title"),
@@ -453,6 +592,32 @@ function sessionFromRow(row: Row): Session {
 		createdAt: getRowString(row, "created_at"),
 		updatedAt: getRowString(row, "updated_at"),
 	};
+	if (row.workspace_task_id !== null && row.workspace_task_id !== undefined) {
+		const generation = row.cleanup_generation;
+		if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 0) throw new DurableStoreSchemaError("Invalid sessions.cleanup_generation");
+		const state = validateCleanupState(row.cleanup_state ?? "retained");
+		const projectId = getRowString(row, "workspace_project_id");
+		const actualCwd = getRowString(row, "workspace_actual_cwd");
+		const metadata: SessionWorkspaceMetadata = {
+			taskId: getRowString(row, "workspace_task_id"),
+			projectId,
+			actualCwd,
+			cleanupGeneration: generation,
+			cleanupState: state,
+			...(typeof row.workspace_repository_id === "string" ? { repositoryId: row.workspace_repository_id } : {}),
+			...(typeof row.workspace_root === "string" ? { worktreeRoot: row.workspace_root } : {}),
+			...(typeof row.workspace_source_commit === "string" ? { sourceCommit: row.workspace_source_commit } : {}),
+			...(typeof row.workspace_task_branch === "string" ? { taskBranch: row.workspace_task_branch } : {}),
+			...(typeof row.integration_target_ref === "string" ? { integrationTargetRef: row.integration_target_ref } : {}),
+			...(typeof row.integration_target_commit === "string" ? { integrationTargetCommit: row.integration_target_commit } : {}),
+			...(typeof row.integration_observed_commit === "string" ? { integrationObservedCommit: row.integration_observed_commit } : {}),
+			...(typeof row.restoration_ref === "string" ? { restorationRef: row.restoration_ref } : {}),
+			...(typeof row.restoration_sha === "string" ? { restorationSha: row.restoration_sha } : {}),
+			...(typeof row.cleanup_last_failure === "string" ? { lastFailure: row.cleanup_last_failure } : {}),
+		};
+		session.workspaceMetadata = metadata;
+	}
+	return session;
 }
 
 function commandFromRow(row: Row): Command {
@@ -474,6 +639,31 @@ function commandFromRow(row: Row): Command {
 	return command;
 }
 
+function turnFromRow(row: Row): TurnIntent {
+	const turn: TurnIntent = {
+		turnIntentId: getRowString(row, "turn_intent_id"),
+		commandId: getRowString(row, "command_id"),
+		deviceId: getRowString(row, "device_id"),
+		incarnation: getRowString(row, "incarnation"),
+		payloadHash: getRowString(row, "payload_hash"),
+		acceptedSequence: requireSequence(row.accepted_sequence, "turn accepted sequence"),
+		state: validateTurnState(row.state),
+		createdAt: getRowString(row, "created_at"),
+		updatedAt: getRowString(row, "updated_at"),
+	};
+	if (row.queue_position !== null && row.queue_position !== undefined) turn.queuePosition = requireSequence(row.queue_position, "turn queue position");
+	if (row.evidence_sequence !== null && row.evidence_sequence !== undefined) turn.evidenceSequence = requireSequence(row.evidence_sequence, "turn evidence sequence", 0);
+	if (row.model !== null && row.model !== undefined) turn.model = requireString(row.model, "turn model", KIND_MAX_BYTES);
+	if (row.thinking_level !== null && row.thinking_level !== undefined) turn.thinkingLevel = requireString(row.thinking_level, "turn thinking level", KIND_MAX_BYTES);
+	if (row.reason !== null && row.reason !== undefined) turn.reason = requireString(row.reason, "turn reason", ERROR_MAX_BYTES);
+	return turn;
+}
+
+function requireSequence(value: unknown, label: string, minimum = 1): number {
+	if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum) throw new DurableStoreSchemaError(`Invalid ${label}`);
+	return value;
+}
+
 function eventFromRow(row: Row): SessionEvent {
 	const sequence = row.sequence;
 	if (typeof sequence !== "number" || !Number.isSafeInteger(sequence) || sequence < 1) {
@@ -485,6 +675,84 @@ function eventFromRow(row: Row): SessionEvent {
 		sequence,
 		timestamp: getRowString(row, "timestamp"),
 		frame: parseJson(row.frame_json, "events.frame_json"),
+	};
+}
+
+function validateDraftRevision(value: unknown, label: string): number {
+	if (!Number.isSafeInteger(value) || (value as number) < 0) throw new TypeError(`${label} must be a non-negative safe integer`);
+	return value as number;
+}
+
+function validateDraftText(value: unknown): string {
+	if (typeof value !== "string") throw new TypeError("draft text must be a string");
+	if (value.length > DRAFT_TEXT_MAX_CHARS) throw new TypeError(`draft text exceeds ${DRAFT_TEXT_MAX_CHARS} characters`);
+	return value;
+}
+
+/**
+ * The cross-window draft payload. The host never interprets it, so the only
+ * requirements are that it is JSON-serializable and bounded: a draft must not be
+ * able to grow the state directory without limit.
+ */
+function validateDraftContent(value: unknown): Json {
+	let serialized: string | undefined;
+	try { serialized = JSON.stringify(value); } catch (error) { throw new TypeError(`draft content must be JSON-serializable: ${error instanceof Error ? error.message : "unknown error"}`); }
+	if (serialized === undefined) throw new TypeError("draft content must be JSON-serializable");
+	if (serialized.length > DRAFT_CONTENT_MAX_CHARS) throw new TypeError(`draft content exceeds ${DRAFT_CONTENT_MAX_CHARS} characters`);
+	return value as Json;
+}
+
+function validateDraftAttachments(value: unknown): DraftAttachment[] {
+	if (!Array.isArray(value)) throw new TypeError("draft attachments must be an array");
+	if (value.length > DRAFT_ATTACHMENT_MAX_COUNT) throw new TypeError(`draft attachments must contain at most ${DRAFT_ATTACHMENT_MAX_COUNT} entries`);
+	return value.map((entry, index) => {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new TypeError(`draft attachment ${index} must be an object`);
+		const candidate = entry as Record<string, unknown>;
+		const id = requireString(candidate.id, `draft attachment ${index} id`, DRAFT_ATTACHMENT_ID_MAX_BYTES);
+		if (candidate.kind !== "image" && candidate.kind !== "file" && candidate.kind !== "text") throw new TypeError(`draft attachment ${index} kind is invalid`);
+		const attachment: DraftAttachment = { id, kind: candidate.kind };
+		if (candidate.name !== undefined) (attachment as { name?: string }).name = requireString(candidate.name, `draft attachment ${index} name`, DRAFT_ATTACHMENT_NAME_MAX_BYTES);
+		if (candidate.byteLength !== undefined) {
+			if (!Number.isSafeInteger(candidate.byteLength) || (candidate.byteLength as number) < 0) throw new TypeError(`draft attachment ${index} byteLength must be a non-negative safe integer`);
+			(attachment as { byteLength?: number }).byteLength = candidate.byteLength as number;
+		}
+		return attachment;
+	});
+}
+
+function draftFromRow(row: Row): DraftSnapshot {
+	const revision = row.revision;
+	if (!Number.isSafeInteger(revision) || (revision as number) < 1) throw new DurableStoreSchemaError("Invalid draft revision");
+	const text = validateDraftText(row.text);
+	if (typeof row.attachments_json !== "string") throw new DurableStoreSchemaError("Invalid drafts.attachments_json");
+	let parsed: unknown;
+	try { parsed = JSON.parse(row.attachments_json); } catch (error) { throw new DurableStoreSchemaError("Invalid drafts.attachments_json", error); }
+	let attachments: DraftAttachment[];
+	try { attachments = validateDraftAttachments(parsed); } catch (error) { throw new DurableStoreSchemaError("Invalid drafts.attachments_json", error); }
+	const sessionId = row.session_id === null || row.session_id === undefined ? undefined : requireString(row.session_id, "drafts.session_id", DRAFT_SESSION_ID_MAX_BYTES);
+	const source = row.source === null || row.source === undefined ? undefined : requireString(row.source, "drafts.source", DRAFT_SOURCE_MAX_BYTES);
+	const content = row.content_json === null || row.content_json === undefined ? undefined : validateDraftContent(parseJson(row.content_json, "drafts.content_json"));
+	return {
+		draftId: getRowString(row, "draft_id"),
+		revision: revision as number,
+		text,
+		attachments,
+		updatedAt: getRowString(row, "updated_at"),
+		...(content === undefined ? {} : { content }),
+		...(sessionId === undefined ? {} : { sessionId }),
+		...(source === undefined ? {} : { source }),
+	};
+}
+
+function draftSubmissionFromRow(row: Row): DraftSubmission {
+	const revision = row.revision;
+	if (!Number.isSafeInteger(revision) || (revision as number) < 1) throw new DurableStoreSchemaError("Invalid draft submission revision");
+	return {
+		submissionId: getRowString(row, "submission_id"),
+		draftId: getRowString(row, "draft_id"),
+		revision: revision as number,
+		commandId: requireString(row.command_id, "draft_submissions.command_id", COMMAND_ID_MAX_BYTES),
+		createdAt: getRowString(row, "created_at"),
 	};
 }
 
@@ -512,7 +780,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
   archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  workspace_task_id TEXT,
+  workspace_project_id TEXT,
+  workspace_repository_id TEXT,
+  workspace_root TEXT,
+  workspace_actual_cwd TEXT,
+  workspace_source_commit TEXT,
+  workspace_task_branch TEXT,
+  integration_target_ref TEXT,
+  integration_target_commit TEXT,
+  integration_observed_commit TEXT,
+  restoration_ref TEXT,
+  restoration_sha TEXT,
+  cleanup_generation INTEGER NOT NULL DEFAULT 0 CHECK (cleanup_generation >= 0),
+  cleanup_state TEXT NOT NULL DEFAULT 'retained' CHECK (cleanup_state IN ('retained', 'archive_requested', 'prepared', 'removed')),
+  cleanup_last_failure TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_project_idx ON sessions(project_id, archived, updated_at);
 CREATE TABLE IF NOT EXISTS commands (
@@ -540,6 +823,49 @@ CREATE TABLE IF NOT EXISTS events (
   frame_json TEXT NOT NULL,
   PRIMARY KEY (session_id, sequence)
 );
+CREATE TABLE IF NOT EXISTS turn_intents (
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  turn_intent_id TEXT NOT NULL,
+  command_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  incarnation TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  accepted_sequence INTEGER NOT NULL CHECK (accepted_sequence > 0),
+  state TEXT NOT NULL CHECK (state IN ('prepared', 'queued', 'running', 'completed', 'failed', 'cancelled', 'needs_continue', 'outcome_unknown')),
+  queue_position INTEGER CHECK (queue_position IS NULL OR queue_position > 0),
+  evidence_sequence INTEGER CHECK (evidence_sequence IS NULL OR evidence_sequence >= 0),
+  model TEXT,
+  thinking_level TEXT,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (session_id, turn_intent_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS turn_intents_command_idx ON turn_intents(session_id, command_id);
+CREATE INDEX IF NOT EXISTS turn_intents_session_sequence_idx ON turn_intents(session_id, accepted_sequence DESC);
+CREATE TABLE IF NOT EXISTS drafts (
+  device_id TEXT NOT NULL,
+  draft_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  text TEXT NOT NULL,
+  attachments_json TEXT NOT NULL,
+  content_json TEXT,
+  session_id TEXT,
+  source TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (device_id, draft_id)
+);
+CREATE TABLE IF NOT EXISTS draft_submissions (
+  device_id TEXT NOT NULL,
+  draft_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  submission_id TEXT NOT NULL,
+  command_id TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (device_id, draft_id, revision)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS draft_submissions_submission_id_idx ON draft_submissions(submission_id);
 `;
 
 function isDatabaseBusy(error: unknown): boolean {
@@ -601,7 +927,7 @@ export class DurableStore {
 			db = new DatabaseSync(journalPath);
 			secureDatabasePath(journalPath, 0o600);
 			db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
-			initializeSchema(db);
+			initializeSchema(db, journalPath);
 			const store = new DurableStore({ stateDir, journalPath, ownerLockPath }, db, ownerDb);
 			try {
 				if (options.recover !== false) store.recoverPending();
@@ -739,15 +1065,15 @@ export class DurableStore {
 		if (projectId !== undefined) this.getProjectOrThrow(requireString(projectId, "projectId"));
 		const includeArchived = options.includeArchived === true;
 		const rows = projectId === undefined
-			? this.db.prepare(`SELECT id, project_id, title, cwd, session_file, incarnation, status, pinned, archived, created_at, updated_at FROM sessions ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY pinned DESC, updated_at DESC, id DESC`).all()
-			: this.db.prepare(`SELECT id, project_id, title, cwd, session_file, incarnation, status, pinned, archived, created_at, updated_at FROM sessions WHERE project_id = ? ${includeArchived ? "" : "AND archived = 0"} ORDER BY pinned DESC, updated_at DESC, id DESC`).all(projectId);
+			? this.db.prepare(`SELECT ${SESSION_COLUMNS} FROM sessions ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY pinned DESC, updated_at DESC, id DESC`).all()
+			: this.db.prepare(`SELECT ${SESSION_COLUMNS} FROM sessions WHERE project_id = ? ${includeArchived ? "" : "AND archived = 0"} ORDER BY pinned DESC, updated_at DESC, id DESC`).all(projectId);
 		return rows.map(row => sessionFromRow(row as Row));
 	}
 
 	getSession(id: string): Session | undefined {
 		this.assertOpen();
 		const sessionId = requireString(id, "sessionId");
-		const row = this.db.prepare("SELECT id, project_id, title, cwd, session_file, incarnation, status, pinned, archived, created_at, updated_at FROM sessions WHERE id = ?").get(sessionId) as Row | undefined;
+		const row = this.db.prepare(`SELECT ${SESSION_COLUMNS} FROM sessions WHERE id = ?`).get(sessionId) as Row | undefined;
 		return row ? sessionFromRow(row) : undefined;
 	}
 
@@ -765,7 +1091,7 @@ export class DurableStore {
 		const timestamp = nowIso();
 		try {
 			return this.transaction(() => {
-				this.db.prepare("INSERT INTO sessions (id, project_id, title, cwd, session_file, incarnation, status, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+				this.db.prepare("INSERT INTO sessions (id, project_id, title, cwd, session_file, incarnation, status, archived, created_at, updated_at, workspace_task_id, workspace_project_id, workspace_actual_cwd, cleanup_generation, cleanup_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'retained')").run(
 					id,
 					projectId,
 					title,
@@ -776,6 +1102,9 @@ export class DurableStore {
 					boolToSql(archived),
 					timestamp,
 					timestamp,
+					id,
+					projectId,
+					cwd,
 				);
 				return this.getSessionOrThrow(id);
 			});
@@ -798,7 +1127,7 @@ export class DurableStore {
 		const pinned = patch.pinned === undefined ? current.pinned ?? false : optionalBoolean(patch.pinned, "session pinned")!;
 		if (typeof archived !== "boolean") throw new TypeError("session archived must be boolean");
 		return this.transaction(() => {
-			this.db.prepare("UPDATE sessions SET title = ?, cwd = ?, session_file = ?, incarnation = ?, status = ?, archived = ?, pinned = ?, updated_at = ? WHERE id = ?").run(
+			this.db.prepare("UPDATE sessions SET title = ?, cwd = ?, session_file = ?, incarnation = ?, status = ?, archived = ?, pinned = ?, workspace_actual_cwd = ?, updated_at = ? WHERE id = ?").run(
 				title,
 				cwd,
 				sessionFile,
@@ -806,11 +1135,87 @@ export class DurableStore {
 				status,
 				boolToSql(archived),
 				boolToSql(pinned),
+				cwd,
 				nowIso(),
 				sessionId,
 			);
 			return this.getSessionOrThrow(sessionId);
 		});
+	}
+
+	/** Read the task-row workspace/cleanup projection without consulting sidecar files. */
+	getSessionWorkspaceMetadata(id: string): SessionWorkspaceMetadata | undefined {
+		return this.getSession(id)?.workspaceMetadata;
+	}
+
+	/** Atomically update durable workspace facts or advance the cleanup state machine. */
+	updateSessionWorkspaceMetadata(id: string, patch: SessionWorkspaceMetadataPatch): SessionWorkspaceMetadata {
+		this.assertOpen();
+		const sessionId = requireString(id, "sessionId");
+		const session = this.getSessionOrThrow(sessionId);
+		const current = session.workspaceMetadata ?? {
+			taskId: session.id,
+			projectId: session.projectId,
+			actualCwd: session.cwd,
+			cleanupGeneration: 0,
+			cleanupState: "retained" as const,
+		};
+		const text = (value: string | null | undefined, label: string): string | null | undefined => {
+			if (value === null || value === undefined) return value;
+			return requireString(value, label, 16_384);
+		};
+		const optional = (value: string | null | undefined, previous: string | undefined, label: string): string | undefined => {
+			if (value === undefined) return previous;
+			if (value === null) return undefined;
+			return text(value, label)!;
+		};
+		const generation = patch.cleanupGeneration === undefined ? current.cleanupGeneration : patch.cleanupGeneration;
+		if (!Number.isSafeInteger(generation) || generation < 0) throw new TypeError("cleanup generation must be a non-negative safe integer");
+		const state = patch.cleanupState === undefined ? current.cleanupState : validateCleanupState(patch.cleanupState);
+		const next: SessionWorkspaceMetadata = {
+			taskId: text(patch.taskId, "workspace task id") ?? current.taskId,
+			projectId: text(patch.projectId, "workspace project id") ?? current.projectId,
+			actualCwd: text(patch.actualCwd, "workspace actual cwd") ?? current.actualCwd,
+			cleanupGeneration: generation,
+			cleanupState: state,
+			...(optional(patch.repositoryId, current.repositoryId, "workspace repository id") === undefined ? {} : { repositoryId: optional(patch.repositoryId, current.repositoryId, "workspace repository id") }),
+			...(optional(patch.worktreeRoot, current.worktreeRoot, "workspace root") === undefined ? {} : { worktreeRoot: optional(patch.worktreeRoot, current.worktreeRoot, "workspace root") }),
+			...(optional(patch.sourceCommit, current.sourceCommit, "workspace source commit") === undefined ? {} : { sourceCommit: optional(patch.sourceCommit, current.sourceCommit, "workspace source commit") }),
+			...(optional(patch.taskBranch, current.taskBranch, "workspace task branch") === undefined ? {} : { taskBranch: optional(patch.taskBranch, current.taskBranch, "workspace task branch") }),
+			...(optional(patch.integrationTargetRef, current.integrationTargetRef, "integration target ref") === undefined ? {} : { integrationTargetRef: optional(patch.integrationTargetRef, current.integrationTargetRef, "integration target ref") }),
+			...(optional(patch.integrationTargetCommit, current.integrationTargetCommit, "integration target commit") === undefined ? {} : { integrationTargetCommit: optional(patch.integrationTargetCommit, current.integrationTargetCommit, "integration target commit") }),
+			...(optional(patch.integrationObservedCommit, current.integrationObservedCommit, "integration observed commit") === undefined ? {} : { integrationObservedCommit: optional(patch.integrationObservedCommit, current.integrationObservedCommit, "integration observed commit") }),
+			...(optional(patch.restorationRef, current.restorationRef, "restoration ref") === undefined ? {} : { restorationRef: optional(patch.restorationRef, current.restorationRef, "restoration ref") }),
+			...(optional(patch.restorationSha, current.restorationSha, "restoration SHA") === undefined ? {} : { restorationSha: optional(patch.restorationSha, current.restorationSha, "restoration SHA") }),
+			...(optional(patch.lastFailure, current.lastFailure, "cleanup last failure") === undefined ? {} : { lastFailure: optional(patch.lastFailure, current.lastFailure, "cleanup last failure") }),
+		};
+		this.transaction(() => {
+			this.db.prepare("UPDATE sessions SET workspace_task_id = ?, workspace_project_id = ?, workspace_repository_id = ?, workspace_root = ?, workspace_actual_cwd = ?, workspace_source_commit = ?, workspace_task_branch = ?, integration_target_ref = ?, integration_target_commit = ?, integration_observed_commit = ?, restoration_ref = ?, restoration_sha = ?, cleanup_generation = ?, cleanup_state = ?, cleanup_last_failure = ?, updated_at = ? WHERE id = ?").run(
+				next.taskId,
+				next.projectId,
+				next.repositoryId ?? null,
+				next.worktreeRoot ?? null,
+				next.actualCwd,
+				next.sourceCommit ?? null,
+				next.taskBranch ?? null,
+				next.integrationTargetRef ?? null,
+				next.integrationTargetCommit ?? null,
+				next.integrationObservedCommit ?? null,
+				next.restorationRef ?? null,
+				next.restorationSha ?? null,
+				next.cleanupGeneration,
+				next.cleanupState,
+				next.lastFailure ?? null,
+				nowIso(),
+				sessionId,
+			);
+		});
+		return this.getSessionOrThrow(sessionId).workspaceMetadata!;
+	}
+
+	/** Short alias used by callers that treat workspace metadata as a row projection. */
+	setSessionWorkspaceMetadata(id: string, patch: SessionWorkspaceMetadataPatch): SessionWorkspaceMetadata {
+		return this.updateSessionWorkspaceMetadata(id, patch);
 	}
 
 	/**
@@ -828,6 +1233,145 @@ export class DurableStore {
 			this.db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
 		});
 		this.retainedJournalBytes.delete(sessionId);
+	}
+
+	readDraft(deviceId: string, draftId: string): DraftSnapshot | undefined {
+		this.assertOpen();
+		const normalizedDeviceId = requireString(deviceId, "deviceId", DEVICE_ID_MAX_BYTES);
+		const normalizedDraftId = requireString(draftId, "draftId", DRAFT_ID_MAX_BYTES);
+		const row = this.db.prepare("SELECT device_id, draft_id, revision, text, attachments_json, content_json, session_id, source, updated_at FROM drafts WHERE device_id = ? AND draft_id = ?").get(normalizedDeviceId, normalizedDraftId) as Row | undefined;
+		return row ? draftFromRow(row) : undefined;
+	}
+
+	writeDraft(input: WriteDraftInput): DraftWriteResult {
+		this.assertOpen();
+		const deviceId = requireString(input.deviceId, "deviceId", DEVICE_ID_MAX_BYTES);
+		const draftId = requireString(input.draftId, "draftId", DRAFT_ID_MAX_BYTES);
+		const expectedRevision = validateDraftRevision(input.expectedRevision, "expectedRevision");
+		const text = validateDraftText(input.text);
+		const attachments = validateDraftAttachments(input.attachments);
+		const content = input.content === undefined ? undefined : validateDraftContent(input.content);
+		const sessionId = input.sessionId === undefined ? undefined : requireString(input.sessionId, "sessionId", DRAFT_SESSION_ID_MAX_BYTES);
+		const source = input.source === undefined ? undefined : requireString(input.source, "source", DRAFT_SOURCE_MAX_BYTES);
+		return this.transaction(() => {
+			const read = () => this.db.prepare("SELECT device_id, draft_id, revision, text, attachments_json, content_json, session_id, source, updated_at FROM drafts WHERE device_id = ? AND draft_id = ?").get(deviceId, draftId) as Row | undefined;
+			const currentRow = read();
+			if (currentRow) {
+				const current = draftFromRow(currentRow);
+				if (expectedRevision === 0 || expectedRevision !== current.revision) return { outcome: "conflict", draft: current };
+				const revision = current.revision + 1;
+				const nextSessionId = sessionId === undefined ? current.sessionId : sessionId;
+				const nextSource = source === undefined ? current.source : source;
+				// An omitted payload keeps the stored one, so a caller that only touches
+				// the readable text cannot erase the other window's draft.
+				const nextContent = content === undefined ? current.content : content;
+				this.db.prepare("UPDATE drafts SET revision = ?, text = ?, attachments_json = ?, content_json = ?, session_id = ?, source = ?, updated_at = ? WHERE device_id = ? AND draft_id = ? AND revision = ?").run(
+					revision,
+					text,
+					JSON.stringify(attachments),
+					nextContent === undefined ? null : JSON.stringify(nextContent),
+					nextSessionId ?? null,
+					nextSource ?? null,
+					nowIso(),
+					deviceId,
+					draftId,
+					current.revision,
+				);
+				const row = read();
+				if (!row) throw new DurableStoreError("store-write", "Draft update was not persisted");
+				return { outcome: "written", draft: draftFromRow(row) };
+			}
+			if (expectedRevision !== 0) return { outcome: "conflict" };
+			this.db.prepare("INSERT INTO drafts (device_id, draft_id, revision, text, attachments_json, content_json, session_id, source, updated_at) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)").run(
+				deviceId,
+				draftId,
+				text,
+				JSON.stringify(attachments),
+				content === undefined ? null : JSON.stringify(content),
+				sessionId ?? null,
+				source ?? null,
+				nowIso(),
+			);
+			const row = read();
+			if (!row) throw new DurableStoreError("store-write", "Draft creation was not persisted");
+			return { outcome: "created", draft: draftFromRow(row) };
+		});
+	}
+
+	claimDraftSubmission(input: ClaimDraftSubmissionInput): ClaimDraftSubmissionResult {
+		this.assertOpen();
+		const deviceId = requireString(input.deviceId, "deviceId", DEVICE_ID_MAX_BYTES);
+		const draftId = requireString(input.draftId, "draftId", DRAFT_ID_MAX_BYTES);
+		const revision = validateDraftRevision(input.revision, "revision");
+		if (revision < 1) throw new TypeError("revision must be at least 1");
+		const commandId = requireString(input.commandId, "commandId", COMMAND_ID_MAX_BYTES);
+		const payloadHash = requireString(input.payloadHash, "payloadHash", 512);
+		return this.transaction(() => {
+			const draftRow = this.db.prepare("SELECT device_id, draft_id, revision, text, attachments_json, content_json, session_id, source, updated_at FROM drafts WHERE device_id = ? AND draft_id = ?").get(deviceId, draftId) as Row | undefined;
+			if (!draftRow || draftFromRow(draftRow).revision !== revision) throw new DurableStoreDraftConflictError(`Draft revision is no longer ${revision}: ${draftId}`);
+			const existingRow = this.db.prepare("SELECT device_id, draft_id, revision, submission_id, command_id, payload_hash, created_at FROM draft_submissions WHERE device_id = ? AND draft_id = ? AND revision = ?").get(deviceId, draftId, revision) as Row | undefined;
+			if (existingRow) {
+				if (getRowString(existingRow, "payload_hash") !== payloadHash) throw new DurableStoreDraftConflictError(`Draft revision already has a different submission: ${draftId}@${revision}`);
+				return { submission: draftSubmissionFromRow(existingRow), created: false };
+			}
+			const createdAt = nowIso();
+			const submissionId = randomUUID();
+			try {
+				this.db.prepare("INSERT INTO draft_submissions (device_id, draft_id, revision, submission_id, command_id, payload_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(deviceId, draftId, revision, submissionId, commandId, payloadHash, createdAt);
+			} catch (error) {
+				if (isUniqueConstraint(error)) throw new DurableStoreDraftConflictError(`Draft submission identity is already claimed: ${draftId}@${revision}`);
+				throw error;
+			}
+			const row = this.db.prepare("SELECT device_id, draft_id, revision, submission_id, command_id, payload_hash, created_at FROM draft_submissions WHERE device_id = ? AND draft_id = ? AND revision = ?").get(deviceId, draftId, revision) as Row | undefined;
+			if (!row) throw new DurableStoreError("store-write", "Draft submission was not persisted");
+			return { submission: draftSubmissionFromRow(row), created: true };
+		});
+	}
+
+	clearDraft(input: ClearDraftInput): { cleared: boolean; draft?: DraftSnapshot } {
+		this.assertOpen();
+		const deviceId = requireString(input.deviceId, "deviceId", DEVICE_ID_MAX_BYTES);
+		const draftId = requireString(input.draftId, "draftId", DRAFT_ID_MAX_BYTES);
+		const revision = validateDraftRevision(input.revision, "revision");
+		return this.transaction(() => {
+			const row = this.db.prepare("SELECT device_id, draft_id, revision, text, attachments_json, content_json, session_id, source, updated_at FROM drafts WHERE device_id = ? AND draft_id = ?").get(deviceId, draftId) as Row | undefined;
+			if (!row) return { cleared: false };
+			const current = draftFromRow(row);
+			if (current.revision !== revision) return { cleared: false, draft: current };
+			this.db.prepare("DELETE FROM drafts WHERE device_id = ? AND draft_id = ? AND revision = ?").run(deviceId, draftId, revision);
+			// Delivery consumes the revision's claim: the next draft restarts at revision 1
+			// (see writeDraft), so a spent submission left behind would collide with it and
+			// every later Send on the task would refuse as a cross-window conflict. A stale
+			// clear that matches nothing leaves live claims alone by construction.
+			this.db.prepare("DELETE FROM draft_submissions WHERE device_id = ? AND draft_id = ? AND revision = ?").run(deviceId, draftId, revision);
+			return { cleared: true };
+		});
+	}
+
+	importDrafts(input: { deviceId: string; entries: ReadonlyArray<ImportDraftEntry> }): { imported: number; skipped: number } {
+		this.assertOpen();
+		const deviceId = requireString(input.deviceId, "deviceId", DEVICE_ID_MAX_BYTES);
+		if (!Array.isArray(input.entries)) throw new TypeError("entries must be an array");
+		return this.transaction(() => {
+			let imported = 0;
+			let skipped = 0;
+			for (const entry of input.entries) {
+				const draftId = requireString(entry?.draftId, "draftId", DRAFT_ID_MAX_BYTES);
+				const text = validateDraftText(entry?.text);
+				const attachments = validateDraftAttachments(entry?.attachments ?? []);
+				const content = entry?.content === undefined ? undefined : validateDraftContent(entry.content);
+				const sessionId = entry?.sessionId === undefined ? undefined : requireString(entry.sessionId, "sessionId", DRAFT_SESSION_ID_MAX_BYTES);
+				const source = requireString(entry?.source, "source", DRAFT_SOURCE_MAX_BYTES);
+				const existing = this.db.prepare("SELECT 1 FROM drafts WHERE device_id = ? AND draft_id = ?").get(deviceId, draftId);
+				if (existing) {
+					skipped += 1;
+					continue;
+				}
+				this.db.prepare("INSERT INTO drafts (device_id, draft_id, revision, text, attachments_json, content_json, session_id, source, updated_at) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)").run(deviceId, draftId, text, JSON.stringify(attachments), content === undefined ? null : JSON.stringify(content), sessionId ?? null, source, nowIso());
+				imported += 1;
+			}
+			return { imported, skipped };
+		});
 	}
 
 	claimCommand(input: ClaimCommandInput): ClaimCommandResult {
@@ -872,6 +1416,136 @@ export class DurableStore {
 		this.getSessionOrThrow(normalizedSessionId);
 		const row = this.db.prepare("SELECT session_id, command_id, device_id, incarnation, kind, payload_json, payload_hash, status, ack_json, result_json, error, created_at, updated_at FROM commands WHERE session_id = ? AND command_id = ?").get(normalizedSessionId, normalizedCommandId) as Row | undefined;
 		return row ? commandFromRow(row) : undefined;
+	}
+
+	/**
+	 * Persist one submitted turn intent before it is dispatched (§2.4).
+	 *
+	 * Idempotent by command: a replay or a reconciliation that names the same command and the
+	 * same payload returns the intent that already exists instead of claiming a second one, and
+	 * a different payload for that command is a conflict, exactly like the command receipt.
+	 */
+	beginTurnIntent(input: BeginTurnIntentInput): { intent: TurnIntent; created: boolean } {
+		this.assertOpen();
+		const sessionId = requireString(input.sessionId, "sessionId");
+		const turnIntentId = requireString(input.turnIntentId, "turnIntentId", COMMAND_ID_MAX_BYTES);
+		const commandId = requireString(input.commandId, "commandId", COMMAND_ID_MAX_BYTES);
+		const deviceId = requireString(input.deviceId, "deviceId", DEVICE_ID_MAX_BYTES);
+		const incarnation = requireString(input.incarnation, "incarnation", INCARNATION_MAX_BYTES);
+		const payloadHash = requireString(input.payloadHash, "payloadHash", KIND_MAX_BYTES);
+		return this.transaction(() => {
+			this.getSessionOrThrow(sessionId);
+			const existingRow = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND command_id = ?`).get(sessionId, commandId) as Row | undefined;
+			if (existingRow) {
+				const existing = turnFromRow(existingRow);
+				if (existing.payloadHash !== payloadHash) throw new DurableStoreCommandConflictError(sessionId, commandId);
+				return { intent: existing, created: false };
+			}
+			const sequenceRow = this.db.prepare("SELECT MAX(accepted_sequence) AS sequence FROM turn_intents WHERE session_id = ?").get(sessionId) as Row | undefined;
+			const previous = sequenceRow?.sequence;
+			const acceptedSequence = previous === null || previous === undefined ? 1 : requireSequence(previous, "turn accepted sequence") + 1;
+			const timestamp = nowIso();
+			this.db.prepare("INSERT INTO turn_intents (session_id, turn_intent_id, command_id, device_id, incarnation, payload_hash, accepted_sequence, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?)").run(
+				sessionId,
+				turnIntentId,
+				commandId,
+				deviceId,
+				incarnation,
+				payloadHash,
+				acceptedSequence,
+				timestamp,
+				timestamp,
+			);
+			const row = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND turn_intent_id = ?`).get(sessionId, turnIntentId) as Row | undefined;
+			if (!row) throw new DurableStoreError("store-write", "Turn intent was not persisted");
+			return { intent: turnFromRow(row), created: true };
+		});
+	}
+
+	getTurnIntent(sessionId: string, turnIntentId: string): TurnIntent | undefined {
+		this.assertOpen();
+		const normalizedSessionId = requireString(sessionId, "sessionId");
+		this.getSessionOrThrow(normalizedSessionId);
+		const row = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND turn_intent_id = ?`).get(normalizedSessionId, requireString(turnIntentId, "turnIntentId", COMMAND_ID_MAX_BYTES)) as Row | undefined;
+		return row ? turnFromRow(row) : undefined;
+	}
+
+	getTurnIntentByCommand(sessionId: string, commandId: string): TurnIntent | undefined {
+		this.assertOpen();
+		const normalizedSessionId = requireString(sessionId, "sessionId");
+		this.getSessionOrThrow(normalizedSessionId);
+		const row = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND command_id = ?`).get(normalizedSessionId, requireString(commandId, "commandId", COMMAND_ID_MAX_BYTES)) as Row | undefined;
+		return row ? turnFromRow(row) : undefined;
+	}
+
+	/** Recent intents for one task, newest first, bounded so a session row stays small. */
+	listTurnIntents(sessionId: string, limit: number = DEFAULT_TURN_PAGE_SIZE): TurnIntent[] {
+		this.assertOpen();
+		const normalizedSessionId = requireString(sessionId, "sessionId");
+		this.getSessionOrThrow(normalizedSessionId);
+		const pageSize = validatePage(limit, "turn limit", MAX_TURN_PAGE_SIZE);
+		const rows = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? ORDER BY accepted_sequence DESC LIMIT ?`).all(normalizedSessionId, pageSize);
+		return rows.map(row => turnFromRow(row));
+	}
+
+	/** Intents that still describe unfinished work: submitted, or accepted, or unresolved. */
+	listOpenTurnIntents(sessionId: string): TurnIntent[] {
+		this.assertOpen();
+		const normalizedSessionId = requireString(sessionId, "sessionId");
+		this.getSessionOrThrow(normalizedSessionId);
+		const rows = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND state IN ('prepared', 'queued', 'running', 'needs_continue') ORDER BY accepted_sequence ASC`).all(normalizedSessionId);
+		return rows.map(row => turnFromRow(row));
+	}
+
+	transitionTurnIntent(sessionId: string, turnIntentId: string, state: TurnState, fields: TurnTransitionFields = {}): TurnIntent {
+		this.assertOpen();
+		const normalizedSessionId = requireString(sessionId, "sessionId");
+		const normalizedTurnId = requireString(turnIntentId, "turnIntentId", COMMAND_ID_MAX_BYTES);
+		const nextState = validateTurnState(state);
+		if (fields.reason !== undefined) requireString(fields.reason, "turn reason", ERROR_MAX_BYTES);
+		if (fields.queuePosition !== undefined) requireSequence(fields.queuePosition, "turn queue position");
+		if (fields.evidenceSequence !== undefined) requireSequence(fields.evidenceSequence, "turn evidence sequence", 0);
+		if (fields.model !== undefined) requireString(fields.model, "turn model", KIND_MAX_BYTES);
+		if (fields.thinkingLevel !== undefined) requireString(fields.thinkingLevel, "turn thinking level", KIND_MAX_BYTES);
+		return this.transaction(() => {
+			this.getSessionOrThrow(normalizedSessionId);
+			const row = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND turn_intent_id = ?`).get(normalizedSessionId, normalizedTurnId) as Row | undefined;
+			if (!row) throw new DurableStoreTurnNotFoundError(normalizedSessionId, normalizedTurnId);
+			const current = turnFromRow(row);
+			if (current.state !== nextState && isFinishedTurnState(current.state)) {
+				throw new DurableStoreCommandTransitionError(`Finished turn ${normalizedSessionId}/${normalizedTurnId} cannot transition from ${current.state} to ${nextState}`);
+			}
+			const nextReason = fields.reason === undefined ? current.reason : fields.reason;
+			const nextQueuePosition = fields.queuePosition === undefined ? current.queuePosition : fields.queuePosition;
+			const nextEvidence = fields.evidenceSequence === undefined ? current.evidenceSequence : fields.evidenceSequence;
+			const nextModel = fields.model === undefined ? current.model : fields.model;
+			const nextThinkingLevel = fields.thinkingLevel === undefined ? current.thinkingLevel : fields.thinkingLevel;
+			// Repeating a state is not a transition, but it may still carry new evidence - the
+			// position OMP reported for a still-queued turn, or the model a running turn actually
+			// uses - so only a call that changes nothing at all is a no-op.
+			if (current.state === nextState && nextReason === current.reason && nextQueuePosition === current.queuePosition
+				&& nextEvidence === current.evidenceSequence && nextModel === current.model && nextThinkingLevel === current.thinkingLevel) return current;
+			this.db.prepare("UPDATE turn_intents SET state = ?, queue_position = ?, evidence_sequence = ?, model = ?, thinking_level = ?, reason = ?, updated_at = ? WHERE session_id = ? AND turn_intent_id = ?").run(
+				nextState,
+				nextQueuePosition === undefined ? null : nextQueuePosition,
+				nextEvidence === undefined ? null : nextEvidence,
+				nextModel === undefined ? null : nextModel,
+				nextThinkingLevel === undefined ? null : nextThinkingLevel,
+				nextReason === undefined ? null : nextReason,
+				nowIso(),
+				normalizedSessionId,
+				normalizedTurnId,
+			);
+			const updated = this.db.prepare(`SELECT ${TURN_INTENT_COLUMNS} FROM turn_intents WHERE session_id = ? AND turn_intent_id = ?`).get(normalizedSessionId, normalizedTurnId) as Row | undefined;
+			if (!updated) throw new DurableStoreError("store-write", "Turn intent transition was not persisted");
+			return turnFromRow(updated);
+		});
+	}
+
+	listOpenTurnSessions(): string[] {
+		this.assertOpen();
+		const rows = this.db.prepare("SELECT DISTINCT session_id FROM turn_intents WHERE state IN ('prepared', 'queued', 'running')").all() as Row[];
+		return rows.map(row => getRowString(row, "session_id"));
 	}
 
 	listCommands(sessionId: string, limit: number = DEFAULT_COMMAND_PAGE_SIZE): Command[] {
@@ -1069,6 +1743,17 @@ export class DurableStore {
 			const timestamp = nowIso();
 			const unfinished = this.db.prepare("SELECT DISTINCT session_id FROM commands WHERE status IN ('claimed', 'acknowledged')").all() as Row[];
 			this.db.prepare("UPDATE commands SET status = 'outcome_unknown', updated_at = ? WHERE status IN ('claimed', 'acknowledged')").run(timestamp);
+			// A turn whose start Cedia never saw is pending work: it is paused for an explicit
+			// Continue instead of being replayed. A turn that was already running when the owner
+			// stopped has an unknown outcome, and only evidence - never a guess - may settle it.
+			this.db.prepare("UPDATE turn_intents SET state = 'needs_continue', reason = ?, updated_at = ? WHERE state IN ('prepared', 'queued')").run(
+				"Cedia stopped before OMP reported this turn starting. Continue explicitly; Cedia does not replay it.",
+				timestamp,
+			);
+			this.db.prepare("UPDATE turn_intents SET state = 'outcome_unknown', reason = ?, updated_at = ? WHERE state = 'running'").run(
+				"Cedia stopped while this turn was running and OMP reported no end for it. The outcome is unknown.",
+				timestamp,
+			);
 			this.db.prepare("UPDATE sessions SET status = 'recovery_required', updated_at = ? WHERE status = 'running'").run(timestamp);
 			for (const row of unfinished) {
 				const sessionId = row.session_id;
@@ -1079,7 +1764,11 @@ export class DurableStore {
 	}
 }
 
-function initializeSchema(db: DatabaseSync): void {
+function initializeSchema(db: DatabaseSync, journalPath: string): void {
+	// The backup runs before the migration transaction: a checkpoint taken inside a write
+	// transaction is a no-op, which would leave the copy missing everything the WAL still held.
+	const existing = readRecordedSchemaVersion(db);
+	if (existing !== undefined && existing < DURABLE_STORE_SCHEMA_VERSION) backupBeforeMigration(db, journalPath, existing);
 	db.exec("BEGIN IMMEDIATE");
 	try {
 		db.exec(SCHEMA_SQL);
@@ -1094,18 +1783,101 @@ function initializeSchema(db: DatabaseSync): void {
 			if (version > DURABLE_STORE_SCHEMA_VERSION) {
 				throw new DurableStoreSchemaError(`State schema ${version} is newer than supported schema ${DURABLE_STORE_SCHEMA_VERSION}`);
 			}
-			// Version 1 is the initial schema. Future migrations must be explicit
-			// here rather than silently accepting a partially understood database.
+			// Version 1 is the initial schema; version 2 added the pinned session field.
+			// Every accepted upgrade is explicit so a partially understood database is
+			// never silently treated as the current schema.
 			if (version === 1) {
-                db.exec("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1))");
-                db.prepare("UPDATE metadata SET value = ? WHERE key = 'schema_version'").run(String(DURABLE_STORE_SCHEMA_VERSION));
-            }
+				const columns = db.prepare("PRAGMA table_info(sessions)").all() as Row[];
+				if (!columns.some(column => column.name === "pinned")) db.exec("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1))");
+			}
+			if (version > DURABLE_STORE_SCHEMA_VERSION) {
+				throw new DurableStoreSchemaError(`Unsupported state schema ${version}`);
+			}
+			// `drafts` gained its cross-window payload column while the schema version was
+			// already 3, so a state directory written by that intermediate build is
+			// repaired here instead of failing every draft read.
+			const draftColumns = db.prepare("PRAGMA table_info(drafts)").all() as Row[];
+			if (draftColumns.length > 0 && !draftColumns.some(column => column.name === "content_json")) db.exec("ALTER TABLE drafts ADD COLUMN content_json TEXT");
+			// Version 3 added the shared-draft submission reservation, version 4 the turn intents
+			// of §2.4, version 5 the model a turn actually ran on, and version 6 the durable
+			// workspace/cleanup projection of §2.6. Every column and table these added is either
+			// created above or repaired below, so an older state directory only needs its recorded
+			// version advanced.
+			const turnColumns = db.prepare("PRAGMA table_info(turn_intents)").all() as Row[];
+			if (turnColumns.length > 0 && !turnColumns.some(column => column.name === "model")) db.exec("ALTER TABLE turn_intents ADD COLUMN model TEXT");
+			if (turnColumns.length > 0 && !turnColumns.some(column => column.name === "thinking_level")) db.exec("ALTER TABLE turn_intents ADD COLUMN thinking_level TEXT");
+			const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all() as Row[];
+			const sessionColumnNames = new Set(sessionColumns.map(column => column.name));
+			const workspaceColumns: ReadonlyArray<[string, string]> = [
+				["workspace_task_id", "TEXT"],
+				["workspace_project_id", "TEXT"],
+				["workspace_repository_id", "TEXT"],
+				["workspace_root", "TEXT"],
+				["workspace_actual_cwd", "TEXT"],
+				["workspace_source_commit", "TEXT"],
+				["workspace_task_branch", "TEXT"],
+				["integration_target_ref", "TEXT"],
+				["integration_target_commit", "TEXT"],
+				["integration_observed_commit", "TEXT"],
+				["restoration_ref", "TEXT"],
+				["restoration_sha", "TEXT"],
+				["cleanup_generation", "INTEGER NOT NULL DEFAULT 0 CHECK (cleanup_generation >= 0)"],
+				["cleanup_state", "TEXT NOT NULL DEFAULT 'retained' CHECK (cleanup_state IN ('retained', 'archive_requested', 'prepared', 'removed'))"],
+				["cleanup_last_failure", "TEXT"],
+			];
+			for (const [name, definition] of workspaceColumns) {
+				if (!sessionColumnNames.has(name)) db.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${definition}`);
+			}
+			// Existing task rows predate the workspace projection.  Their sidecar identity may
+			// be unavailable, but the row still has enough durable identity to seed the
+			// migration without guessing a repository, branch or commit.  Keep the update
+			// idempotent so reopening a partially upgraded state directory is harmless.
+			db.exec("UPDATE sessions SET workspace_task_id = id WHERE workspace_task_id IS NULL");
+			db.exec("UPDATE sessions SET workspace_project_id = project_id WHERE workspace_project_id IS NULL");
+			db.exec("UPDATE sessions SET workspace_actual_cwd = cwd WHERE workspace_actual_cwd IS NULL");
+			if (version <= 5) db.prepare("UPDATE metadata SET value = ? WHERE key = 'schema_version'").run(String(DURABLE_STORE_SCHEMA_VERSION));
 		}
 		db.exec("COMMIT");
 	} catch (error) {
 		try { db.exec("ROLLBACK"); } catch { /* preserve original error */ }
 		throw error;
 	}
+}
+
+/**
+ * Keep the state a schema upgrade started from.
+ *
+ * The copy lands beside the journal in the private state directory, named for the schema
+ * version it holds, and is written to a temporary name first so an interrupted copy can never
+ * be read as a backup. An existing backup of that version is left alone: it is evidence of
+ * what the owner actually had, not scratch space.
+ */
+function backupBeforeMigration(db: DatabaseSync, journalPath: string, version: number): void {
+	const path = `${journalPath}.schema-${version}.backup`;
+	if (existsSync(path)) return;
+	const temporary = `${path}.${randomUUID()}.tmp`;
+	// Checkpoint first so the copy on disk is the whole state, not a WAL fragment of it. This
+	// process already owns the store, so nothing else can be writing while the copy is made.
+	try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch { /* the copy below is still the best available state */ }
+	copyFileSync(journalPath, temporary);
+	chmodSync(temporary, 0o600);
+	renameSync(temporary, path);
+}
+
+/** The schema version a state file records, or `undefined` for a state file with no metadata. */
+function readRecordedSchemaVersion(db: DatabaseSync): number | undefined {
+	let row: Row | undefined;
+	try {
+		row = db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as Row | undefined;
+	} catch {
+		return undefined;
+	}
+	if (row === undefined || row === null) return undefined;
+	const value = row.value;
+	if (typeof value !== "string" || !/^\d+$/.test(value)) throw new DurableStoreSchemaError("Invalid schema version metadata");
+	const version = Number(value);
+	if (!Number.isSafeInteger(version) || version < 1) throw new DurableStoreSchemaError(`Invalid schema version metadata: ${value}`);
+	return version;
 }
 
 function canonicalProjectPath(input: unknown): string {
@@ -1133,6 +1905,15 @@ function isForeignKeyConstraint(error: unknown): boolean {
 
 function isTerminalCommandStatus(status: CommandStatus): boolean {
 	return status === "completed" || status === "failed" || status === "outcome_unknown" || status === "not_dispatched";
+}
+
+/**
+ * A finished turn is proven finished. `needs_continue` and `outcome_unknown` stay open on
+ * purpose: a late OMP frame or an explicit reconciliation may still resolve them, and until
+ * something proves otherwise the honest answer is "Cedia does not know".
+ */
+function isFinishedTurnState(state: TurnState): boolean {
+	return state === "completed" || state === "failed" || state === "cancelled";
 }
 
 function isAllowedCommandTransition(current: CommandStatus, next: CommandStatus): boolean {

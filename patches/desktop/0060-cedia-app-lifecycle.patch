@@ -1,0 +1,73 @@
+diff --git a/src/vs/code/electron-main/app.ts b/src/vs/code/electron-main/app.ts
+--- a/src/vs/code/electron-main/app.ts
++++ b/src/vs/code/electron-main/app.ts
+@@ -207,6 +207,18 @@
+ 
+ type CediaAgentWindowModule = {
+ 	isCediaAgentBrowserWebContents(contents: unknown): boolean;
++	/**
++	 * Patch `0060`: Cedia's application lifetime. Code-OSS waits for the host's
++	 * shutdown join before the process exits, and a packaged login launch starts
++	 * in the background. Optional, so a checkout without the bundle still starts.
++	 */
++	installCediaMainProcessLifecycle?(options: {
++		readonly appRoot: string;
++		readonly parentPid: number;
++		readonly stateDir?: string;
++		readonly lifecycleMainService: { onWillShutdown(listener: (event: { join(id: string, promise: Promise<void>): void }) => void): unknown };
++		readonly log?: (message: string) => void;
++	}): { readonly shouldOpenFirstWindow: (hasOpenableArguments: boolean) => boolean } | undefined;
+ 	registerCediaAgentWindowBridge(options: {
+ 		readonly ipcMain: typeof validatedIpcMain;
+ 		readonly appRoot: string;
+@@ -726,6 +738,9 @@
+ 	 */
+ 	private isCediaAgentBrowserWebContents: ((contents: unknown) => boolean) | undefined;
+ 
++	/** Patch `0060`: decides whether this launch opens a work window at all. */
++	private cediaShouldOpenFirstWindow: ((hasOpenableArguments: boolean) => boolean) | undefined;
++
+ 	private async registerCediaAgentWindowBridge(accessor: ServicesAccessor): Promise<void> {
+ 		// Resolving the service here (rather than waiting for openFirstWindow) keeps
+ 		// the bridge installed before the renderer can issue its first invoke.
+@@ -739,6 +754,23 @@
+ 			this.isCediaAgentBrowserWebContents = module.isCediaAgentBrowserWebContents;
+ 			const dialogMainService = accessor.get(IDialogMainService);
+ 			const configurationService = accessor.get(IConfigurationService);
++
++			// Cedia owns the application quit boundary (patch `0060`). Code-OSS waits
++			// for the shutdown join this installs, so the host stops and the running
++			// tasks pause before the process exits instead of leaving a detached
++			// execution daemon behind. It also registers the packaged login item and
++			// answers whether a background login launch opens a work window.
++			try {
++				this.cediaShouldOpenFirstWindow = module.installCediaMainProcessLifecycle?.({
++					appRoot: this.environmentMainService.appRoot,
++					parentPid: process.pid,
++					stateDir: process.env.CEDIA_STATE_DIR || configurationService.getValue<string | undefined>('cedia.hostStateDir'),
++					lifecycleMainService: this.lifecycleMainService,
++					log: message => this.logService.info(message),
++				})?.shouldOpenFirstWindow;
++			} catch (error) {
++				this.logService.error('Cedia main-process lifecycle was not installed', error);
++			}
+ 
+ 			const windowForEvent = (event: unknown): ICodeWindow | undefined => {
+ 				if (!event || typeof event !== 'object' || !('sender' in event)) {
+@@ -1643,6 +1675,16 @@
+ 
+ 		const context = isLaunchedFromCli(process.env) ? OpenContext.CLI : OpenContext.DESKTOP;
+ 		const args = this.environmentMainService.args;
++
++		// Patch `0060`: a packaged macOS login launch starts in the background. The
++		// host may run, but no work window opens and no task replays (plan §3.C). An
++		// explicit argument - a folder, a file, a URL, `--agents`, or a CLI launch -
++		// always opens its window, and a normal launch is unchanged.
++		const hasOpenableArguments = isLaunchedFromCli(process.env) || !!args['agents'] || args._.length > 0 || (args._urls?.length ?? 0) > 0 || initialProtocolUrls !== undefined;
++		if (this.cediaShouldOpenFirstWindow && !this.cediaShouldOpenFirstWindow(hasOpenableArguments)) {
++			this.logService.info('Cedia started in the background at login; no work window was opened.');
++			return [];
++		}
+ 
+ 		// Handle agents window first based on context
+ 		if (args['agents']) {

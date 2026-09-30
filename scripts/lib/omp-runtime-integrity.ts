@@ -38,12 +38,15 @@ export function attestOmpRuntime(root: string, executable: string) {
   const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
   const manifestPath = join(root, "patches/omp/manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as OmpPatchManifest;
+  const activeEntry = manifest.patches.length === 1 ? manifest.patches[0]!
+    : (manifest.patches.find(patch => patch.file.includes(manifest.revision.slice(0, 12))) ?? manifest.patches.at(-1)!);
+  const activePatches = [{ file: activeEntry.file, sha256: activeEntry.sha256 }];
   if ((runtime.developmentRuntime !== true && runtime.standaloneRuntime !== true) || resolve(runtime.executable) !== resolve(executable)
-    || runtime.revision !== manifest.revision || JSON.stringify(runtime.patches) !== JSON.stringify(manifest.patches)) throw new Error("Runtime descriptor does not match the requested pinned launcher");
+    || runtime.revision !== manifest.revision || JSON.stringify(runtime.patches) !== JSON.stringify(activePatches)) throw new Error("Runtime descriptor does not match the requested pinned launcher");
   if (runtime.standaloneRuntime === true) {
     if (fileSha256(executable) !== runtime.executableSha256) throw new Error("Standalone runtime hash mismatch");
   } else if (readFileSync(executable, "utf8") !== launcherText(runtime.bun, runtime.source)) throw new Error("Runtime launcher content mismatch");
-  const sourceTree = verifyOmpSource(root, runtime.source, manifest);
+  const sourceTree = verifyOmpSource(root, runtime.source, { revision: manifest.revision, patches: activePatches });
   if (runtime.sourceTree !== sourceTree || runtime.bunSha256 !== fileSha256(runtime.bun)
     || runtime.nativeSha256 !== fileSha256(runtime.nativePath)) throw new Error("Prepared runtime attestation changed; prepare the runtime again");
   return { runtimeKind: runtime.standaloneRuntime === true ? "standalone-binary" : "development-source-launcher", sourceVerified: true, sourceRevision: manifest.revision,

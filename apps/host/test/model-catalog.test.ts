@@ -11,6 +11,12 @@ import readline from "node:readline";
 const args = process.argv.slice(2);
 if (process.env.CATALOG_TRACE) appendFileSync(process.env.CATALOG_TRACE, JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
 const emit = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+if (args.includes("models")) {
+  process.stdout.write(JSON.stringify({ models: [
+    { provider: "opencode-go", id: "muse-spark-1.3-contributor", selector: "opencode-go/muse-spark-1.3-contributor", name: "Muse Spark 1.3 Contributor", contextWindow: 65536, maxTokens: 8192, reasoning: true, thinking: ["low", "high"], input: ["text"] },
+  ] }));
+  process.exit(0);
+}
 emit({ type: "ready", protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1024 * 1024, maxReassembledFrameBytes: 64 * 1024 * 1024 });
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on("line", (line) => {
@@ -19,6 +25,14 @@ input.on("line", (line) => {
   if (command.type === "negotiate_protocol") {
     emit({ type: "response", command: command.type, id: command.id, success: true, data: { protocolVersion: 2 } });
   } else if (command.type === "get_available_models") {
+  if (process.env.CATALOG_OVERFLOW === "1") {
+    emit({ type: "response", command: command.type, id: command.id, success: false, error: "RPC response exceeded the transport limit" });
+    return;
+  }
+  if (process.env.CATALOG_REFUSE === "1") {
+    emit({ type: "response", command: command.type, id: command.id, success: false, error: "Model catalog is unavailable" });
+    return;
+  }
   emit({ type: "response", command: command.type, id: command.id, success: true, data: { models: [
       { id: "deepseek-v4", provider: "openrouter", label: "DeepSeek V4", upstreamProviderName: "OpenRouter", thinking: { efforts: ["low", "high"], mode: "effort" }, contextWindow: 128000, maxTokens: 4096 },
       { id: "claude-fable-5", provider: "commandcode", name: "Claude Fable 5", reasoning: true, thinking: ["low", "medium", "high", "xhigh", "max"], contextWindow: 1000000, maxTokens: 65536 },
@@ -118,6 +132,62 @@ describe("OMP model catalog", () => {
       expect(cached.cached).toBe(true);
       expect(cached.models).toEqual(first.models);
       expect((await readFile(trace, "utf8")).trim().split("\n")).toHaveLength(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to OMP's compact models JSON only when its RPC catalog is oversized", async () => {
+    const { root, executable, trace } = await makeFixture();
+    try {
+      const catalog = createOmpModelCatalog({
+        ompExecutable: executable,
+        ompEnv: { ...process.env, CATALOG_TRACE: trace, CATALOG_OVERFLOW: "1" },
+        cwd: root,
+      });
+
+      const result = await catalog.list();
+      expect(result.models).toHaveLength(1);
+      expect(result.models[0]).toMatchObject({
+        provider: "opencode-go",
+        id: "muse-spark-1.3-contributor",
+        slug: "opencode-go/muse-spark-1.3-contributor",
+        name: "Muse Spark 1.3 Contributor",
+        contextWindow: 65536,
+        maxOutputTokens: 8192,
+        supportedReasoningEfforts: [
+          { value: "low", label: "low" },
+          { value: "high", label: "high" },
+        ],
+      });
+
+      const launches = (await readFile(trace, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { args: string[]; cwd: string });
+      expect(launches).toHaveLength(2);
+      expect(launches[0]?.args).not.toContain("models");
+      expect(launches[1]?.args).toContain("models");
+      expect(launches[1]?.args).toContain("--json");
+      expect(launches[1]?.args).toContain("--no-session");
+      expect(launches[1]?.args).toContain("--no-extensions");
+      expect(launches[1]?.args).toContain("--cwd");
+      expect(launches[1]?.cwd).toBe(await realpath(root));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not hide ordinary OMP model-catalog failures behind the CLI fallback", async () => {
+    const { root, executable, trace } = await makeFixture();
+    try {
+      const catalog = createOmpModelCatalog({
+        ompExecutable: executable,
+        ompEnv: { ...process.env, CATALOG_TRACE: trace, CATALOG_REFUSE: "1" },
+        cwd: root,
+      });
+
+      await expect(catalog.list()).rejects.toThrow("Model catalog is unavailable");
+      const launches = (await readFile(trace, "utf8")).trim().split("\n").map(line => JSON.parse(line) as { args: string[] });
+      expect(launches).toHaveLength(1);
+      expect(launches[0]?.args).not.toContain("models");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

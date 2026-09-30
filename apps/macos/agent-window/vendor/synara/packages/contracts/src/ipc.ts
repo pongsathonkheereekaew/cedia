@@ -535,7 +535,34 @@ interface BrowserControlMethods {
   closeTab: (input: BrowserTabInput) => Promise<ThreadBrowserState>;
   selectTab: (input: BrowserTabInput) => Promise<ThreadBrowserState>;
   openDevTools: (input: BrowserTabInput) => Promise<void>;
+  // Agent-driving controls are Cedia-only: other NativeApi backends (e.g. the unused
+  // Synara WebSocket backend) do not implement them, so renderers must probe.
+  agentAttach?: (input: BrowserTabInput) => Promise<BrowserAgentAttachResult>;
+  agentDetach?: (input: BrowserThreadInput & { tabId?: string }) => Promise<BrowserAgentDetachResult>;
+  agentEndpoint?: (input: BrowserThreadInput) => Promise<BrowserAgentEndpointResult>;
   onState: (listener: (state: ThreadBrowserState) => void) => () => void;
+}
+
+export interface BrowserAgentAttachResult {
+  readonly cdpUrl: string;
+  readonly tabId: string;
+}
+
+export interface BrowserAgentDetachResult {
+  readonly attached: boolean;
+  readonly cdpUrl?: string;
+}
+
+export interface BrowserAgentEndpointTab {
+  readonly tabId: string;
+  readonly url: string;
+  readonly title: string;
+}
+
+export interface BrowserAgentEndpointResult {
+  readonly attached: boolean;
+  readonly cdpUrl?: string;
+  readonly tabs: BrowserAgentEndpointTab[];
 }
 
 export interface DesktopNotificationInput {

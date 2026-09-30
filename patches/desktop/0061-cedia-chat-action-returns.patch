@@ -1,0 +1,27 @@
+diff --git a/src/vs/workbench/contrib/chat/browser/actions/chatActions.ts b/src/vs/workbench/contrib/chat/browser/actions/chatActions.ts
+--- a/src/vs/workbench/contrib/chat/browser/actions/chatActions.ts
++++ b/src/vs/workbench/contrib/chat/browser/actions/chatActions.ts
+@@ -633,7 +633,10 @@
+ 		}
+ 
+ 		async run(accessor: ServicesAccessor) {
+-			if (product.nameShort === 'Cedia') return accessor.get(ICommandService).executeCommand('cedia.openComposer');
++			if (product.nameShort === 'Cedia') {
++				await accessor.get(ICommandService).executeCommand('cedia.openComposer');
++				return;
++			}
+ 			const layoutService = accessor.get(IWorkbenchLayoutService);
+ 			const viewsService = accessor.get(IViewsService);
+ 			const viewDescriptorService = accessor.get(IViewDescriptorService);
+@@ -702,7 +705,10 @@
+ 		}
+ 
+ 		async run(accessor: ServicesAccessor) {
+-			if (product.nameShort === 'Cedia') return accessor.get(ICommandService).executeCommand('cedia.newTask');
++			if (product.nameShort === 'Cedia') {
++				await accessor.get(ICommandService).executeCommand('cedia.newTask');
++				return;
++			}
+ 			const widgetService = accessor.get(IChatWidgetService);
+ 			const input = getNewChatEditorInput(accessor);
+ 			await widgetService.openSession(input.resource, ACTIVE_GROUP, input.options);

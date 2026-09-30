@@ -8,7 +8,13 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "types": ["bun"],
-    "lib": ["ES2023", "DOM"]
+    "lib": ["ES2023", "DOM"],
+    "baseUrl": ".",
+    // Mirrors the agent-window tsconfig for vendor sources that root tests import
+    // relatively: without this the root program cannot resolve `~/` imports.
+    "paths": {
+      "~/*": ["apps/macos/agent-window/vendor/synara/apps/web/src/*"]
+    }
   },
   "include": ["packages/**/*.ts", "apps/host/**/*.ts", "apps/macos/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["apps/ios", "apps/macos/agent-window", "**/node_modules", "**/dist"]

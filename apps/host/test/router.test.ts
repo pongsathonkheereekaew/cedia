@@ -176,7 +176,7 @@ describe("authenticated Cedia host router", () => {
     const fixture = makeFixture();
     expect((await fixture.router({ method: "GET", path: "/v1/health" })).status).toBe(401);
     const health = await request(fixture, "GET", "/v1/health");
-    expect(health).toEqual({ status: 200, body: { protocolVersion: 1, status: "ready", ompVersion: "18.1.18" } });
+    expect(health).toEqual({ status: 200, body: { protocolVersion: 1, status: "ready", ompVersion: "18.4.3" } });
     expect((await request(fixture, "GET", "/v2/health")).status).toBe(404);
 
     const issued = fixture.auth.issue("Phone");
@@ -240,8 +240,8 @@ describe("authenticated Cedia host router", () => {
     expect((await request(fixture, "GET", `/v1/sessions/${session.id}/events`)).body).toMatchObject({ events: [], cursor: 0, hasMore: false });
     const invalid = await request(fixture, "POST", `/v1/sessions/${session.id}/commands`, { commandId: "bad", incarnation: session.incarnation, command: "not-omp" });
     expect(invalid).toMatchObject({ status: 400, body: { error: { code: "invalid_command" } } });
-    expect(RPC_COMMAND_TYPES).toHaveLength(42);
-    expect(new Set(RPC_COMMAND_TYPES).size).toBe(42);
+    expect(RPC_COMMAND_TYPES).toHaveLength(47);
+    expect(new Set(RPC_COMMAND_TYPES).size).toBe(47);
     for (const command of RPC_COMMAND_TYPES) {
       const response = await request(fixture, "POST", `/v1/sessions/${session.id}/commands`, {
         commandId: `cmd-${command}`,

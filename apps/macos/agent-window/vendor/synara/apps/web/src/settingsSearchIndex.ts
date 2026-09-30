@@ -8,8 +8,10 @@ import { rankProviderDiscoveryItems } from "~/lib/providerDiscovery";
 import {
   settingRowAnchorId,
   SETTINGS_NAV_ITEMS,
+  settingsSectionVisible,
   type SettingsSectionId,
 } from "./settingsNavigation";
+import type { HostCapability } from "./capabilityGate";
 
 /**
  * One searchable settings result. `title` usually matches a string SettingsRow heading so
@@ -32,6 +34,23 @@ export function settingsSearchEntryTarget(entry: SettingsSearchEntry): string | 
 // null while inactive, so the sidebar cannot read every row at runtime; keep this list in sync
 // when rows are added, renamed, hidden conditionally, or represented as panel-level results.
 export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
+  // ── Remote ──────────────────────────────────────────────────────────────────
+  {
+    id: "remote:gateway",
+    section: "remote",
+    title: "Remote gateway",
+    keywords:
+      "Reach this Mac from another device. Tailscale tailnet address enrollment code pair device revoke controller",
+    target: null,
+  },
+  {
+    id: "remote:devices",
+    section: "remote",
+    title: "Paired devices",
+    keywords: "Controllers that can call this Mac. revoke pairing device list phone browser",
+    target: null,
+  },
+
   // ── General ────────────────────────────────────────────────────────────────
   {
     id: "general:default-provider",
@@ -300,6 +319,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "Add custom model slugs for supported providers. custom model",
   },
 
+  // ── AI / OMP ────────────────────────────────────────────────────────────────
+  {
+    id: "omp:settings",
+    section: "omp",
+    title: "OMP settings",
+    keywords:
+      "Live OMP runtime configuration. Search every schema path, inspect effective values and layer provenance, edit supported values, protected credentials, advanced settings, excluded provider endpoints ordering enabled fields",
+    target: null,
+  },
+
   // ── Providers ─────────────────────────────────────────────────────────────────
   {
     id: "providers:automatic-cli-update-checks",
@@ -367,12 +396,18 @@ export function settingsSectionLabel(section: SettingsSectionId): string {
 export function rankSettingsSearchEntries(
   query: string,
   limit: number,
+  capabilities?: readonly HostCapability[],
 ): readonly SettingsSearchEntry[] {
   const trimmed = query.trim();
   if (trimmed.length === 0) {
     return [];
   }
-  const ranked = rankProviderDiscoveryItems(SETTINGS_SEARCH_ENTRIES, trimmed, (entry) => [
+  // A result that deep-links into a destination the host reports as not implemented is not a
+  // result: clicking it would land on a section that is gone from the nav (§3.B).
+  const candidates = capabilities === undefined
+    ? SETTINGS_SEARCH_ENTRIES
+    : SETTINGS_SEARCH_ENTRIES.filter((entry) => settingsSectionVisible(entry.section, capabilities));
+  const ranked = rankProviderDiscoveryItems(candidates, trimmed, (entry) => [
     { value: entry.title },
     { value: entry.keywords, weight: 200 },
     { value: settingsSectionLabel(entry.section), weight: 400 },

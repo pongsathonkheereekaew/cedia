@@ -3,6 +3,8 @@
 // Layer: Route/UI support
 // Exports: section ids, nav items, and search normalization helper
 
+import { capabilityState, isCapabilityVisible, type HostCapability } from "./capabilityGate";
+
 export const SETTINGS_SECTION_IDS = [
   // Cedia §10 item 60 keeps only backed sections: the general panel, notification
   // and behavior rows, the read-only keybindings sheet (editing lands with
@@ -19,6 +21,9 @@ export const SETTINGS_SECTION_IDS = [
   "archived",
   "models",
   "providers",
+  "remote",
+  "omp",
+  "status",
   "advanced",
 ] as const;
 
@@ -63,6 +68,14 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     description: "Choose defaults for new chats, navigation, and the Environment panel.",
     icon: "settings-gear-4",
     eyebrow: "Workflow defaults",
+  },
+  {
+    id: "remote",
+    group: "personal",
+    label: "Remote",
+    description: "Reach this Mac from your tailnet: the gateway address, device enrollment, and paired devices.",
+    icon: "globe",
+    eyebrow: "This Mac, elsewhere",
   },
   {
     id: "profile",
@@ -121,12 +134,28 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     eyebrow: "Model configuration",
   },
   {
+    id: "omp",
+    group: "coding",
+    label: "AI / OMP settings",
+    description: "Inspect and edit the live OMP configuration with revision-safe writes.",
+    icon: "brain",
+    eyebrow: "Runtime configuration",
+  },
+  {
     id: "advanced",
     group: "system",
     label: "System tools",
     description: "Manage sessions, recovery tools, low-level keybindings, and version details.",
     icon: "toolbox",
     eyebrow: "System tools",
+  },
+  {
+    id: "status",
+    group: "system",
+    label: "Capability status",
+    description: "See what this Cedia host supports, what needs setup, and what is not implemented yet.",
+    icon: "circle-info",
+    eyebrow: "Cedia",
   },
   {
     id: "archived",
@@ -157,4 +186,50 @@ export function normalizeSettingsSection(value: unknown): SettingsSectionId {
     return "general";
   }
   return SETTINGS_SECTION_IDS.find((candidate) => candidate === value) ?? "general";
+}
+
+/**
+ * The host capability that backs a settings destination, when one does (§3.B/§3.D).
+ *
+ * Only a section whose whole content comes from one host integration is listed. A section
+ * without an entry is core Cedia UI and never disappears.
+ */
+export const SETTINGS_SECTION_CAPABILITY_IDS: Readonly<Partial<Record<SettingsSectionId, string>>> = {
+  omp: "omp.settings",
+};
+
+/**
+ * Whether a settings destination may be offered.
+ *
+ * An `integration_missing` row is absent from the working UI, exactly like the sidebar's
+ * automations row. A capability the host reports as needing setup stays visible, because its
+ * panel has to explain itself; an unknown or unloaded snapshot changes nothing.
+ */
+export function settingsSectionVisible(
+  id: SettingsSectionId,
+  capabilities: readonly HostCapability[] | undefined,
+): boolean {
+  const capabilityId = SETTINGS_SECTION_CAPABILITY_IDS[id];
+  return isCapabilityVisible(capabilityState(capabilities, capabilityId));
+}
+
+/** The destination a hidden section falls back to: the first one the host still backs. */
+export function firstVisibleSettingsSection(
+  capabilities: readonly HostCapability[] | undefined,
+): SettingsSectionId {
+  return SETTINGS_SECTION_IDS.find((candidate) => settingsSectionVisible(candidate, capabilities)) ?? "general";
+}
+
+/**
+ * Resolve a `?section=` deep link.
+ *
+ * An unknown id already normalized to general. This adds the capability rule: a stored deep link
+ * or an old profile must not reopen a destination the host reports as not implemented.
+ */
+export function resolveSettingsSection(
+  value: unknown,
+  capabilities: readonly HostCapability[] | undefined,
+): SettingsSectionId {
+  const requested = normalizeSettingsSection(value);
+  return settingsSectionVisible(requested, capabilities) ? requested : firstVisibleSettingsSection(capabilities);
 }

@@ -1,0 +1,649 @@
+{
+	"kind": "sdk-service-supplement",
+	"scope": "Selected public session/service paths complementing exhaustive command/tool/settings registries; not an inventory of every internal SDK symbol.",
+	"baseRevision": "fc671eba383f2a7208500836673b485c0dc7073d",
+	"sources": {
+		"packages/coding-agent/src/session/agent-session.ts": "0b4236620159df4bbba360d888a541373d45e9a058682563fc0703b0cd046c5a",
+		"docs/sdk.md": "6028083949359c15d5b24a06d0a447df969d4571ef400e90975196da9b31a3ab",
+		"packages/coding-agent/src/sdk.ts": "28cbdd7d9bd26d367f0d15afaa3a3d5e251a81f16c850c5cd454d56e2f28f6b3",
+		"packages/coding-agent/src/main.ts": "4bc93f1101047c401adaeda1e6b9d5a48353409f5b471cd6289b03fef07643a0"
+	},
+	"entries": [
+		{
+			"name": "prompt",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 94
+		},
+		{
+			"name": "steer",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 6797
+		},
+		{
+			"name": "followUp",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 6816
+		},
+		{
+			"name": "sendUserMessage",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7341
+		},
+		{
+			"name": "sendCustomMessage",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7208
+		},
+		{
+			"name": "abort",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7765
+		},
+		{
+			"name": "getQueuedMessages",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7431
+		},
+		{
+			"name": "clearQueue",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7404
+		},
+		{
+			"name": "popLastQueuedMessage",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7443
+		},
+		{
+			"name": "subscribe",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4316
+		},
+		{
+			"name": "subscribeRunState",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4341
+		},
+		{
+			"name": "activeToolExecutionUpdates",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4333
+		},
+		{
+			"name": "beginDispose",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4522
+		},
+		{
+			"name": "dispose",
+			"family": "execution",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4553
+		},
+		{
+			"name": "freshSession",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4869
+		},
+		{
+			"name": "resetSessionContext",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4903
+		},
+		{
+			"name": "newSession",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7856
+		},
+		{
+			"name": "switchSession",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 9006
+		},
+		{
+			"name": "fork",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7985
+		},
+		{
+			"name": "branch",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 9370
+		},
+		{
+			"name": "branchFromBtw",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 9473
+		},
+		{
+			"name": "navigateTree",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 9611
+		},
+		{
+			"name": "moveSession",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8058
+		},
+		{
+			"name": "setSessionName",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7974
+		},
+		{
+			"name": "buildDisplaySessionContext",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5504
+		},
+		{
+			"name": "buildTranscriptSessionContext",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5514
+		},
+		{
+			"name": "exportToHtml",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10498
+		},
+		{
+			"name": "formatSessionAsText",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10591
+		},
+		{
+			"name": "getLastAssistantText",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10523
+		},
+		{
+			"name": "getCheckpointState",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5753
+		},
+		{
+			"name": "getLastCompletedRewind",
+			"family": "history",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5757
+		},
+		{
+			"name": "getAvailableModels",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8121
+		},
+		{
+			"name": "setModel",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8076
+		},
+		{
+			"name": "setModelTemporary",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8089
+		},
+		{
+			"name": "cycleModel",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8098
+		},
+		{
+			"name": "applyRoleModel",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8108
+		},
+		{
+			"name": "setThinkingLevel",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8126
+		},
+		{
+			"name": "configuredThinkingLevel",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5121
+		},
+		{
+			"name": "autoResolvedThinkingLevel",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5131
+		},
+		{
+			"name": "setFastMode",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8151
+		},
+		{
+			"name": "setServiceTierFamily",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8146
+		},
+		{
+			"name": "fetchUsageReports",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10096
+		},
+		{
+			"name": "listCurrentProviderOAuthAccounts",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10141
+		},
+		{
+			"name": "pinCurrentProviderOAuthAccount",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10156
+		},
+		{
+			"name": "redeemResetCredit",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10168
+		},
+		{
+			"name": "listResetCredits",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10181
+		},
+		{
+			"name": "getSessionStats",
+			"family": "models-auth-usage",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10067
+		},
+		{
+			"name": "getContextBreakdown",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10076
+		},
+		{
+			"name": "getContextUsage",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10083
+		},
+		{
+			"name": "dropImages",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5434
+		},
+		{
+			"name": "shake",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5439
+		},
+		{
+			"name": "compact",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5444
+		},
+		{
+			"name": "abortCompaction",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5449
+		},
+		{
+			"name": "setAutoCompactionEnabled",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5467
+		},
+		{
+			"name": "setAutoRetryEnabled",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8683
+		},
+		{
+			"name": "retry",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8693
+		},
+		{
+			"name": "abortRetry",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8668
+		},
+		{
+			"name": "applyMemoryBackend",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5401
+		},
+		{
+			"name": "refreshBaseSystemPrompt",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5406
+		},
+		{
+			"name": "getHindsightSessionState",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 2144
+		},
+		{
+			"name": "getMnemopiSessionState",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 2154
+		},
+		{
+			"name": "runAutolearnCapture",
+			"family": "context-memory",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4466
+		},
+		{
+			"name": "preparePlanForReview",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 1206
+		},
+		{
+			"name": "getPlanModeState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5597
+		},
+		{
+			"name": "setPlanModeState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5606
+		},
+		{
+			"name": "getGoalModeState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5620
+		},
+		{
+			"name": "setGoalModeState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5624
+		},
+		{
+			"name": "goalRuntime",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5664
+		},
+		{
+			"name": "getVibeModeState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5628
+		},
+		{
+			"name": "setVibeModeState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5632
+		},
+		{
+			"name": "getPrewalkState",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5602
+		},
+		{
+			"name": "armPrewalk",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 1191
+		},
+		{
+			"name": "sendPlanModeContext",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5773
+		},
+		{
+			"name": "sendGoalModeContext",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5787
+		},
+		{
+			"name": "sendVibeModeContext",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5802
+		},
+		{
+			"name": "getTodoPhases",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7493
+		},
+		{
+			"name": "setTodoPhases",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7497
+		},
+		{
+			"name": "setAdvisorEnabled",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10643
+		},
+		{
+			"name": "applyAdvisorConfigs",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10732
+		},
+		{
+			"name": "getAdvisorStatusOverview",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10802
+		},
+		{
+			"name": "getAdvisorStats",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10867
+		},
+		{
+			"name": "formatAdvisorHistoryAsText",
+			"family": "plan-goals-advisor",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10884
+		},
+		{
+			"name": "getAllToolInfos",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5299
+		},
+		{
+			"name": "getActiveToolNames",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5214
+		},
+		{
+			"name": "setActiveToolsByName",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5356
+		},
+		{
+			"name": "getCodeModeDirectToolNames",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5249
+		},
+		{
+			"name": "initializeCodeMode",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5344
+		},
+		{
+			"name": "getEvalPreludes",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5376
+		},
+		{
+			"name": "refreshMCPTools",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5415
+		},
+		{
+			"name": "refreshRpcHostTools",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5420
+		},
+		{
+			"name": "refreshSkills",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 5328
+		},
+		{
+			"name": "reload",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8994
+		},
+		{
+			"name": "subscribeCommandMetadataChanged",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 4352
+		},
+		{
+			"name": "extensionRunner",
+			"family": "extensibility",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 10902
+		},
+		{
+			"name": "getAsyncJobSnapshot",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 2193
+		},
+		{
+			"name": "hasPendingAsyncWork",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 2281
+		},
+		{
+			"name": "settleAsyncWork",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 2293
+		},
+		{
+			"name": "getWorkPoolYieldItems",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7502
+		},
+		{
+			"name": "setWorkPoolYieldItems",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 7507
+		},
+		{
+			"name": "deliverIrcMessage",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8804
+		},
+		{
+			"name": "drainPendingIrcInboxMessages",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8799
+		},
+		{
+			"name": "waitForIrcReplies",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8809
+		},
+		{
+			"name": "executeBash",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8708
+		},
+		{
+			"name": "executePython",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8747
+		},
+		{
+			"name": "abortBash",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8722
+		},
+		{
+			"name": "abortEval",
+			"family": "jobs-agents",
+			"source": "packages/coding-agent/src/session/agent-session.ts",
+			"line": 8776
+		}
+	]
+}

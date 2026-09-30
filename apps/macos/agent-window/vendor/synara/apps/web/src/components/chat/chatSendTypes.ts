@@ -44,6 +44,54 @@ export interface PlanFollowUpSubmission {
   queuedTurn?: QueuedComposerPlanFollowUp;
 }
 
+export interface SelectedSlashCommand {
+  readonly threadId: ThreadId;
+  readonly name: string;
+}
+
+/** Keep menu provenance attached to a rejected draft so a retry cannot become plain prompt text. */
+export function selectedSlashCommandForSend(
+  selected: SelectedSlashCommand | null,
+  threadId: ThreadId,
+  text: string,
+): string | undefined {
+  const trimmed = text.trimStart();
+  return selected?.threadId === threadId &&
+    trimmed.startsWith("/") && trimmed.slice(1).split(/\s/, 1)[0] === selected.name
+    ? selected.name
+    : undefined;
+}
+
+export function selectedSlashQueueRefusal(input: {
+  selected: SelectedSlashCommand | null;
+  threadId: ThreadId;
+  text: string;
+  hasQueueableLiveTurn: boolean;
+  dispatchMode: "queue" | "steer";
+}): string | undefined {
+  if (!input.hasQueueableLiveTurn) return undefined;
+  if (selectedSlashCommandForSend(input.selected, input.threadId, input.text) === undefined) {
+    return undefined;
+  }
+  return input.dispatchMode === "queue"
+    ? "A menu-selected slash command cannot be queued while a turn is running. Retry after the current turn finishes."
+    : "A menu-selected slash command cannot be steered into a running turn. Retry after the current turn finishes.";
+}
+
+export function clearSelectedSlashCommandAfterSend(
+  selectedRef: RefObject<SelectedSlashCommand | null>,
+  threadId: ThreadId,
+  selectedName: string | undefined,
+  sent: boolean,
+): void {
+  if (
+    sent && selectedName !== undefined && selectedRef.current?.threadId === threadId &&
+    selectedRef.current.name === selectedName
+  ) {
+    selectedRef.current = null;
+  }
+}
+
 /**
  * Send-path handlers that are declared *after* `onSend` in the component body (they depend on
  * state and callbacks that are set up later) yet have to be reachable from it — and, for
@@ -72,6 +120,7 @@ export interface LateComposerSendHandlers {
 
 export interface ChatTurnSubmissionInput {
   threadId: ThreadId;
+  selectedSlashCommandRef: RefObject<SelectedSlashCommand | null>;
   hasLiveTurn: boolean;
   lateComposerSendHandlersRef: RefObject<LateComposerSendHandlers | null>;
   activeThread: Thread | undefined;

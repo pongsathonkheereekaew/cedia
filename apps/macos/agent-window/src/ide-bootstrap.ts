@@ -352,9 +352,19 @@ async function boot(): Promise<void> {
 
   // Load the shared app-side persistence only after the scoped bridge and native
   // API globals exist. Several Synara modules inspect those globals at module load.
-  const { installSharedUiDraftBridge } = await import("../vendor/synara/apps/web/src/sharedUiDraftBridge");
-  const sharedDraftBridge = installSharedUiDraftBridge(bridge);
+  const [{ installSharedUiDraftBridge }, { appHistory }] = await Promise.all([
+    import("../vendor/synara/apps/web/src/sharedUiDraftBridge"),
+    import("../vendor/synara/apps/web/src/appNavigation"),
+  ]);
+  const sharedDraftBridge = installSharedUiDraftBridge(bridge, {
+    subscribeToRouteChanges: listener => appHistory.subscribe(listener),
+  });
   window.__CEDIA_DRAFT_FLUSH__ = sharedDraftBridge.flush;
+  // §6.4: both windows read and write the one host-owned CEDIA preference record, so a change made
+  // in the IDE window reaches the AI window and survives a restart.
+  const { installHostPreferenceSync } = await import("../vendor/synara/apps/web/src/hostPreferences");
+  const hostPreferences = installHostPreferenceSync(bridge);
+  void hostPreferences.hydrate();
   if (sessionId) await sharedDraftBridge.hydrateThread(sessionId);
   let contextHandoffs = Promise.resolve();
   synchronizeContext = () => {
@@ -422,6 +432,7 @@ async function boot(): Promise<void> {
     themeObserver?.disconnect();
     void sharedDraftBridge.flush().finally(() => {
       sharedDraftBridge.dispose();
+      hostPreferences.dispose();
       delete window.__CEDIA_DRAFT_FLUSH__;
       disposeDeviceFrames();
       bridge.dispose();

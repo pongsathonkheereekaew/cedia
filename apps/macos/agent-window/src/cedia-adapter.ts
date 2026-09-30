@@ -17,7 +17,8 @@ import {
 	type ProviderListSkillsInput,
 } from "@synara/contracts";
 import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState, type TranscriptEntry } from "../../src/state.ts";
-import type { Command, EventPage, Json, Project, Session, SessionEvent } from "../../../../packages/protocol/src/index.ts";
+import { parseOmpGoalSnapshot, parseOmpGoalUpdatedEvent, parseOmpSubagentList, type Command, type EventPage, type Json, type OmpGoalSnapshot, type OmpSubagentRow, type Project, type Session, type SessionEvent } from "../../../../packages/protocol/src/index.ts";
+import { readCediaHostError } from "./host-error-codes.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
 import { requestComposerFocus } from "../vendor/synara/apps/web/src/composerFocusRequestStore";
@@ -94,6 +95,193 @@ interface AdapterOptions {
 	readonly bridge?: AgentWindowBridge;
 	readonly now?: () => Date;
 }
+
+/** The host-owned plan control operations exposed to the shared agent bundle. */
+export type CediaPlanOperation = "read" | "enter" | "exit" | "vibe.enter" | "vibe.exit" | "review.decide";
+
+export interface CediaPlanCommand {
+	readonly commandId: string;
+	/** Optional for the renderer convenience API; the adapter fills it from the durable session row. */
+	readonly incarnation?: string;
+	readonly op: CediaPlanOperation;
+	readonly workflow?: "parallel" | "iterative";
+	readonly planFilePath?: string;
+	readonly paused?: boolean;
+	readonly confirm?: boolean;
+	readonly reviewId?: number;
+	readonly decision?: "approve" | "refine" | "cancel";
+	readonly preserveContext?: boolean;
+	readonly compactBeforeExecute?: boolean;
+	readonly feedback?: string;
+}
+
+/** The host-owned advisor switch operation exposed to the shared agent bundle. */
+export interface CediaAgentConfigInput {
+	/** Optional for the renderer convenience API; the adapter fills the command identity. */
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly agent: string;
+	readonly enabled?: boolean;
+	readonly model?: string;
+	readonly prewalk?: string;
+	readonly advisor?: string;
+}
+
+export interface CediaAdvisorCommand {
+	/** Optional for the renderer convenience API; the adapter fills both command fields. */
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly op: "set";
+	readonly enabled: boolean;
+}
+
+/** A host-owned advisor config read or write; the adapter fills command identity for renderer callers. */
+export interface CediaAdvisorConfigCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly scope: "project" | "user";
+	readonly text?: string;
+}
+
+/** A host-owned queue drop; the adapter fills command identity for renderer callers. */
+export interface CediaQueueDropCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly mode: "last" | "all";
+}
+
+/** A host-owned shell execution; the adapter fills command identity for renderer callers. */
+export interface CediaBashExecCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly command: string;
+}
+
+/** A host-owned Python execution; the adapter fills command identity for renderer callers. */
+export interface CediaPythonExecCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly code: string;
+}
+
+/** A host-owned Python abort; the adapter fills command identity for renderer callers. */
+export interface CediaPythonAbortCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A host-owned shell abort; the adapter fills command identity for renderer callers. */
+export interface CediaBashAbortCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A host-owned run-pause write; the adapter fills command identity for renderer callers. */
+export interface CediaOmfgDraftCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly complaint: string;
+	readonly feedback?: string;
+}
+
+export interface CediaOmfgSaveCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly scope: "project" | "global";
+	readonly overwrite?: boolean;
+	readonly allowUnvalidated?: boolean;
+}
+
+export interface CediaOmfgAbortCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A host-owned run-pause write; the adapter fills command identity for renderer callers. */
+export interface CediaCleanseRunCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly request?: string;
+	readonly all?: boolean;
+	readonly includeTests?: boolean;
+	readonly maxAgents?: number;
+	readonly model?: string;
+}
+
+export interface CediaCleanseAbortCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A host-owned run-pause write; the adapter fills command identity for renderer callers. */
+export interface CediaBtwAskCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly question: string;
+}
+
+export interface CediaBtwBranchCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A host-owned run-pause write; the adapter fills command identity for renderer callers. */
+export interface CediaRunPauseCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+	readonly paused: boolean;
+}
+
+/** A host-owned loop disable; the adapter fills command identity for renderer callers. */
+export interface CediaLoopCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A context maintenance command; the adapter fills omitted identity fields from the session. */
+export interface CediaContextCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** A context shake command; the adapter fills omitted identity fields from the session. */
+export interface CediaContextShakeCommand extends CediaContextCommand {
+	readonly mode: "elide" | "images" | "thinking";
+}
+
+/** A memory apply command; the adapter fills omitted identity fields from the session. */
+export interface CediaMemoryCommand {
+	readonly commandId?: string;
+	readonly incarnation?: string;
+}
+
+/** One account identity accepted by OMP's saved-reset redeem operation. */
+export interface CediaCreditTarget {
+	readonly credentialId?: number;
+	readonly accountId?: string;
+	readonly email?: string;
+}
+
+/** The runtime's own model, effort, and service-tier projection for one session. */
+export interface CediaModelStateCommandTarget {
+	readonly family: string;
+	readonly tier: string | null;
+}
+
+/** The owner-visible account identity projection for the active provider. */
+export interface CediaAccountTarget {
+	readonly credentialId: number;
+}
+
+/**
+ * What the shared draft owner answers before a Send dispatches (plan §2.5 item 2). `reserved`
+ * carries the command the host bound to this revision; `conflict` means the revision was
+ * already sent with different text; `none` means this task has no draft record to reserve.
+ */
+type DraftReservation =
+	| { readonly status: "reserved"; readonly commandId: string; readonly revision: number }
+	| { readonly status: "conflict" }
+	| { readonly status: "none" };
 
 interface BootstrapEnvironment {
 	readonly platform: string;
@@ -254,6 +442,38 @@ function asProjects(value: unknown): Project[] {
 	});
 }
 
+/**
+ * Is this the host's pending-model record?
+ *
+ * The states are the host's own three; anything else is not a record a window may draw.
+ */
+function isPendingModelRecord(value: unknown): value is NonNullable<Session["pendingModel"]> {
+	const row = record(value);
+	if (!row) return false;
+	if (typeof row.revision !== "number" || !Number.isSafeInteger(row.revision) || row.revision < 1) return false;
+	if (row.state !== "awaiting" && row.state !== "in-effect" && row.state !== "refused") return false;
+	return typeof row.acceptedAt === "string" && record(row.requested) !== undefined;
+}
+
+/**
+ * Is this the host's own archive receipt (§2.6)?
+ *
+ * The four states are the host's protocol; a receipt missing its own required facts is not one a
+ * window may show as a retention decision.
+ */
+function isArchiveReceipt(value: unknown): value is NonNullable<Session["archive"]> {
+	const row = record(value);
+	if (!row) return false;
+	if (row.state !== "retained" && row.state !== "prepared" && row.state !== "removed" && row.state !== "restored") return false;
+	if (typeof row.dirty !== "boolean" || typeof row.ignored !== "boolean") return false;
+	if (typeof row.recordedAt !== "string" || typeof row.reason !== "string") return false;
+	if (row.state === "restored") {
+		const restored = record(row.restored);
+		if (!restored || typeof restored.worktree !== "string" || typeof restored.branch !== "string" || typeof restored.reattached !== "boolean") return false;
+	}
+	return true;
+}
+
 function asSessions(value: unknown): Session[] {
 	return array(value).flatMap(item => {
 		const row = record(item);
@@ -284,6 +504,16 @@ function asSessions(value: unknown): Session[] {
 			updatedAt,
 			// Null for an ordinary task, the source task's id for a sidechat fork.
 			sidechatSourceThreadId: string(row.sidechatSourceThreadId) ?? null,
+			// The host's turn projection travels with the row: it is what tells a caller whether a
+			// model change belongs to the turn about to start or to the one after it.
+			...(Array.isArray(row.turns) ? { turns: row.turns as Session["turns"] } : {}),
+			// §2.4: the model/effort change the task is holding. It is a record about the request,
+			// never a claim that OMP committed it, so a row whose shape is not the host's own
+			// vocabulary carries nothing rather than a half-read record.
+			...(isPendingModelRecord(row.pendingModel) ? { pendingModel: row.pendingModel } : {}),
+			// §2.6: the archive receipt the host recorded for this task, read only when it has the
+			// states and facts the host itself writes.
+			...(isArchiveReceipt(row.archive) ? { archive: row.archive } : {}),
 		}];
 	});
 }
@@ -423,6 +653,12 @@ function sessionStatus(status: string, turn: TurnProjection | null): "idle" | "s
 			// Cedia's `running` session status means the OMP process is alive. The
 			// actual turn lifecycle is carried by agent_start/agent_end frames.
 			if (status === "running" || turn?.state === "completed") return "ready";
+			// Cedia's `idle` is not an ended session: the task still owns its folder
+			// (plan section 3.C) and its runtime starts on demand, so it is the
+			// vendor's `ready`. Reporting `idle` would read as legacy `closed` and
+			// release the folder slot the host still holds, refusing the next local
+			// task instead of offering the busy-project worktree default.
+			if (status === "idle") return "ready";
 			return "idle";
 	}
 }
@@ -592,6 +828,205 @@ function pendingInteractions(value: unknown, session: Session, now: string): unk
 	});
 }
 
+/**
+ * Synthesize the `user-input.requested` activities the bundle's pending-input
+ * derivation replays (probe 10 gap, item 1 permission half).
+ *
+ * The settlement rows above deliberately stay token-only (no titles, options,
+ * or params — #1305), and the derivation ignores settlements for content: it
+ * rebuilds pending inputs from `user-input.requested` activities carrying
+ * `payload.questions`. OMP's permission gate arrives as `select` frames
+ * (options Approve/Deny), so without this synthesis the composer panel has
+ * nothing to render and no click can reach `thread.user-input.respond`.
+ * Only the decision surface (title + option labels) is forwarded; rich
+ * request params never leave the broker journal.
+ */
+function pendingInputActivities(value: unknown, session: Session, now: string, sequenceStart: number): unknown[] {
+	return array(value).flatMap((item, index) => {
+		const row = record(item);
+		const token = string(row?.token) ?? string(row?.requestId);
+		if (!token) return [];
+		const request = record(row?.request) ?? {};
+		const method = string(request.method) ?? "";
+		if (!/input|select|editor/i.test(method)) return [];
+		const title = string(request.title) ?? "";
+		if (!title) return [];
+		const questionId = string(request.id) ?? token;
+		const details = array(request.optionDetails);
+		const options = array(request.options).flatMap((option, optionIndex) => {
+			const label = string(option);
+			if (!label) return [];
+			const description = string(record(details[optionIndex])?.description) ?? "";
+			return [{ label, description }];
+		});
+		// `input`/`editor` frames carry no options; the composer supplies free text.
+		return [{
+			id: `pending-input-${token}`,
+			tone: "info",
+			kind: "user-input.requested",
+			summary: title,
+			payload: {
+				requestId: token,
+				lifecycleGeneration: session.incarnation,
+				questions: [{ id: questionId, header: "Permission", question: title, options }],
+			},
+			turnId: null,
+			sequence: sequenceStart + index,
+			createdAt: string(row?.receivedAt) ?? now,
+		}];
+	});
+}
+
+/**
+ * Synthesize the `approval.requested` activities the bundle's pending-approval
+ * derivation replays (o11 paid-probe gap: `confirm`-method broker frames project
+ * to token-only `approval` settlements and render nothing clickable, so the turn
+ * stalls with no path to an answer).
+ *
+ * The only in-tree producer of `confirm`-method frames is the native editor
+ * bridge (`apps/host/src/service.ts`, "Allow this editor change?"), so a confirm
+ * row is a file-change approval: requestKind `file-change`, detail carrying the
+ * title plus the bounded request message. The bundle's own approval UI answers
+ * through the existing `thread.approval.respond` boolean path, so no
+ * respond-side change is needed, and no other broker field leaves the journal.
+ */
+const CONFIRM_DETAIL_LIMIT = 2000;
+
+function pendingApprovalActivities(value: unknown, session: Session, now: string, sequenceStart: number): unknown[] {
+	return array(value).flatMap((item, index) => {
+		const row = record(item);
+		const token = string(row?.token) ?? string(row?.requestId);
+		if (!token) return [];
+		const request = record(row?.request) ?? {};
+		if (!/^confirm$/i.test(string(request.method) ?? "")) return [];
+		const title = string(request.title) ?? "";
+		if (!title) return [];
+		const message = string(request.message) ?? "";
+		const full = message ? `${title}\n${message}` : title;
+		const detail = full.length > CONFIRM_DETAIL_LIMIT ? `${full.slice(0, CONFIRM_DETAIL_LIMIT)}\n[truncated]` : full;
+		return [{
+			id: `pending-approval-${token}`,
+			tone: "info",
+			kind: "approval.requested",
+			summary: title,
+			payload: {
+				requestId: token,
+				lifecycleGeneration: session.incarnation,
+				requestKind: "file-change",
+				detail,
+			},
+			turnId: null,
+			sequence: sequenceStart + index,
+			createdAt: string(row?.receivedAt) ?? now,
+		}];
+	});
+}
+
+/** The newest native goal event in the reduced OMP transcript, if one was valid. */
+function latestGoalSnapshot(state: TaskState): OmpGoalSnapshot | undefined {
+	for (let entryIndex = state.transcript.length - 1; entryIndex >= 0; entryIndex -= 1) {
+		const entry = state.transcript[entryIndex];
+		if (!entry) continue;
+		for (let frameIndex = entry.rawFrames.length - 1; frameIndex >= 0; frameIndex -= 1) {
+			const frame = entry.rawFrames[frameIndex];
+			if (record(frame)?.type !== "goal_updated") continue;
+			try {
+				// The shared reducer adds the durable event timestamp to every object frame. It is
+				// envelope metadata, not part of OMP's strict goal_updated payload.
+				const row = record(frame);
+				const { timestamp: _timestamp, ...goalFrame } = row ?? {};
+				const event = parseOmpGoalUpdatedEvent(goalFrame);
+				return event.state === undefined
+					? { enabled: event.goal !== null, goal: event.goal }
+					: { ...event.state, goal: event.goal };
+			} catch {
+				// A malformed future event is not a goal. Keep looking for an earlier valid
+				// event; the host read below remains the fallback when none is usable.
+			}
+		}
+	}
+	return undefined;
+}
+
+/** Read the host route's available wrapper, dropping only its route metadata. */
+function parseHostGoalSnapshot(value: unknown): OmpGoalSnapshot | undefined {
+	const row = record(value);
+	if (!row || row.state !== "available") return undefined;
+	const { state: _state, revision: _revision, ...snapshot } = row;
+	try { return parseOmpGoalSnapshot(snapshot); } catch { return undefined; }
+}
+
+function visibleGoal(snapshot: OmpGoalSnapshot | undefined): OmpGoalSnapshot["goal"] {
+	const goal = snapshot?.goal;
+	// OMP keeps a budget-limited goal live so the owner can raise its budget. The vendor header has
+	// no separate budget state, so keep showing the objective (with no paused timestamp) until OMP
+	// reports the terminal dropped or complete state.
+	return goal && (goal.status === "active" || goal.status === "paused" || goal.status === "budget-limited") ? goal : null;
+}
+
+/** Read the host's available live subagent wrapper, dropping route metadata and invalid rows. */
+function parseHostSubagents(value: unknown): OmpSubagentRow[] | undefined {
+	const row = record(value);
+	if (!row || row.state !== "available" || !Array.isArray(row.subagents)) return undefined;
+	try { return parseOmpSubagentList(row.subagents); } catch { return undefined; }
+}
+
+function subagentActivityTime(row: OmpSubagentRow, fallback: string): string {
+	try { return new Date(row.lastUpdate).toISOString(); } catch { return fallback; }
+}
+
+/** Build the exact payload shape consumed by workLog.ts's collab subagent decoders. */
+function subagentActivitiesFromRows(
+	rows: readonly OmpSubagentRow[] | undefined,
+	turnId: string | null,
+	sequenceStart: number,
+	fallbackTime: string,
+): unknown[] {
+	if (!rows || rows.length === 0) return [];
+	return rows.map((row, index) => {
+		// `agent` is OMP's own agent name (the definition the run was started from), which is what
+		// the strip shows as the role; `agentSource` is where that definition came from (bundled,
+		// project, user) and would read as a meaningless label, so it stays out of the display.
+		const label = row.assignment ?? row.task ?? row.description ?? `${row.agent} subagent`;
+		const receiverAgent: Record<string, unknown> = {
+			threadId: row.id,
+			agentId: row.agent,
+			agentRole: row.agent,
+			...(row.progress?.resolvedModel === undefined ? {} : { model: row.progress.resolvedModel }),
+			...(row.assignment === undefined && row.task === undefined ? {} : { prompt: row.assignment ?? row.task! }),
+		};
+		const agentState: Record<string, unknown> = {
+			threadId: row.id,
+			agentId: row.agent,
+			agentRole: row.agent,
+			status: row.status,
+			message: label,
+			...(row.progress?.resolvedModel === undefined ? {} : { model: row.progress.resolvedModel }),
+		};
+		const item = {
+			status: row.status,
+			prompt: label,
+			receiverAgents: [receiverAgent],
+			statuses: { [row.id]: agentState },
+		};
+		return {
+			id: `cedia-subagent-${row.id}`,
+			kind: row.status === "completed" || row.status === "failed" || row.status === "aborted" ? "tool.completed" : "tool.started",
+			tone: row.status === "failed" || row.status === "aborted" ? "error" : "tool",
+			summary: label,
+			payload: { itemType: "collab_agent_tool_call", data: { item } },
+			turnId,
+			sequence: sequenceStart + index,
+			createdAt: subagentActivityTime(row, fallbackTime),
+		};
+	});
+}
+
+function goalTimeIso(value: number | undefined): string | null {
+	if (value === undefined) return null;
+	try { return new Date(value).toISOString(); } catch { return null; }
+}
+
 function threadProjection(
 	session: Session,
 	project: Project | undefined,
@@ -600,10 +1035,15 @@ function threadProjection(
 	modelBySession?: ReadonlyMap<string, string>,
 	pendingUi?: unknown,
 	workspace?: ThreadWorkspaceMetadata,
+	goalSnapshot?: OmpGoalSnapshot,
+	subagents?: readonly OmpSubagentRow[],
 ): Record<string, unknown> {
 	const modelSelection = selectionFor(session, state, modelBySession);
 	const interactions = pendingInteractions(pendingUi, session, now);
 	const latestTurn = latestTurnFromState(state);
+	const turnIds = turnIdsByEntry(state);
+	const subagentTurnId = latestTurn?.turnId ?? [...turnIds.values()].at(-1) ?? null;
+	const ownSubagent = subagents?.find(candidate => candidate.id === session.id || candidate.sessionFile === session.sessionFile);
 	const sessionView = {
 		threadId: session.id,
 		status: sessionStatus(session.status, latestTurn),
@@ -612,7 +1052,25 @@ function threadProjection(
 		activeTurnId: latestTurn?.state === "running" ? latestTurn.turnId : null,
 		lastError: session.status === "recovery_required" ? "OMP session requires reconciliation" : null,
 		updatedAt: session.updatedAt,
+		// §2.4: a model/effort change the task is holding for its next turn travels with the row,
+		// so a surface can show "awaiting OMP" instead of presenting the request as in effect.
+		pendingModel: session.pendingModel ?? null,
+		// §2.6: what the archive kept, and how Continue put a task back. The window shows a decision
+		// from the host's own record rather than inferring that files came back.
+		archive: session.archive ?? null,
+		// §2.4/O01: the bounded turn projection, reduced to what a surface may draw. The window can
+		// say how much work OMP is holding and whether a turn's outcome is still unknown; it never
+		// sees this device's identity or the payload hash, and it never invents a turn the host did
+		// not record.
+		turns: (session.turns ?? []).map(turn => ({
+			turnIntentId: turn.turnIntentId,
+			state: turn.state,
+			...(turn.queuePosition === undefined ? {} : { queuePosition: turn.queuePosition }),
+			...(turn.model === undefined ? {} : { model: turn.model }),
+			...(turn.reason === undefined ? {} : { reason: turn.reason }),
+		})),
 	};
+	const goal = visibleGoal(goalSnapshot);
 	return {
 		id: session.id,
 		projectId: session.projectId,
@@ -635,9 +1093,9 @@ function threadProjection(
 		sourceTurnId: null,
 		gatewayOperationId: null,
 		gatewayOperationIndex: null,
-		subagentAgentId: null,
-		subagentNickname: null,
-		subagentRole: null,
+		subagentAgentId: ownSubagent?.agent ?? null,
+		subagentNickname: ownSubagent?.description ?? null,
+		subagentRole: ownSubagent?.agent ?? null,
 		forkSourceThreadId: null,
 		sidechatSourceThreadId: string(session.sidechatSourceThreadId) ?? null,
 		sidechatLastActivityAt: null,
@@ -656,14 +1114,20 @@ function threadProjection(
 		handoff: null,
 		pinnedMessages: [],
 		notes: "",
-		goal: "",
-		goalStartedAt: null,
-		goalPausedAt: null,
+		goal: goal?.objective ?? "",
+		goalStartedAt: goalTimeIso(goal?.createdAt),
+		goalPausedAt: goal?.status === "paused" ? goalTimeIso(goal.updatedAt) : null,
 		goalAchievements: [],
-		messages: messagesFromState(state, now, turnIdsByEntry(state)),
+		messages: messagesFromState(state, now, turnIds),
 		proposedPlans: [],
-		activities: activitiesFromState(state, now),
+		activities: [
+			...activitiesFromState(state, now),
+			...pendingInputActivities(pendingUi, session, now, state.transcript.length + 1),
+			...pendingApprovalActivities(pendingUi, session, now, state.transcript.length + 1),
+			...subagentActivitiesFromRows(subagents, subagentTurnId, state.transcript.length + 1, now),
+		],
 		pendingInteractions: interactions,
+		cediaSlashCommands: state.slashCommands,
 		checkpoints: [],
 		session: sessionView,
 		projectTitle: project?.name,
@@ -715,17 +1179,30 @@ function threadSnapshotKey(input: {
 	readonly model?: string;
 	readonly usage?: { readonly usedTokens: number; readonly maxTokens: number };
 	readonly workspace?: ThreadWorkspaceMetadata;
+	readonly goal?: OmpGoalSnapshot;
+	readonly subagents?: readonly OmpSubagentRow[];
 }): string {
 	const session = input.session;
 	return JSON.stringify([
 		session.id, session.projectId, session.title, session.status, session.incarnation,
 		session.updatedAt, session.cwd, session.pinned === true, session.archived === true,
 		string(session.sidechatSourceThreadId) ?? "",
+		// §2.4: a held model/effort change is its own reason to repaint. It is recorded against the
+		// task, not against the OMP session row, so the row's timestamps can stand still while it moves.
+		session.pendingModel ? JSON.stringify(session.pendingModel) : "",
+		// §2.6: the same for the archive receipt - Continue rewrites it (state `restored` plus where
+		// it resumed) without the OMP session row moving at all.
+		session.archive ? JSON.stringify(session.archive) : "",
+		// §2.4/O01: the turn projection moves on OMP's boundaries, not on the session row's stamp, so
+		// a queued turn starting is its own reason to repaint.
+		session.turns ? JSON.stringify(session.turns) : "",
 		input.project ? [input.project.id, input.project.name, input.project.path, input.project.pinned === true, input.project.archived === true, input.project.createdAt] : null,
 		input.cursor,
 		input.model ?? "",
 		input.usage ? [input.usage.usedTokens, input.usage.maxTokens] : null,
 		input.workspace ?? null,
+		input.goal ?? null,
+		input.subagents ? JSON.stringify(input.subagents) : null,
 		input.ui,
 	]);
 }
@@ -735,11 +1212,13 @@ function shellSnapshotKey(data: {
 	readonly projects: readonly Project[];
 	readonly sessions: readonly Session[];
 	readonly states: ReadonlyMap<string, TaskState>;
+	readonly goals?: ReadonlyMap<string, OmpGoalSnapshot | undefined>;
 }): string {
 	return JSON.stringify([
 		data.projects.map(project => [project.id, project.path, project.name, project.pinned === true, project.archived === true, project.createdAt]),
-		data.sessions.map(session => [session.id, session.projectId, session.title, session.status, session.incarnation, session.updatedAt, session.cwd, session.pinned === true, session.archived === true]),
+		data.sessions.map(session => [session.id, session.projectId, session.title, session.status, session.incarnation, session.updatedAt, session.cwd, session.pinned === true, session.archived === true, session.pendingModel ? JSON.stringify(session.pendingModel) : "", session.archive ? JSON.stringify(session.archive) : "", session.turns ? JSON.stringify(session.turns) : ""]),
 		[...data.states].map(([id, state]) => [id, state.cursor, state.transcript.length]),
+		data.goals ? [...data.goals].map(([id, goal]) => [id, goal ? JSON.stringify(goal) : ""]) : [],
 	]);
 }
 
@@ -899,6 +1378,8 @@ class CediaAgentAdapter {
 	readonly #threadListeners = new Set<(event: unknown) => void>();
 	readonly #domainListeners = new Set<(event: unknown) => void>();
 	readonly #modelBySession = new Map<string, string>();
+	/** The last pending-model revision handed to the host for a task. */
+	readonly #pendingModelRevision = new Map<string, number>();
 	readonly #threadWorkspace = new Map<string, ThreadWorkspaceMetadata>();
 	readonly #eventCache = new Map<string, EventCacheEntry>();
 	readonly #contextCache = new Map<string, { marker: string; usage: ReturnType<typeof contextUsageFromFrame>; updatedAt: string }>();
@@ -958,14 +1439,585 @@ class CediaAgentAdapter {
 		}
 	}
 
+	/**
+	 * The host's capability snapshot (CEDIA-PLAN §2.2).
+	 *
+	 * Read-only and never invented: the answer is whatever the host advertises, and the
+	 * consumer (`capabilityGate`) treats an unparsable or absent snapshot as "unknown"
+	 * rather than as an empty catalog of working features.
+	 */
+	async capabilities(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/capabilities");
+	}
+
+	/** Read the host-owned OMP credit policy without changing the owner's shared setting. */
+	async getPolicy(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/omp/policy");
+	}
+
+	/** Read the runtime's own model, effort, and service-tier state for one session. */
+	async getModelState(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/model-state`);
+	}
+
+	/** Read the owner-visible provider account identities for one session. */
+	async getAccounts(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/accounts`);
+	}
+
+	/** Pin one provider account through the host's durable owner command. */
+	async pinAccount(sessionId: string, credentialId: number): Promise<unknown> {
+		const requestBody = {
+			commandId: id(),
+			incarnation: (await this.session(sessionId)).incarnation,
+			credentialId,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/accounts/pin`, requestBody);
+	}
+
+	/** Read the runtime-owned role-to-model mapping for one session. */
+	async getModelRoles(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/roles`);
+	}
+
+	/** Activate one configured role's model through the host's durable owner command. */
+	async applyModelRole(sessionId: string, role: string): Promise<unknown> {
+		if (typeof role !== "string" || role.trim().length === 0) throw new Error("Role apply needs a role name");
+		const requestBody = {
+			commandId: id(),
+			incarnation: (await this.session(sessionId)).incarnation,
+			role,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/roles/apply`, requestBody);
+	}
+
+	/** Assign (or, with null, clear) one role mapping through the host's durable owner command. */
+	async setModelRole(sessionId: string, role: string, modelId: string | null): Promise<unknown> {
+		if (typeof role !== "string" || role.trim().length === 0) throw new Error("Role set needs a role name");
+		if (modelId !== null && (typeof modelId !== "string" || modelId.trim().length === 0)) throw new Error("Role set needs a model id, or null to clear the role");
+		const requestBody = {
+			commandId: id(),
+			incarnation: (await this.session(sessionId)).incarnation,
+			role,
+			modelId,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/roles/set`, requestBody);
+	}
+
+	/** Set or clear one runtime-published service-tier override. */
+	async setServiceTier(sessionId: string, family: string, tier: string | null): Promise<unknown> {
+		const requestBody = {
+			commandId: id(),
+			incarnation: (await this.session(sessionId)).incarnation,
+			family,
+			tier,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/service-tier`, requestBody);
+	}
+
+	/** Read the host-owned plan, vibe, and pending review state for one session. */
+	async getPlan(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/plan`);
+	}
+
+	/** Read OMP's current todo progress for one session. */
+	async getProgress(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/progress`);
+	}
+
+	/** Read OMP's own steering and follow-up queues for one session. */
+	async getQueue(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/queue`);
+	}
+
+	/** Remove queued user submissions while preserving the host's typed refusal errors. */
+	async dropQueued(sessionId: string, body: CediaQueueDropCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			mode: body.mode,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/queue/drop`, requestBody);
+	}
+
+	/** Run one shell command through the session's own foreground bash. */
+	async execBash(sessionId: string, body: CediaBashExecCommand): Promise<unknown> {
+		if (typeof body.command !== "string" || body.command.trim().length === 0) throw new Error("Shell command must be a non-empty string");
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			command: body.command,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/bash/exec`, requestBody);
+	}
+
+	/** Run code one-shot through the session's shared kernel. */
+	async execPython(sessionId: string, body: CediaPythonExecCommand): Promise<unknown> {
+		if (typeof body.code !== "string" || body.code.trim().length === 0) throw new Error("Python code must be a non-empty string");
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			code: body.code,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/python/exec`, requestBody);
+	}
+
+	/** Ask the session to cancel running Python execution. */
+	async abortPython(sessionId: string, body?: CediaPythonAbortCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body?.commandId ?? id(),
+			incarnation: body?.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/python/abort`, requestBody);
+	}
+
+	/** Ask the session to cancel running bash commands. */
+	async abortBash(sessionId: string, body?: CediaBashAbortCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body?.commandId ?? id(),
+			incarnation: body?.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/bash/abort`, requestBody);
+	}
+
+	/** Read the process run-pause gate for one session. */
+	async getRunPause(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/pause`);
+	}
+
+	/** Engage or release the process run-pause gate while preserving the host's typed refusal errors. */
+	async setRunPaused(sessionId: string, body: CediaRunPauseCommand): Promise<unknown> {
+		if (typeof body.paused !== "boolean") throw new Error("Run pause must be a boolean");
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			paused: body.paused,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/pause`, requestBody);
+	}
+
+	/** Read the runtime-owned context usage and maintenance state for one session. */
+	async getContext(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/context`);
+	}
+
+	/** Read the runtime-owned checkpoint and rewind facts for one session. */
+	async getHistory(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/history`);
+	}
+
+	/** Read the runtime-owned session tree and this task's lineage. */
+	async getTree(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/tree`);
+	}
+
+	/** Read whether the runtime's prewalk handoff is armed. Absence stays absence. */
+	async getPrewalk(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/prewalk`);
+	}
+
+	/** Read the terminal owner's loop mode for one session. Absence stays absence. */
+	async getLoop(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/loop`);
+	}
+
+	/** Disable the terminal owner's loop mode while preserving the host's typed refusal errors. */
+	async disableLoop(sessionId: string, body?: CediaLoopCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body?.commandId ?? id(),
+			incarnation: body?.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/loop`, requestBody);
+	}
+
+	/** Read the terminal owner side-question state for one session. */
+	async getBtw(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/btw`);
+	}
+
+	/** Ask an ephemeral side question through the host's durable owner command. */
+	async askBtw(sessionId: string, body: CediaBtwAskCommand): Promise<unknown> {
+		if (!body || typeof body.question !== "string" || body.question.trim().length === 0) throw new Error("Side question needs a question");
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			question: body.question,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/btw/ask`, requestBody);
+	}
+
+	/** Promote the held side answer into a branched session. */
+	async branchBtw(sessionId: string, body?: CediaBtwBranchCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body?.commandId ?? id(),
+			incarnation: body?.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/btw/branch`, requestBody);
+	}
+
+	/** Read the cleanse run state for one session. */
+	async getCleanse(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/cleanse`);
+	}
+
+	/** Start detection plus one bounded repair batch through the host's durable owner command. */
+	async runCleanse(sessionId: string, body: CediaCleanseRunCommand): Promise<unknown> {
+		const requestBody: Record<string, unknown> = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		for (const [key, value] of Object.entries({ request: body.request, all: body.all, includeTests: body.includeTests, maxAgents: body.maxAgents, model: body.model })) {
+			if (value !== undefined) requestBody[key] = value;
+		}
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/cleanse/run`, requestBody);
+	}
+
+	/** Cancel the running cleanse batch. */
+	async abortCleanse(sessionId: string, body?: CediaCleanseAbortCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body?.commandId ?? id(),
+			incarnation: body?.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/cleanse/abort`, requestBody);
+	}
+
+	/** Read the rule-forging state for one session. */
+	async getOmfg(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/omfg`);
+	}
+
+	/** Draft a TTSR rule candidate through the host's durable owner command. */
+	async draftOmfg(sessionId: string, body: CediaOmfgDraftCommand): Promise<unknown> {
+		if (!body || typeof body.complaint !== "string" || body.complaint.trim().length === 0) throw new Error("Rule forging needs a complaint");
+		const requestBody: Record<string, unknown> = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			complaint: body.complaint,
+		};
+		if (body.feedback !== undefined) requestBody.feedback = body.feedback;
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/omfg/draft`, requestBody);
+	}
+
+	/** Save the held rule draft into the named scope. */
+	async saveOmfg(sessionId: string, body: CediaOmfgSaveCommand): Promise<unknown> {
+		if (!body || (body.scope !== "project" && body.scope !== "global")) throw new Error('Rule save scope must be "project" or "global"');
+		const requestBody: Record<string, unknown> = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			scope: body.scope,
+		};
+		if (body.overwrite !== undefined) requestBody.overwrite = body.overwrite;
+		if (body.allowUnvalidated !== undefined) requestBody.allowUnvalidated = body.allowUnvalidated;
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/omfg/save`, requestBody);
+	}
+
+	/** Cancel a running rule draft. */
+	async abortOmfg(sessionId: string, body?: CediaOmfgAbortCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body?.commandId ?? id(),
+			incarnation: body?.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/omfg/abort`, requestBody);
+	}
+
+	/** Read the runtime-owned live tool catalog: registry identity, source class and activation. */
+	async getToolCatalog(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/tools/catalog`);
+	}
+
+	/** Read the runtime-owned extension records plus the live root policy. */
+	async getExtensions(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/tools/extensions`);
+	}
+
+	/** Read the runtime-owned Code Mode partition: direct names and prelude flags, never sources. */
+	async getCodeMode(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/tools/codemode`);
+	}
+
+	/** Re-run the runtime-owned skill rediscovery, preserving the durable command envelope. */
+	async refreshSkills(sessionId: string): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/tools/refresh-skills`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+		});
+	}
+
+	/** Select the runtime-owned enabled tools, preserving the durable command envelope. */
+	async setActiveTools(sessionId: string, toolNames: readonly string[]): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/tools/active`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+			toolNames: [...toolNames],
+		});
+	}
+
+	/** Enable or disable one runtime-owned extension, preserving the durable command envelope. */
+	async setExtensionEnabled(sessionId: string, extensionId: string, enabled: boolean): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/tools/extensions/set`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+			id: extensionId,
+			enabled,
+		});
+	}
+
+	/** Navigate the runtime-owned session tree, preserving the durable command envelope. */
+	async navigateTree(sessionId: string, entryId: string, summarize?: boolean): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/tree/navigate`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+			entryId,
+			...(summarize === undefined ? {} : { summarize }),
+		});
+	}
+
+	/** Read the runtime-owned transcript for one session on demand. */
+	async getTranscript(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/history/transcript`);
+	}
+
+	/** Clear the runtime conversation context in place, preserving the durable session/task. */
+	async clearContext(sessionId: string, body: CediaContextCommand = {}): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/history/clear`, requestBody);
+	}
+
+	/** Start a fresh provider session for the same durable task through the runtime boundary. */
+	async freshSession(sessionId: string, body: CediaContextCommand = {}): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/history/fresh`, requestBody);
+	}
+
+	/** Read the owner-requested provider usage snapshot for one session. */
+	async getUsage(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/usage`);
+	}
+
+	/** Read live saved-reset accounts only when the owner asks for them. */
+	async getCredits(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/credits`);
+	}
+
+	/** Redeem one saved reset after the owner has confirmed the selected account. */
+	async redeemCredit(sessionId: string, target: CediaCreditTarget): Promise<unknown> {
+		const requestBody = {
+			commandId: id(),
+			incarnation: (await this.session(sessionId)).incarnation,
+			target,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/credits/redeem`, requestBody);
+	}
+
+	/** Remove image parts from the stored transcript after the runtime confirms the command. */
+	async dropContextImages(sessionId: string, body: CediaContextCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/context/drop-images`, requestBody);
+	}
+
+	/** Reduce stored context with the runtime's selected strategy and preserve its typed answer. */
+	async shakeContext(sessionId: string, body: CediaContextShakeCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			mode: body.mode,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/context/shake`, requestBody);
+	}
+
+	/** Ask the runtime to stop an active compaction and return the state it observed afterward. */
+	async abortCompaction(sessionId: string, body: CediaContextCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/context/abort-compaction`, requestBody);
+	}
+
+	/** Read the runtime-owned memory backend and its shape-only session state. */
+	async getMemory(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/memory`);
+	}
+
+	/** Re-apply the selected memory backend through the runtime-owned operation. */
+	async applyMemoryBackend(sessionId: string, body: CediaMemoryCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/memory/apply`, requestBody);
+	}
+
+	/** Read the host/runtime-owned agent roster for one session. */
+	async getAgents(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/agents`);
+	}
+
+	/** Read one page of a selected agent's child transcript. */
+	async getAgentTranscript(sessionId: string, agentId: string, fromByte = 0): Promise<unknown> {
+		return await this.request<unknown>(
+			"GET",
+			`/v1/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}/transcript?fromByte=${fromByte}`,
+		);
+	}
+
+	/** Abort a running agent turn and release its row, preserving the durable command envelope. */
+	async killAgent(sessionId: string, agentId: string): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/agents/kill`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+			id: agentId,
+		});
+	}
+
+	/** Revive a parked agent through the lifecycle's own restore, preserving the durable command envelope. */
+	async reviveAgent(sessionId: string, agentId: string): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/agents/revive`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+			id: agentId,
+		});
+	}
+
+	/** List every discovered agent with its effective hub config. */
+	async getAgentConfigs(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/agents/config`);
+	}
+
+	/** Configure one discovered agent with the hub's persist semantics, preserving the durable command envelope. */
+	async configureAgent(sessionId: string, body: CediaAgentConfigInput): Promise<unknown> {
+		const session = await this.session(sessionId);
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/agents/config`, {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? session.incarnation,
+			agent: body.agent,
+			...(body.enabled === undefined ? {} : { enabled: body.enabled }),
+			...(body.model === undefined ? {} : { model: body.model }),
+			...(body.prewalk === undefined ? {} : { prewalk: body.prewalk }),
+			...(body.advisor === undefined ? {} : { advisor: body.advisor }),
+		});
+	}
+
+	/** Read the host-owned advisor switch, runtime state, and spend for one session. */
+	async getAdvisor(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/advisor`);
+	}
+
+	/** Apply one host-owned advisor switch operation. */
+	async setAdvisor(sessionId: string, body: CediaAdvisorCommand): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			op: body.op,
+			enabled: body.enabled,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/advisor`, requestBody);
+	}
+
+	/** Read the bounded advisor transcript owned by the runtime. */
+	async getAdvisorHistory(sessionId: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/advisor/history`);
+	}
+
+	/** Read one scope's raw advisor config text without starting a stopped runtime. */
+	async getAdvisorConfig(sessionId: string, scope: "project" | "user"): Promise<unknown> {
+		if (scope !== "project" && scope !== "user") throw new Error("Advisor config scope must be project or user");
+		return await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/advisor/config?scope=${scope}`);
+	}
+
+	/** Validate, write and apply one scope's advisor config while preserving the host's typed refusal errors. */
+	async setAdvisorConfig(sessionId: string, body: CediaAdvisorConfigCommand): Promise<unknown> {
+		if (body.scope !== "project" && body.scope !== "user") throw new Error("Advisor config scope must be project or user");
+		if (typeof body.text !== "string") throw new Error("Advisor config text must be a string");
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			scope: body.scope,
+			text: body.text,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/advisor/config`, requestBody);
+	}
+
+	/** Apply one host-owned plan operation. The request body is forwarded unchanged. */
+	async setPlan(sessionId: string, body: CediaPlanCommand): Promise<unknown> {
+		const requestBody = body.incarnation === undefined
+			? { ...body, incarnation: (await this.session(sessionId)).incarnation }
+			: body;
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/plan`, requestBody);
+	}
+
+	/** The selected remote path's own state (§6.5). Owner-only on the host side. */
+	async remoteGatewayState(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/remote/gateway");
+	}
+
+	/**
+	 * Ask the host for one short-lived enrollment code.
+	 *
+	 * The code is minted by the gateway's own store, is redeemed once, and is never stored by
+	 * Cedia: this method returns what the owner has to read out or scan, once.
+	 */
+	async issueRemoteEnrollment(name: string): Promise<unknown> {
+		return await this.request<unknown>("POST", "/v1/remote/enrollment", { name });
+	}
+
+	/** Paired controller devices, and the one action that ends a pairing. */
+	async listDevices(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/devices");
+	}
+
+	async revokeDevice(deviceId: string): Promise<unknown> {
+		return await this.request<unknown>("POST", `/v1/devices/${encodeURIComponent(deviceId)}/revoke`, {});
+	}
+
+	/** OMP's live settings inventory, including Cedia's disposition for every schema path. */
+	async getOmpSettingsKeys(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/omp/settings/keys");
+	}
+
+	/** Read one effective OMP setting. The host owns redaction and layer resolution. */
+	async getOmpSettingValue(path: string): Promise<unknown> {
+		return await this.request<unknown>("GET", `/v1/omp/settings/value?path=${encodeURIComponent(path)}`);
+	}
+
+	/** Write one OMP setting with the revision the row was read at. Host errors propagate unchanged. */
+	async setOmpSetting(input: { path: string; value: unknown; expectedRevision?: string }): Promise<unknown> {
+		return await this.request<unknown>("PATCH", "/v1/omp/settings", {
+			path: input.path,
+			value: input.value,
+			...(input.expectedRevision === undefined ? {} : { expectedRevision: input.expectedRevision }),
+		});
+	}
+
 	async request<T>(method: NonNullable<AgentRequest["method"]>, path: string, body?: unknown): Promise<T> {
 		if (!path.startsWith("/v1/") || path.includes("#") || path.includes("\\")) throw new Error("Invalid Cedia host path");
-		return await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, {
-			kind: "request",
-			method,
-			path,
-			...(body === undefined ? {} : { body }),
-		}) as T;
+		try {
+			return await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, {
+				kind: "request",
+				method,
+				path,
+				...(body === undefined ? {} : { body }),
+			}) as T;
+		} catch (error) {
+			// One funnel for every renderer-side application request, so a host error code is
+			// restored in the same place it was lost (see host-error-codes.ts).
+			throw normalizeCediaHostError(error);
+		}
 	}
 
 	/**
@@ -1017,6 +2069,18 @@ class CediaAgentAdapter {
 	async sessions(projectId?: string): Promise<Session[]> {
 		const query = projectId === undefined ? "" : `?projectId=${encodeURIComponent(projectId)}`;
 		return asSessions(await this.request("GET", `/v1/sessions${query}`));
+	}
+
+	/** Re-probe known owners, then ask the host to adopt the selected task owner. */
+	async attachOwner(sessionId: string): Promise<Session> {
+		// The listing endpoint performs the same bounded owner probe used by the picker immediately
+		// before the action. The start route remains the final authenticated lease/identity gate.
+		await this.request<unknown>("GET", "/v1/owners");
+		const value = await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/start`);
+		const started = asSessions([value])[0];
+		if (!started) throw new Error(`Cedia did not return a started session for '${sessionId}'`);
+		this.#eventCache.delete(sessionId);
+		return started;
 	}
 
 	/**
@@ -1114,6 +2178,44 @@ class CediaAgentAdapter {
 		return array(row?.requests ?? value);
 	}
 
+	/** Read a task's goal only when its event journal has not supplied one. */
+	async goalFromHost(sessionId: string): Promise<OmpGoalSnapshot | undefined> {
+		try {
+			return parseHostGoalSnapshot(await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/goal`));
+		} catch {
+			// A stopped or older runtime has no goal surface. The projection stays empty rather
+			// than presenting a local draft as if OMP accepted it.
+			return undefined;
+		}
+	}
+
+	/**
+	 * Project the host's goal snapshot to the budget and usage details a surface may draw.
+	 * No token, objective edit or second command is involved: this is the read half of the
+	 * goal's budget controls, and an absent goal reads as unavailable rather than as zeroes.
+	 */
+	async getGoalDetails(sessionId: string): Promise<unknown> {
+		const snapshot = await this.goalFromHost(sessionId);
+		const goal = visibleGoal(snapshot);
+		if (!goal) return { available: false as const, reason: "This task has no active goal." };
+		return {
+			available: true as const,
+			status: goal.status,
+			tokenBudget: goal.tokenBudget ?? null,
+			tokensUsed: goal.tokensUsed,
+			timeUsedSeconds: goal.timeUsedSeconds,
+		};
+	}
+
+	/** Read the host's live subagent cache without starting a stopped runtime. */
+	async subagentsFromHost(sessionId: string): Promise<OmpSubagentRow[] | undefined> {
+		try {
+			return parseHostSubagents(await this.request<unknown>("GET", `/v1/sessions/${encodeURIComponent(sessionId)}/subagents`));
+		} catch {
+			return undefined;
+		}
+	}
+
 	async hydrateEvent(sessionId: string, event: SessionEvent): Promise<SessionEvent> {
 		const reference = frameReference(event.frame);
 		if (!reference) return event;
@@ -1157,7 +2259,14 @@ class CediaAgentAdapter {
 
 	async shellSnapshot(full: boolean): Promise<Record<string, unknown>> {
 		const data = await this.readShellData(full);
-		this.#shellKey = shellSnapshotKey(data);
+		const goals = new Map<string, OmpGoalSnapshot | undefined>();
+		await Promise.all(data.sessions.map(async session => {
+			// A streamed goal update is authoritative for the reduced transcript. Only ask the host
+			// projection when this shell read has not seen one yet (for example, a stopped task or a
+			// lightweight sidebar hydration).
+			goals.set(session.id, latestGoalSnapshot(data.states.get(session.id) ?? initialState()) ?? await this.goalFromHost(session.id));
+		}));
+		this.#shellKey = shellSnapshotKey({ ...data, goals });
 		this.#snapshotSequence += 1;
 		const now = iso(this.#now);
 		const projectRows = data.projects.map(project => ({
@@ -1175,7 +2284,7 @@ class CediaAgentAdapter {
 		const projectMap = new Map(data.projects.map(project => [project.id, project]));
 		const threads = data.sessions.map(session => {
 			const state = data.states.get(session.id) ?? initialState();
-			const thread = threadProjection(session, projectMap.get(session.projectId), state, now, this.#modelBySession);
+			const thread = threadProjection(session, projectMap.get(session.projectId), state, now, this.#modelBySession, undefined, undefined, goals.get(session.id));
 			return full ? thread : shellThreadProjection(thread, session);
 		});
 		return { snapshotSequence: this.#snapshotSequence, spaces: [], projects: projectRows, threads, updatedAt: now };
@@ -1187,19 +2296,24 @@ class CediaAgentAdapter {
 		const { state, cursor } = await this.events(session);
 		let ui: unknown[] = [];
 		try { ui = await this.ui(session); } catch { /* unavailable while the session is stopped */ }
+		const goalSnapshot = latestGoalSnapshot(state) ?? await this.goalFromHost(session.id);
+		const subagents = await this.subagentsFromHost(session.id);
 		const model = latestModel(state, session);
 		if (model?.id) this.#modelBySession.set(session.id, modelSlug(model));
 		this.#snapshotSequence += 1;
 		const project = projects.find(candidate => candidate.id === session.projectId);
 		const workspace = this.#threadWorkspace.get(threadId);
-		const thread = threadProjection(session, project, state, iso(this.#now), this.#modelBySession, ui, workspace);
+		const thread = threadProjection(session, project, state, iso(this.#now), this.#modelBySession, ui, workspace, goalSnapshot, subagents);
 		// Read occupancy after completed messages/compaction, never sum lifetime token usage.
 		// The marker excludes our own get_state response, avoiding a polling feedback loop.
 		const contextFrames = state.transcript.flatMap(entry => entry.rawFrames).filter(frame =>
 			["cedia_session", "message_end", "agent_end", "auto_compaction_end"].includes(String(frame.type)));
 		const marker = `${session.incarnation}:${contextFrames.length}:${model?.provider ?? ""}:${model?.id ?? ""}`;
 		let context = this.#contextCache.get(threadId);
-		if (context?.marker !== marker && contextFrames.length && session.status !== "stopped" && session.status !== "recovery_required") {
+		// A live confirmation is time-bounded and must reach the window immediately.
+		// `get_state` can wait behind the active OMP turn, so do not hold the entire
+		// thread snapshot (including its pending approval card) on context accounting.
+		if (ui.length === 0 && context?.marker !== marker && contextFrames.length && session.status !== "stopped" && session.status !== "recovery_required") {
 			try {
 				const response = await this.sendCommand(session, id(), "get_state");
 				context = { marker, usage: contextUsageFromFrame(response), updatedAt: iso(this.#now) };
@@ -1211,6 +2325,8 @@ class CediaAgentAdapter {
 			session, project, cursor, ui, model: model ? modelSlug(model) : undefined,
 			...(usage ? { usage } : {}),
 			...(workspace ? { workspace } : {}),
+			...(goalSnapshot ? { goal: goalSnapshot } : {}),
+			...(subagents ? { subagents } : {}),
 		}));
 		if (usage) (thread.activities as unknown[]).push({
 			id: `context-${threadId}`, kind: "context-window.updated", tone: "info",
@@ -1255,6 +2371,70 @@ class CediaAgentAdapter {
 		})();
 		this.#threadRefreshes.set(threadId, refresh);
 		try { await refresh; } finally { if (this.#threadRefreshes.get(threadId) === refresh) this.#threadRefreshes.delete(threadId); }
+	}
+
+	async sendGoalCommand(session: Session, request: { readonly op: "set" | "replace" | "pause" | "resume" | "drop" | "complete" | "budget"; readonly objective?: string; readonly tokenBudget?: number }): Promise<Command> {
+		const result = await this.request<Command>("POST", `/v1/sessions/${encodeURIComponent(session.id)}/goal`, {
+			commandId: id(),
+			incarnation: session.incarnation,
+			...request,
+		});
+		if (result.status === "failed" || result.status === "outcome_unknown" || result.status === "not_dispatched") throw new Error(result.error ?? "OMP did not accept the goal operation");
+		return result;
+	}
+
+	async updateGoalFromMetadata(threadId: string, objective: string): Promise<void> {
+		const session = await this.session(threadId);
+		if (objective.trim().length === 0) {
+			await this.sendGoalCommand(session, { op: "drop" });
+			return;
+		}
+		const current = await this.goalFromHost(threadId);
+		const existing = visibleGoal(current);
+		await this.sendGoalCommand(session, { op: existing ? "replace" : "set", objective: objective.trim() });
+	}
+
+	async updateGoalPausedFromMetadata(threadId: string, paused: boolean): Promise<void> {
+		const session = await this.session(threadId);
+		await this.sendGoalCommand(session, { op: paused ? "pause" : "resume" });
+	}
+
+	async updateGoalBudgetFromMetadata(threadId: string, tokenBudget: number): Promise<void> {
+		if (!Number.isSafeInteger(tokenBudget) || tokenBudget <= 0) throw new Error("A goal token budget must be a positive integer");
+		const session = await this.session(threadId);
+		await this.sendGoalCommand(session, { op: "budget", tokenBudget });
+	}
+
+	/**
+	 * Ask the shared draft owner for the command bound to this task's current revision
+	 * (CEDIA §2.5). The composer keeps its own register; this identity is what makes two
+	 * windows sending the same revision produce one turn instead of two.
+	 */
+	async reserveDraftSubmission(threadId: string, commandId: string, message: string): Promise<DraftReservation> {
+		try {
+			const answer = await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, {
+				kind: "uiDraft",
+				threadId,
+				action: "reserve",
+				commandId,
+				text: message,
+			} as unknown as AgentRequest) as DraftReservation;
+			return answer && typeof answer === "object" && "status" in answer ? answer : { status: "none" };
+		} catch {
+			// Bookkeeping must never be what blocks a send: an unavailable draft owner means this
+			// turn carries its own command id, exactly as it did before the draft owner existed.
+			return { status: "none" };
+		}
+	}
+
+	/** Drop the delivered draft, and only while its revision still matches (§2.5 item 3). */
+	async releaseDraftSubmission(threadId: string, revision: number): Promise<void> {
+		try {
+			await this.#bridge.invoke(CEDIA_AGENT_CHANNEL, { kind: "uiDraft", threadId, action: "clear", revision } as unknown as AgentRequest);
+		} catch (error) {
+			console.warn("Cedia could not release a delivered composer draft.", error);
+			// A newer edit, or a host that already moved on, leaves the draft where it is.
+		}
 	}
 
 	async sendCommand(session: Session, commandId: string, command: string, payload?: Record<string, unknown>): Promise<Command> {
@@ -1351,7 +2531,8 @@ class CediaAgentAdapter {
 		session = await this.session(threadId);
 		await this.resyncTranscript(session);
 		const selection = modelSelectionFromCommand(row.modelSelection);
-		if (selection) await this.setModelIfRequested(session, selection);
+		// The model picked with a send applies to that send: this is not a deferred change.
+		if (selection) await this.setModelIfRequested(session, selection, { forSubmission: true });
 		await this.sendCommand(session, string(row.commandId) ?? id(), "prompt", { message: text });
 	}
 
@@ -1396,7 +2577,7 @@ class CediaAgentAdapter {
 		return started;
 	}
 
-	async setModelIfRequested(session: Session, selection: ModelSelectionLike | undefined): Promise<void> {
+	async setModelIfRequested(session: Session, selection: ModelSelectionLike | undefined, options: { forSubmission?: boolean } = {}): Promise<void> {
 		if (!selection || selection.model === OMP_UNRESOLVED_MODEL) return;
 		// Model discovery is global OMP metadata. Reading it through the host route
 		// avoids starting an arbitrary existing task just to populate the picker and
@@ -1409,15 +2590,53 @@ class CediaAgentAdapter {
 		const match = matches.length === 1 ? matches[0] : matches.find(row => row.provider === selection.ompProvider);
 		if (!match) throw new Error(`OMP no longer advertises model '${selection.model}'`);
 		if (!match.provider) throw new Error(`OMP did not identify the provider for model '${selection.model}'`);
+		const requestedEffort = selection.reasoningEffort ?? selection.options?.thinkingLevel;
+		if (requestedEffort && match.efforts && match.efforts.length > 0 && !match.efforts.includes(requestedEffort)) {
+			throw new Error(`OMP does not advertise reasoning effort '${requestedEffort}' for '${match.id}'`);
+		}
+		// §2.4: while a turn is running, the change is handed to OMP as a revision and committed
+		// at OMP's own turn boundary, so the running turn keeps the model it started with. The
+		// host decides what that runtime can honour and records what actually happened. An idle
+		// task still applies the change immediately, because there is no next turn to defer to.
+		// A turn is in flight only when the host's own turn projection says one is running: a task
+		// that is merely started reports `status: running` too, and a model picked for the turn the
+		// user is about to send must apply to that turn, not to the one after it.
+		const turnInFlight = options.forSubmission === true
+			? false
+			: session.turns === undefined
+				? session.status === "running"
+				: session.turns.some(turn => turn.state === "running");
+		if (turnInFlight) {
+			const applied = await this.request<{ state?: string; applied?: { model?: string; via?: string } }>("POST", `/v1/sessions/${encodeURIComponent(session.id)}/pending-model`, {
+				revision: this.#nextPendingModelRevision(session.id),
+				provider: match.provider,
+				modelId: match.id,
+				...(requestedEffort ? { thinkingLevel: requestedEffort } : {}),
+			});
+			// Only a change OMP reports as in effect may be shown as the task's model.
+			if (applied?.state === "in-effect" && applied.applied?.model) this.#modelBySession.set(session.id, applied.applied.model);
+			return;
+		}
 		const result = await this.sendCommand(session, id(), "set_model", { provider: match.provider, modelId: match.id });
 		if (result.status === "failed" || result.status === "outcome_unknown" || result.status === "not_dispatched") throw new Error(result.error ?? "OMP rejected the model change");
 		this.#modelBySession.set(session.id, match.slug);
-		const requestedEffort = selection.reasoningEffort ?? selection.options?.thinkingLevel;
 		if (requestedEffort) {
-			if (match.efforts && match.efforts.length > 0 && !match.efforts.includes(requestedEffort)) throw new Error(`OMP does not advertise reasoning effort '${requestedEffort}' for '${match.id}'`);
 			const effort = await this.sendCommand(session, id(), "set_thinking_level", { level: requestedEffort });
 			if (effort.status === "failed" || effort.status === "outcome_unknown" || effort.status === "not_dispatched") throw new Error(effort.error ?? "OMP rejected the reasoning effort");
 		}
+	}
+
+	/**
+	 * The revision a task's next pending model change carries.
+	 *
+	 * Monotonic per task and independent of the wall clock, so two windows changing the same
+	 * task's model cannot produce the same revision for different requests - OMP echoes the
+	 * revision back, and that echo is what tells the host which change was committed.
+	 */
+	#nextPendingModelRevision(sessionId: string): number {
+		const next = (this.#pendingModelRevision.get(sessionId) ?? 0) + 1;
+		this.#pendingModelRevision.set(sessionId, next);
+		return next;
 	}
 
 	async dispatch(command: unknown): Promise<{ sequence: number }> {
@@ -1461,6 +2680,14 @@ class CediaAgentAdapter {
 				projectId,
 				...(string(row.title) ? { title: string(row.title) } : {}),
 				workspaceMode: row.envMode === "worktree" ? "worktree" : "local",
+				// A base revision is only meaningful for an isolated worktree, and the host
+				// resolves it to a commit before creating anything (§3.C).
+				...(row.envMode === "worktree" && string(row.baseRef) ? { baseRef: string(row.baseRef) } : {}),
+				// A dirty-file selection likewise only applies to a worktree creation: the
+				// host carries exactly those paths and refuses a malformed list before
+				// creating anything, so the adapter forwards the selection verbatim and
+				// lets the host refusal (with its per-path outcome) surface.
+				...(row.envMode === "worktree" && row.dirtyFiles !== undefined ? { dirtyFiles: row.dirtyFiles } : {}),
 			});
 		} else if (["thread.meta.update", "thread.archive", "thread.unarchive"].includes(type)) {
 			const threadId = string(row.threadId);
@@ -1471,6 +2698,14 @@ class CediaAgentAdapter {
 			else {
 				if (string(row.title)) patch.title = string(row.title);
 				if (typeof row.isPinned === "boolean") patch.pinned = row.isPinned;
+				if (Object.hasOwn(row, "goal")) {
+					if (typeof row.goal !== "string") throw new Error("A thread goal must be text");
+					await this.updateGoalFromMetadata(threadId, row.goal);
+				}
+				if (Object.hasOwn(row, "goalPaused")) {
+					if (typeof row.goalPaused !== "boolean") throw new Error("A thread goal pause state must be boolean");
+					await this.updateGoalPausedFromMetadata(threadId, row.goalPaused);
+				}
 				// The workspace fields are the thread's own metadata, not the host's: they describe
 				// which checkout this thread is pointed at. Cedia keeps them for the window's
 				// lifetime and projects them back (see `ThreadWorkspaceMetadata`), which is what
@@ -1500,23 +2735,46 @@ class CediaAgentAdapter {
 			// the native path proved it — image bytes into OMP's `images[]`, everything
 			// else into a labelled attached-context block.
 			const turn = await this.turnTextWithAttachments(threadId, message);
-			const payload = { message: turn.message, ...(turn.images.length > 0 ? { images: turn.images } : {}) };
-			let session = await this.ensureStarted(await this.session(threadId));
-			const selection = modelSelectionFromCommand(row.modelSelection);
-			if (selection) await this.setModelIfRequested(session, selection);
+			const selectedSlashCommand = string(row.cediaSelectedSlashCommand);
+			const payload = {
+				message: turn.message,
+				...(turn.images.length > 0 ? { images: turn.images } : {}),
+				...(selectedSlashCommand ? { cediaSelectedSlashCommand: selectedSlashCommand } : {}),
+			};
 			const dispatchMode = row.dispatchMode === "steer" ? "steer" : row.dispatchMode === "queue" ? "queue" : undefined;
+			const existingSession = await this.session(threadId);
+			if (selectedSlashCommand && existingSession.status === "running" && dispatchMode) {
+				throw new Error("The selected slash command cannot be dispatched while this turn is running. Retry after the current turn finishes.");
+			}
+			let session = await this.ensureStarted(existingSession);
+			if (selectedSlashCommand && session.status === "running" && dispatchMode) {
+				throw new Error("The selected slash command cannot be dispatched while this turn is running. Retry after the current turn finishes.");
+			}
+			// Cedia §2.5: the shared draft owner binds this revision to one command before
+			// dispatch. Two windows sending the same revision then produce one turn, and a
+			// revision already sent with different text stops here instead of double-sending.
+			const requestedCommandId = string(row.commandId) ?? id();
+			const reservation = await this.reserveDraftSubmission(threadId, requestedCommandId, turn.message);
+			if (reservation.status === "conflict") throw new Error("This draft was already sent with different text from another window. Review the task before sending again.");
+			const commandId = reservation.status === "reserved" ? reservation.commandId : requestedCommandId;
+			const selection = modelSelectionFromCommand(row.modelSelection);
+			// `dispatchMode: steer` feeds the running turn, which keeps the model it started with,
+			// so a change sent with it is deferred; a plain send owns the turn it starts.
+			if (selection) await this.setModelIfRequested(session, selection, { forSubmission: dispatchMode === undefined });
 			const command = session.status === "running" && dispatchMode
 				? dispatchMode === "steer" ? "steer" : "follow_up"
 				: "prompt";
-			let result = await this.sendCommand(session, string(row.commandId) ?? id(), command, payload);
+			let result = await this.sendCommand(session, commandId, command, payload);
 			if (result.status === "not_dispatched") {
 				// A not_dispatched result is explicitly safe to retry with the same
 				// command id.  Refresh the session first so its durable incarnation
 				// matches the next command envelope.
 				session = await this.ensureStarted(await this.session(threadId));
-				result = await this.sendCommand(session, string(row.commandId) ?? id(), command, payload);
+				result = await this.sendCommand(session, commandId, command, payload);
 			}
 			if (result.status === "failed" || result.status === "outcome_unknown" || result.status === "not_dispatched") throw new Error(result.error ?? "OMP did not accept the prompt");
+			// Accepted: the draft has become history, and a newer edit keeps its own revision.
+			if (reservation.status === "reserved") await this.releaseDraftSubmission(threadId, reservation.revision);
 		} else if (type === "thread.turn.interrupt" || type === "thread.task.stop") {
 			const threadId = string(row.threadId);
 			if (!threadId) throw new Error("Thread id is required");
@@ -1853,7 +3111,110 @@ export function createCediaNativeApi(options: AdapterOptions = {}): any {
 	// The full interface is intentionally cast at this boundary: Synara's
 	// contracts have provider-specific method overloads, while unsupported Cedia
 	// domains reject at runtime instead of pretending to succeed.
-	return adapter.nativeApi();
+	// `cedia` is Cedia's own namespace: the vendor contracts describe Synara's server, and
+	// the capability snapshot is a Cedia host fact, not something to smuggle into it.
+	const api = adapter.nativeApi() as Record<string, unknown>;
+	return {
+		...api,
+		cedia: {
+			getOwners: async (): Promise<unknown> => await adapter.request("GET", "/v1/owners"),
+			attachOwner: async (sessionId: string): Promise<unknown> => await adapter.attachOwner(sessionId),
+			getCapabilities: async (): Promise<unknown> => await adapter.capabilities(),
+			getPolicy: async (): Promise<unknown> => await adapter.getPolicy(),
+			getModelState: async (sessionId: string): Promise<unknown> => await adapter.getModelState(sessionId),
+			getAccounts: async (sessionId: string): Promise<unknown> => await adapter.getAccounts(sessionId),
+			pinAccount: async (sessionId: string, credentialId: number): Promise<unknown> => await adapter.pinAccount(sessionId, credentialId),
+			setServiceTier: async (sessionId: string, family: string, tier: string | null): Promise<unknown> => await adapter.setServiceTier(sessionId, family, tier),
+			getModelRoles: async (sessionId: string): Promise<unknown> => await adapter.getModelRoles(sessionId),
+			applyModelRole: async (sessionId: string, role: string): Promise<unknown> => await adapter.applyModelRole(sessionId, role),
+			setModelRole: async (sessionId: string, role: string, modelId: string | null): Promise<unknown> => await adapter.setModelRole(sessionId, role, modelId),
+			getPlan: async (sessionId: string): Promise<unknown> => await adapter.getPlan(sessionId),
+			getProgress: async (sessionId: string): Promise<unknown> => await adapter.getProgress(sessionId),
+			getQueue: async (sessionId: string): Promise<unknown> => await adapter.getQueue(sessionId),
+			dropQueued: async (sessionId: string, body: CediaQueueDropCommand): Promise<unknown> => await adapter.dropQueued(sessionId, body),
+			getRunPause: async (sessionId: string): Promise<unknown> => await adapter.getRunPause(sessionId),
+			setRunPause: async (sessionId: string, body: CediaRunPauseCommand): Promise<unknown> => await adapter.setRunPaused(sessionId, body),
+			execBash: async (sessionId: string, body: CediaBashExecCommand): Promise<unknown> => await adapter.execBash(sessionId, body),
+			abortBash: async (sessionId: string, body?: CediaBashAbortCommand): Promise<unknown> => await adapter.abortBash(sessionId, body),
+			execPython: async (sessionId: string, body: CediaPythonExecCommand): Promise<unknown> => await adapter.execPython(sessionId, body),
+			abortPython: async (sessionId: string, body?: CediaPythonAbortCommand): Promise<unknown> => await adapter.abortPython(sessionId, body),
+			getContext: async (sessionId: string): Promise<unknown> => await adapter.getContext(sessionId),
+			getHistory: async (sessionId: string): Promise<unknown> => await adapter.getHistory(sessionId),
+			getTree: async (sessionId: string): Promise<unknown> => await adapter.getTree(sessionId),
+			getPrewalk: async (sessionId: string): Promise<unknown> => await adapter.getPrewalk(sessionId),
+			getOmfg: async (sessionId: string): Promise<unknown> => await adapter.getOmfg(sessionId),
+			draftOmfg: async (sessionId: string, body: CediaOmfgDraftCommand): Promise<unknown> => await adapter.draftOmfg(sessionId, body),
+			saveOmfg: async (sessionId: string, body: CediaOmfgSaveCommand): Promise<unknown> => await adapter.saveOmfg(sessionId, body),
+			abortOmfg: async (sessionId: string, body?: CediaOmfgAbortCommand): Promise<unknown> => await adapter.abortOmfg(sessionId, body),
+			getCleanse: async (sessionId: string): Promise<unknown> => await adapter.getCleanse(sessionId),
+			runCleanse: async (sessionId: string, body: CediaCleanseRunCommand): Promise<unknown> => await adapter.runCleanse(sessionId, body),
+			abortCleanse: async (sessionId: string, body?: CediaCleanseAbortCommand): Promise<unknown> => await adapter.abortCleanse(sessionId, body),
+			getBtw: async (sessionId: string): Promise<unknown> => await adapter.getBtw(sessionId),
+			askBtw: async (sessionId: string, body: CediaBtwAskCommand): Promise<unknown> => await adapter.askBtw(sessionId, body),
+			branchBtw: async (sessionId: string, body?: CediaBtwBranchCommand): Promise<unknown> => await adapter.branchBtw(sessionId, body),
+			getLoop: async (sessionId: string): Promise<unknown> => await adapter.getLoop(sessionId),
+			disableLoop: async (sessionId: string, body?: CediaLoopCommand): Promise<unknown> => await adapter.disableLoop(sessionId, body),
+			navigateTree: async (sessionId: string, entryId: string, summarize?: boolean): Promise<unknown> => await adapter.navigateTree(sessionId, entryId, summarize),
+			getToolCatalog: async (sessionId: string): Promise<unknown> => await adapter.getToolCatalog(sessionId),
+			getCodeMode: async (sessionId: string): Promise<unknown> => await adapter.getCodeMode(sessionId),
+			getExtensions: async (sessionId: string): Promise<unknown> => await adapter.getExtensions(sessionId),
+			setActiveTools: async (sessionId: string, toolNames: readonly string[]): Promise<unknown> => await adapter.setActiveTools(sessionId, toolNames),
+			setExtensionEnabled: async (sessionId: string, extensionId: string, enabled: boolean): Promise<unknown> => await adapter.setExtensionEnabled(sessionId, extensionId, enabled),
+			refreshSkills: async (sessionId: string): Promise<unknown> => await adapter.refreshSkills(sessionId),
+			getTranscript: async (sessionId: string): Promise<unknown> => await adapter.getTranscript(sessionId),
+			clearContext: async (sessionId: string, body?: CediaContextCommand): Promise<unknown> => await adapter.clearContext(sessionId, body),
+			freshSession: async (sessionId: string, body?: CediaContextCommand): Promise<unknown> => await adapter.freshSession(sessionId, body),
+			getUsage: async (sessionId: string): Promise<unknown> => await adapter.getUsage(sessionId),
+			getGoalDetails: async (sessionId: string): Promise<unknown> => await adapter.getGoalDetails(sessionId),
+			setGoalBudget: async (sessionId: string, tokenBudget: number): Promise<unknown> => {
+				if (typeof tokenBudget !== "number" || !Number.isSafeInteger(tokenBudget) || tokenBudget <= 0) throw new Error("A goal token budget must be a positive integer");
+				return await adapter.updateGoalBudgetFromMetadata(sessionId, tokenBudget);
+			},
+			getCredits: async (sessionId: string): Promise<unknown> => await adapter.getCredits(sessionId),
+			redeemCredit: async (sessionId: string, target: CediaCreditTarget): Promise<unknown> => await adapter.redeemCredit(sessionId, target),
+			dropContextImages: async (sessionId: string, body: CediaContextCommand): Promise<unknown> => await adapter.dropContextImages(sessionId, body),
+			shakeContext: async (sessionId: string, body: CediaContextShakeCommand): Promise<unknown> => await adapter.shakeContext(sessionId, body),
+			abortCompaction: async (sessionId: string, body: CediaContextCommand): Promise<unknown> => await adapter.abortCompaction(sessionId, body),
+			getMemory: async (sessionId: string): Promise<unknown> => await adapter.getMemory(sessionId),
+			applyMemoryBackend: async (sessionId: string, body: CediaMemoryCommand): Promise<unknown> => await adapter.applyMemoryBackend(sessionId, body),
+			getAgents: async (sessionId: string): Promise<unknown> => await adapter.getAgents(sessionId),
+			getAgentTranscript: async (sessionId: string, agentId: string, fromByte?: number): Promise<unknown> => await adapter.getAgentTranscript(sessionId, agentId, fromByte),
+			killAgent: async (sessionId: string, agentId: string): Promise<unknown> => await adapter.killAgent(sessionId, agentId),
+			reviveAgent: async (sessionId: string, agentId: string): Promise<unknown> => await adapter.reviveAgent(sessionId, agentId),
+			getAgentConfigs: async (sessionId: string): Promise<unknown> => await adapter.getAgentConfigs(sessionId),
+			configureAgent: async (sessionId: string, body: CediaAgentConfigInput): Promise<unknown> => await adapter.configureAgent(sessionId, body),
+			setPlan: async (sessionId: string, body: CediaPlanCommand): Promise<unknown> => await adapter.setPlan(sessionId, body),
+			getAdvisor: async (sessionId: string): Promise<unknown> => await adapter.getAdvisor(sessionId),
+			setAdvisor: async (sessionId: string, body: CediaAdvisorCommand): Promise<unknown> => await adapter.setAdvisor(sessionId, body),
+			getAdvisorHistory: async (sessionId: string): Promise<unknown> => await adapter.getAdvisorHistory(sessionId),
+			getAdvisorConfig: async (sessionId: string, scope: "project" | "user"): Promise<unknown> => await adapter.getAdvisorConfig(sessionId, scope),
+			setAdvisorConfig: async (sessionId: string, body: CediaAdvisorConfigCommand): Promise<unknown> => await adapter.setAdvisorConfig(sessionId, body),
+			getOmpSettingsKeys: async (): Promise<unknown> => await adapter.getOmpSettingsKeys(),
+			getOmpSettingValue: async (path: string): Promise<unknown> => await adapter.getOmpSettingValue(path),
+			setOmpSetting: async (input: { path: string; value: unknown; expectedRevision?: string }): Promise<unknown> => await adapter.setOmpSetting(input),
+			getRemoteGatewayState: async (): Promise<unknown> => await adapter.remoteGatewayState(),
+			issueRemoteEnrollment: async (name: string): Promise<unknown> => await adapter.issueRemoteEnrollment(name),
+			listDevices: async (): Promise<unknown> => await adapter.listDevices(),
+			revokeDevice: async (deviceId: string): Promise<unknown> => await adapter.revokeDevice(deviceId),
+		},
+	};
+}
+
+/**
+ * Rebuild the typed host error Electron's IPC flattened.
+ *
+ * The transport keeps only a message, so the main process tags the code into it and this
+ * restores it as a property. An error that never carried a code is returned untouched, and the
+ * host's own words are never rewritten beyond removing the tag and Electron's prefixes.
+ */
+export function normalizeCediaHostError(error: unknown): Error {
+	const original = error instanceof Error ? error : new Error(String(error));
+	const { code, message } = readCediaHostError(original.message);
+	if (code === undefined) return original;
+	const normalized = new Error(message);
+	normalized.name = "CediaHostError";
+	normalized.stack = original.stack;
+	return Object.assign(normalized, { code });
 }
 
 export interface CediaDesktopBridgeOptions { readonly bridge: AgentWindowBridge }

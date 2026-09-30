@@ -7,6 +7,7 @@ import { cn } from "./utils";
 import { CentralIcon, type CentralIconVariant } from "./central-icons";
 import {
   IconAlertCircle,
+  IconAlertOctagon,
   IconAlertTriangle,
   IconArchive,
   IconArrowBackUp,
@@ -18,6 +19,7 @@ import {
   IconArrowUpRight,
   IconBolt,
   IconBrain,
+  IconBulb,
   IconBug,
   IconCamera,
   IconCheck,
@@ -136,6 +138,7 @@ export const SortIcon: LucideIcon = centralIconWrapper("arrow-top-bottom");
 export const AGENT_ROBOT_ICON_NAME = "robot";
 export const BotIcon: LucideIcon = centralIconWrapper(AGENT_ROBOT_ICON_NAME);
 export const BookIcon: LucideIcon = centralIconWrapper("book-simple");
+export const BookOpenIcon: LucideIcon = centralIconWrapper("newspaper-2");
 export const BugIcon = adaptIcon(IconBug);
 export const CameraIcon = adaptIcon(IconCamera);
 export const CheckIcon = adaptIcon(IconCheck);
@@ -308,6 +311,10 @@ export const TerminalSquareIcon = centralIconWrapper("console");
 export const TextWrapIcon = adaptIcon(IconTextWrap);
 export const Trash2 = adaptIcon(IconTrash);
 export const TriangleAlertIcon = adaptIcon(IconAlertTriangle);
+// GitHub alert glyphs for chat markdown (ported from upstream #1273;
+// Tabler names differ from Lucide, hence the explicit mapping).
+export const LightbulbIcon = adaptIcon(IconBulb);
+export const OctagonAlertIcon = adaptIcon(IconAlertOctagon);
 export const Undo2Icon = adaptIcon(IconArrowBackUp);
 // Single source for every "reset / restore default / revert" affordance (settings
 // row resets, Restore defaults, effort-slider reset, space reset, file revert):

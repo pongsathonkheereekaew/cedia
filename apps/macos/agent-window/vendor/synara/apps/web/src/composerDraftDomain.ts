@@ -49,7 +49,7 @@ import {
 } from "./types";
 
 export const COMPOSER_DRAFT_STORAGE_KEY = "synara:composer-drafts:v1";
-export const COMPOSER_DRAFT_STORAGE_VERSION = 6;
+export const COMPOSER_DRAFT_STORAGE_VERSION = 7;
 export type DraftThreadEnvMode = "local" | "worktree";
 const TERMINAL_DRAFT_THREAD_MAPPING_SUFFIX = "::terminal";
 
@@ -170,6 +170,8 @@ export type QueuedComposerTurn = QueuedComposerChatTurn | QueuedComposerPlanFoll
 export interface ComposerThreadDraftState {
   pendingUserInputDrafts?: Record<string, PendingUserInputRecoveryDraft>;
   prompt: string;
+  /** OMP command intent selected from the composer menu; absent for literal slash text. */
+  selectedSlashCommand: string | null;
   // Non-null only while composer prompt-history browsing is active: the user's
   // real draft, kept safe while `prompt` temporarily holds a recalled history
   // entry. Restored (and cleared) when a browse is interrupted by a thread
@@ -204,6 +206,7 @@ export interface DraftThreadState {
   branch: string | null;
   worktreePath: string | null;
   workingDirectory?: string | null;
+  dirtyFiles?: string[] | null | undefined;
   lastKnownPr?: OrchestrationThreadPullRequest | null;
   envMode: DraftThreadEnvMode;
   // Goal staged before the thread exists server-side; persisted via
@@ -217,6 +220,7 @@ interface DraftThreadMutationOptions {
   branch?: string | null;
   worktreePath?: string | null;
   workingDirectory?: string | null;
+  dirtyFiles?: string[] | null | undefined;
   lastKnownPr?: OrchestrationThreadPullRequest | null;
   createdAt?: string;
   // Explicitly `| undefined`: callers forward a `ThreadWorkspacePatch`, whose `envMode` is
@@ -300,6 +304,7 @@ export interface ComposerDraftStoreState {
   clearDraftThread: (threadId: ThreadId) => void;
   setStickyModelSelection: (modelSelection: ModelSelection | null | undefined) => void;
   setPrompt: (threadId: ThreadId, prompt: string) => void;
+  setSelectedSlashCommand: (threadId: ThreadId, name: string | null) => void;
   setPromptHistorySavedDraft: (
     threadId: ThreadId,
     savedDraft: ComposerPromptHistorySavedDraft | null,
@@ -475,6 +480,8 @@ export function buildDraftThreadState(input: {
       options?.workingDirectory === undefined
         ? (existingThread?.workingDirectory ?? null)
         : (options.workingDirectory ?? null),
+    dirtyFiles:
+      options?.dirtyFiles === undefined ? (existingThread?.dirtyFiles ?? null) : (options.dirtyFiles ?? null),
     lastKnownPr:
       options?.lastKnownPr === undefined
         ? (existingThread?.lastKnownPr ?? null)
@@ -485,6 +492,13 @@ export function buildDraftThreadState(input: {
     ...(nextIsTemporary ? { isTemporary: true } : {}),
     ...(nextPromotedTo ? { promotedTo: nextPromotedTo } : {}),
   };
+}
+
+/** Content equality for the worktree dirty-file selection (builder allocates). */
+function sameStringList(left: ReadonlyArray<string> | null, right: ReadonlyArray<string> | null): boolean {
+  if (left === right) return true;
+  if (left === null || right === null || left.length !== right.length) return false;
+  return left.every((entry, index) => entry === right[index]);
 }
 
 export function draftThreadStatesEqual(
@@ -504,6 +518,7 @@ export function draftThreadStatesEqual(
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath &&
     (left.workingDirectory ?? null) === (right.workingDirectory ?? null) &&
+    sameStringList(left.dirtyFiles ?? null, right.dirtyFiles ?? null) &&
     Equal.equals(left.lastKnownPr ?? null, right.lastKnownPr ?? null) &&
     left.envMode === right.envMode &&
     (left.goal ?? "") === (right.goal ?? "") &&
@@ -532,6 +547,7 @@ export function removeProjectDraftMappingsForThread(
 export function createEmptyThreadDraft(): ComposerThreadDraftState {
   return {
     prompt: "",
+    selectedSlashCommand: null,
     promptHistorySavedDraft: null,
     images: [],
     files: [],
@@ -766,6 +782,7 @@ export function buildTransferredComposerDraft(input: {
   return {
     ...base,
     prompt: sourceDraft.prompt,
+    selectedSlashCommand: sourceDraft.selectedSlashCommand,
     promptHistorySavedDraft: clonePromptHistorySavedDraft(
       sourceDraft.promptHistorySavedDraft,
       targetThreadId,
@@ -836,6 +853,7 @@ export function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
   return (
     Object.keys(draft.pendingUserInputDrafts ?? {}).length === 0 &&
     draft.prompt.length === 0 &&
+    draft.selectedSlashCommand === null &&
     draft.promptHistorySavedDraft === null &&
     draft.images.length === 0 &&
     draft.files.length === 0 &&
@@ -890,7 +908,8 @@ const EMPTY_MODEL_SELECTION_BY_PROVIDER: Partial<Record<ProviderKind, ModelSelec
   Object.freeze({});
 
 const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
-  prompt: "",
+    prompt: "",
+    selectedSlashCommand: null,
   promptHistorySavedDraft: null,
   images: EMPTY_IMAGES,
   files: EMPTY_FILES,

@@ -175,14 +175,7 @@ function ShellRightDockToggle({
               variant="default"
               size="xs"
             >
-              <SidebarToggleIcon
-                side="right"
-                open={open}
-                className={cn(
-                  "transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transform-none motion-reduce:transition-none",
-                  open ? "-translate-x-0.5" : "translate-x-0",
-                )}
-              />
+              <SidebarToggleIcon side="right" open={open} />
             </Toggle>
           }
         />

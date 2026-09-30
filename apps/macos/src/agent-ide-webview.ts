@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { CediaHostClient } from "./api.ts";
+import { HostHttpError, type CediaHostClient } from "./api.ts";
 import { createAgentWindowHandler } from "./agent-window-main.ts";
 import { readIdeHandoff, resolveAgentUiThread, validAgentThreadId } from "./agent-ui-state.ts";
 import { createAgentFilesService } from "./agent-window-files.ts";
@@ -19,6 +19,9 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
   private revision: string | undefined;
   private sessionId: string | undefined;
   private syncedSessionId: string | undefined;
+  private draftSessionId: string | undefined;
+  private draftRevision = 0;
+  private draftSync: Promise<void> | undefined;
   private disposed = false;
   private ready = false;
   private pendingActions: unknown[] = [];
@@ -117,8 +120,9 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
           if (this.syncedSessionId !== session.id) {
             await this.onSession(session.id);
             this.syncedSessionId = session.id;
-            this.sessionId = session.id;
           }
+          this.selectDraftSession(session.id);
+          this.sessionId = session.id;
           result = null;
         } else if (input?.kind === "openAgents") {
           const cwd = this.cwd();
@@ -144,10 +148,14 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
     try {
       let html = await readFile(join(this.context.extensionPath, "agent-ui", "ide.html"), "utf8");
       html = html.replace(/(?:src|href)="(\.\/[^\"]+)"/g, (match, relative: string) => match.replace(relative, escapeAttribute(view.webview.asWebviewUri(vscode.Uri.joinPath(assetRoot, relative.slice(2))).toString())));
+      const publicAssetBase = `${view.webview.asWebviewUri(assetRoot).toString().replace(/\/+$/, "")}/`;
       const csp = `default-src 'none'; script-src ${view.webview.cspSource}; style-src ${view.webview.cspSource} 'unsafe-inline'; img-src ${view.webview.cspSource} data: blob: https:; font-src ${view.webview.cspSource} data:; connect-src ${view.webview.cspSource}; worker-src blob:;`;
-      html = html.replace("<head>", `<head><meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">`);
+      html = html.replace("<head>", `<head><meta name="cedia-public-asset-base" content="${escapeAttribute(publicAssetBase)}"><meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">`);
       view.webview.html = html;
-      this.timer ??= setInterval(() => { void this.readContext(true).catch(error => console.error("Cedia IDE handoff failed", error)); }, 750);
+      this.timer ??= setInterval(() => {
+        void this.readContext(true).catch(error => console.error("Cedia IDE handoff failed", error));
+        void this.syncDraft().catch(error => console.error("Cedia IDE draft sync failed", error));
+      }, 750);
     } catch (error) {
       view.webview.html = `<html><body><p>Could not load Cedia Agent UI. Rebuild Cedia to install its assets.</p></body></html>`;
       console.error(error);
@@ -165,6 +173,7 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
       await this.onSession(session.id);
       this.syncedSessionId = session.id;
     }
+    this.selectDraftSession(session.id);
     this.revision = handoff.revision;
     this.sessionId = session.id;
     if (notify && this.view) {
@@ -172,5 +181,65 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
       await this.view.webview.postMessage({ type: "cedia-agent-context", cwd, sessionId: session.id });
     }
   }
+
+  private selectDraftSession(sessionId: string): void {
+    if (this.draftSessionId === sessionId) return;
+    this.draftSessionId = sessionId;
+    this.draftRevision = 0;
+  }
+
+  /**
+   * The Electron main process broadcasts draft events to BrowserWindows, but the
+   * embedded IDE composer is a separate VS Code webview. Poll the host-owned
+   * revision here and forward changes through that webview's existing event
+   * bridge so both Mac surfaces converge without starting another owner.
+   */
+  private async syncDraft(): Promise<void> {
+    const threadId = this.sessionId;
+    const view = this.view;
+    if (!threadId || !view || !this.ready || this.disposed || this.draftSync) return;
+
+    const current = (): boolean => !this.disposed && this.ready && this.view === view && this.sessionId === threadId;
+    const pending = (async () => {
+      try {
+        const snapshot = await (await this.ensureClient()).requestApplication<{ revision?: unknown; content?: unknown }>(
+          "GET",
+          `/drafts/${encodeURIComponent(threadId)}`,
+        );
+        if (!current()) return;
+        if (typeof snapshot?.revision !== "number" || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1) return;
+        this.selectDraftSession(threadId);
+        if (snapshot.revision <= this.draftRevision) return;
+        this.draftRevision = snapshot.revision;
+        await view.webview.postMessage({
+          type: "cedia-agent-event",
+          channel: "vscode:cedia-draft-updated",
+          payload: {
+            status: "written",
+            threadId,
+            revision: snapshot.revision,
+            payload: snapshot.content ?? null,
+          },
+        });
+      } catch (error) {
+        if (!(error instanceof HostHttpError) || error.status !== 404 || !current()) return;
+        this.selectDraftSession(threadId);
+        if (this.draftRevision < 1) return;
+        this.draftRevision = 0;
+        await view.webview.postMessage({
+          type: "cedia-agent-event",
+          channel: "vscode:cedia-draft-updated",
+          payload: { status: "delivered", threadId },
+        });
+      }
+    })();
+    this.draftSync = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.draftSync === pending) this.draftSync = undefined;
+    }
+  }
+
   dispose(): void { this.disposed = true; if (this.timer) clearInterval(this.timer); this.files.dispose(); this.git.dispose(); this.view = undefined; }
 }

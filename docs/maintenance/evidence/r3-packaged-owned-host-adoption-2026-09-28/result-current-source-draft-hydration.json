@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "runtimeVersion": "omp/18.1.18",
+  "appGenerations": [
+    "packaged-owner-first-ef80d32c-c8e8-4c78-a777-51525849848d",
+    "packaged-owner-second-d71d05a8-4305-4865-83bb-fad499643598"
+  ],
+  "appProcessIds": [
+    8966,
+    9146
+  ],
+  "hostPid": 8996,
+  "hostGeneration": "99d16304-908d-47fa-a562-a1bb48d9adec",
+  "hostAppGeneration": "packaged-owner-first-ef80d32c-c8e8-4c78-a777-51525849848d",
+  "bundledHost": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-current-source-proof.47usIL/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/host/cli.js",
+  "projectId": "ed6da8ac-86b1-47e1-a5bc-6042a70520a5",
+  "taskId": "c57fd470-674a-43d6-b05d-38cc4da2908b",
+  "incarnation": "f012ed31-e55a-467f-a00c-2321f3ae9f96",
+  "ompOwnerPid": 9046,
+  "ownerSummary": "available",
+  "draftRevision": 1,
+  "draftText": "unsent restart draft 0bbcbc94-3427-4b13-89aa-f89a2542ab7e",
+  "localDraftCacheRemovedBeforeRelaunch": true,
+  "providerRequests": 0,
+  "loginItemInterceptions": 2,
+  "sourceHostSha256": "208d92846782bcac5b6992d9d6b41c3e26b99d3f007054e61699020266f5a24b",
+  "sourceOmpSha256": "29847d53cb4c1249a12e913b15678f13592e5fd33f6b911b84edda64f7bfc313",
+  "sourceAgentWindowMainSha256": "4f645de219ac2e8b1f4e41517172e4dc7a39ca3734c58ca579bafcfb70400e61",
+  "sourceExtensionJsSha256": "a8eef2db5982f2153d984799a2aac85ce1777d362eb659bb2cde74a6719cf88e"
+}

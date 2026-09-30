@@ -47,12 +47,24 @@ async function boot(): Promise<void> {
 	window.desktopBridge = createCediaDesktopBridge({ bridge: preload.ipcRenderer });
 	// Load the shared app-side persistence only after the scoped bridge and native
 	// API globals exist. Several Synara modules inspect those globals at module load.
-	const { installSharedUiDraftBridge } = await import("../vendor/synara/apps/web/src/sharedUiDraftBridge");
-	const sharedDraftBridge = installSharedUiDraftBridge(preload.ipcRenderer);
+	const [{ installSharedUiDraftBridge }, { appHistory }] = await Promise.all([
+		import("../vendor/synara/apps/web/src/sharedUiDraftBridge"),
+		import("../vendor/synara/apps/web/src/appNavigation"),
+	]);
+	const sharedDraftBridge = installSharedUiDraftBridge(preload.ipcRenderer, {
+		subscribeToRouteChanges: listener => appHistory.subscribe(listener),
+	});
 	window.__CEDIA_DRAFT_FLUSH__ = sharedDraftBridge.flush;
+	// §6.4: the host owns the CEDIA app-preference subset. The window projects it into its own
+	// settings store and sends its own changes back with the revision it read, so two windows and a
+	// restart agree on the same record instead of each keeping a private copy.
+	const { installHostPreferenceSync } = await import("../vendor/synara/apps/web/src/hostPreferences");
+	const hostPreferences = installHostPreferenceSync(preload.ipcRenderer);
+	void hostPreferences.hydrate();
 	const openInEditor = nativeApi.shell.openInEditor;
 	nativeApi.shell.openInEditor = async (target: string, editor: string) => {
 		await sharedDraftBridge.flush();
+		await hostPreferences.flush();
 		await openInEditor(target, editor);
 	};
 
@@ -130,7 +142,9 @@ async function boot(): Promise<void> {
 		const request = args[0] as { replyChannel?: unknown } | undefined;
 		(nativeApi as { dispose?: () => void }).dispose?.();
 		void sharedDraftBridge.flush();
+		void hostPreferences.flush();
 		sharedDraftBridge.dispose();
+		hostPreferences.dispose();
 		delete window.__CEDIA_DRAFT_FLUSH__;
 		window.removeEventListener("hashchange", onHashChange);
 		disposeMenuZoom();

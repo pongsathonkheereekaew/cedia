@@ -1,9 +1,13 @@
 {
-  "revision": "00085d4e7dfdcfbf302c122fa2682b410a0f43d1",
+  "revision": "fc671eba383f2a7208500836673b485c0dc7073d",
   "patches": [
     {
       "file": "0001-cedia-rpc-bridges.patch",
       "sha256": "c7286164c78b543501e23519769cd275764e463e8645157093846cdedc508b6e"
+    },
+    {
+      "file": "0002-cedia-rpc-bridges-18.4.3.patch",
+      "sha256": "a90b75f9fbcde9979e68af0ddd9ceca740f3b3720dd93f732f286fdc366782d5"
     }
   ]
 }

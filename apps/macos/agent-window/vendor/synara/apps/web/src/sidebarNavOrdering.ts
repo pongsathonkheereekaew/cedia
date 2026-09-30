@@ -4,8 +4,11 @@
 // Layer: Web settings utility
 // Exports: nav item ids, default order, and normalization helpers.
 // Cedia scope cut (§10 item 60): Kanban and Pull requests had no OMP/host source, so their
-// nav ids leave the type — persisted orders normalize them away. Automations stays visible
-// as an honest-unavailable row until a host automation backend exists (§4).
+// nav ids leave the type — persisted orders normalize them away. Automations is gated on the
+// host capability snapshot (§3.B): the row is absent while the host reports it as
+// integration-missing, and keeps its honest disabled explanation when no snapshot has loaded.
+
+import { capabilityState, isCapabilityVisible, type HostCapability } from "./capabilityGate";
 
 export const SIDEBAR_NAV_ITEM_IDS = ["newThread", "automations"] as const;
 
@@ -49,4 +52,23 @@ export function normalizeSidebarNavOrder(order: ReadonlyArray<string>): SidebarN
     }
   }
   return result;
+}
+
+/** The host capability that backs each nav row. A row without one is core Cedia UI. */
+export const SIDEBAR_NAV_CAPABILITY_IDS: Readonly<Partial<Record<SidebarNavItemId, string>>> = {
+  automations: "app.automations",
+};
+
+/**
+ * Whether a nav row belongs in the sidebar for the host's current capability snapshot.
+ *
+ * `undefined` means no snapshot has loaded (or the host does not advertise the id), and the
+ * row keeps its existing behaviour: an honest disabled row is better than a row that
+ * disappears because the host was briefly unreachable.
+ */
+export function sidebarNavItemVisible(
+  id: SidebarNavItemId,
+  capabilities: readonly HostCapability[] | undefined,
+): boolean {
+  return isCapabilityVisible(capabilityState(capabilities, SIDEBAR_NAV_CAPABILITY_IDS[id]));
 }

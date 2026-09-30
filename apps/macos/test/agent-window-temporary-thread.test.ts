@@ -106,8 +106,12 @@ describe("a temporary draft put away by the window", () => {
 		try {
 			const window = await harness(directory, stateDir);
 			const project = (await window.gateway.request("GET", "projects") as { id: string }[])[0]!;
+			// §3.C admits one task per folder, so the second task gets its own project folder.
+			const otherPath = join(directory, "project-two");
+			await mkdir(otherPath, { recursive: true });
+			const other = await server.host.store.createProject({ path: otherPath, name: "Second folder" });
 			await window.api.orchestration.dispatchCommand({ type: "thread.create", commandId: "create-2", threadId: "draft-2", projectId: project.id, title: "New task" });
-			await window.api.orchestration.dispatchCommand({ type: "thread.create", commandId: "create-3", threadId: "explicit-2", projectId: project.id, title: "Delete me" });
+			await window.api.orchestration.dispatchCommand({ type: "thread.create", commandId: "create-3", threadId: "explicit-2", projectId: other.id, title: "Delete me" });
 			const draft = { id: "draft-2" };
 			const explicit = { id: "explicit-2" };
 

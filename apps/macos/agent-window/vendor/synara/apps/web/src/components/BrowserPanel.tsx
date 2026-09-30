@@ -82,6 +82,7 @@ import {
   resolveBrowserRuntimePresentation,
   type BrowserAddressSuggestion,
 } from "./BrowserPanel.logic";
+import { BrowserAgentAttachBar } from "./BrowserAgentAttachBar";
 import { BrowserTabStrip } from "./BrowserTabStrip";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import {
@@ -2019,6 +2020,9 @@ export function BrowserPanel({
               onCloseTab={onCloseTab}
               onCreateTab={onCreateTab}
             />
+          ) : null}
+          {!isFloatingMode ? (
+            <BrowserAgentAttachBar threadId={threadId} activeTabId={activeTabId} />
           ) : null}
           <div className="relative min-h-0 flex-1 bg-transparent">
             {!isLiveRuntime ? (

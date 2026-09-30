@@ -200,6 +200,7 @@ export interface ThreadWorkspaceState {
   envMode?: ThreadEnvironmentMode | undefined;
   branch: string | null;
   worktreePath: string | null;
+  dirtyFiles?: string[] | null | undefined;
   workingDirectory?: string | null;
   associatedWorktreePath?: string | null;
   associatedWorktreeBranch?: string | null;
@@ -211,6 +212,7 @@ export interface ThreadWorkspacePatch {
   envMode?: ThreadEnvironmentMode | undefined;
   branch?: string | null;
   worktreePath?: string | null;
+  dirtyFiles?: string[] | null | undefined;
   workingDirectory?: string | null;
   associatedWorktreePath?: string | null;
   associatedWorktreeBranch?: string | null;
@@ -370,6 +372,73 @@ export interface ComposerThreadMentionSource {
   latestUserMessageAt: string | null;
 }
 
+/**
+ * A model/effort change Cedia's host is holding for this task's next turn (CEDIA-PLAN §2.4).
+ *
+ * The record travels with the session so a surface can show "awaiting OMP" rather than drawing
+ * a request that OMP has not committed as the model in effect.
+ */
+export interface ThreadSessionPendingModel {
+  readonly revision: number;
+  readonly state: "awaiting" | "in-effect" | "refused";
+  readonly requested: {
+    readonly provider?: string;
+    readonly modelId?: string;
+    readonly thinkingLevel?: string | null;
+  };
+  readonly acceptedAt: string;
+  readonly applied?: {
+    readonly model?: string;
+    readonly thinkingLevel?: string;
+    readonly at: string;
+    readonly via?: "turn-boundary" | "immediate";
+  };
+  readonly error?: string;
+}
+
+/** What an archive kept, and how Continue put a task back (CEDIA-PLAN §2.6). */
+export interface ThreadSessionRestoration {
+  readonly at: string;
+  readonly worktree: string;
+  readonly branch: string;
+  readonly reattached: boolean;
+  readonly reason: string;
+}
+
+export interface ThreadSessionArchive {
+  readonly state: "retained" | "prepared" | "removed" | "restored";
+  readonly ref?: string;
+  readonly commit?: string;
+  readonly branch?: string;
+  readonly worktree?: string;
+  readonly dirty: boolean;
+  readonly ignored: boolean;
+  readonly recordedAt: string;
+  readonly reason: string;
+  readonly restored?: ThreadSessionRestoration;
+}
+
+/**
+ * One entry of Cedia's bounded turn projection (plan §2.4/O01), as the window sees it.
+ *
+ * The host records the turns it submitted; this carries only what a surface may draw.
+ */
+export interface ThreadSessionTurn {
+  readonly turnIntentId: string;
+  readonly state:
+    | "prepared"
+    | "queued"
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "needs_continue"
+    | "outcome_unknown";
+  readonly queuePosition?: number;
+  readonly model?: string;
+  readonly reason?: string;
+}
+
 export interface ThreadSession {
   provider: ProviderKind;
   status: SessionPhase | "error" | "closed";
@@ -378,4 +447,10 @@ export interface ThreadSession {
   updatedAt: string;
   lastError?: string;
   orchestrationStatus: OrchestrationSessionStatus;
+  /** The pending model/effort change for this task, when the host holds one. */
+  pendingModel?: ThreadSessionPendingModel | null;
+  /** What the archive kept for this task, when the host recorded a receipt (§2.6). */
+  archive?: ThreadSessionArchive | null;
+  /** The turns the host recorded for this task, newest first, when it sent them (§2.4/O01). */
+  turns?: readonly ThreadSessionTurn[];
 }
