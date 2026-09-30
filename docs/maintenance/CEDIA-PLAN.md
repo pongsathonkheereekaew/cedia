@@ -6040,6 +6040,9 @@ deletions so dead code is not carried across.
     requires independent-renderer edits, Send arbitration, restart and migration acceptance in
     its combined scenario. Receipts: [packaged CUA Send/edit race](evidence/r2-send-race-packaged-cua-2026-09-28/findings.md)
     and [packaged draft hydration](evidence/r3-packaged-owned-host-adoption-2026-09-28/findings.md).
+    A 2026-09-30 rerun re-proves the same race with the CUA half driven by the agent
+    itself through computer-use (no human operator) on the current build; two earlier
+    same-day attempts are retained as failures with causes in the [new receipt](evidence/r2-send-race-packaged-cua-2026-09-30/findings.md).
     The earlier [draft-staging diagnostic](evidence/r2-packaged-draft-staged-diagnostic-2026-09-27/findings.md)
     remains an intermediate adapter-only result. Packaged archive/resume and the Archived-row
     Restore click are already evidenced by the receipts below; they need not be repeated.
