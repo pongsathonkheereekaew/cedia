@@ -4,23 +4,29 @@
  * OMP owns both user queues. This smoke reads that state through `cedia_control`, then proves the
  * host routes project the same queue, settle the exact queued turn intent when it is dropped,
  * return an explicit empty `dropped` on a no-op drop, validate an unknown mode before claiming a
- * durable command, and remain owner-only. The model fixture never answers, so no provider request
- * can complete during this run.
+ * durable command, and remain owner-only. Drop scenarios hold the loopback model
+ * request open; --execute explicitly releases deterministic local SSE replies.
  *
- * Run: bun scripts/omp-queue-smoke.ts [--browser | --composer]
+ * Run: bun scripts/omp-queue-smoke.ts [--browser | --composer | --execute]
  * --browser uses the existing Mac package assets in headless Chrome to click Drop last;
  * queue setup remains host-driven, not composer-submit acceptance.
  * --composer submits both prompts from the real composer before clicking Drop last.
+ * --execute submits A/B/C from the composer, then releases loopback replies one
+ * at a time and checks queue order, durable intent completion and transcript.
  * CEDIA_QUEUE_UI_ASSETS selects a freshly built frontend instead of package assets.
+ * CEDIA_QUEUE_NATIVE_APP selects an independent Cedia.app copy under the OS temp
+ * directory for native Electron --composer proof (no asset override). Its Login
+ * Item calls are shimmed and it is re-signed; never point it at an installed app.
  */
-import { createServer, type Server } from "node:http";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { createServer, type Server, type ServerResponse } from "node:http";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { OMP_BASELINE_VERSION, OmpRpcClient, isSupportedOmpVersion } from "../packages/omp-adapter/src/index.ts";
 import { startHostServer } from "../apps/host/src/server.ts";
-import { dropQueueThroughBrowser } from "./lib/queue-browser-proof.ts";
+import { decodeQueueImagePair, dropQueueThroughBrowser, queueImageDataUrl, queueImageParts, queuePixelsMatch, summarizeQueueRequest, type QueueImageFixture } from "./lib/queue-browser-proof.ts";
 
 function check(value: unknown, message: string): asserts value {
 	if (!value) throw new Error(`OMP queue smoke failed: ${message}`);
@@ -42,6 +48,9 @@ async function exists(path: string): Promise<boolean> {
 	}
 }
 
+const executeMode = process.argv.includes("--execute");
+const attachmentsMode = process.argv.includes("--attachments");
+check(!attachmentsMode || executeMode, "--attachments requires --execute");
 const requested = process.env.CEDIA_OMP_PATH ?? process.env.CEDIA_OMP_BINARY ?? "dist/omp/omp";
 const executable = requested.includes("/")
 	? resolve(requested)
@@ -52,13 +61,43 @@ const executable = requested.includes("/")
 check(await exists(executable), `OMP runtime is present at ${executable}`);
 const version = execFileSync(executable, ["--version"], { encoding: "utf8", timeout: 20_000 }).trim();
 check(isSupportedOmpVersion(version), `the runtime is the pinned ${OMP_BASELINE_VERSION} or later (${version})`);
+const runtime = { executable, version, executableSha256: createHash("sha256").update(await readFile(executable)).digest("hex") };
 
 const cwd = await mkdtemp(join(tmpdir(), "cedia-queue-"));
+const executionTexts = ["Queue A: first local task", "Queue B: second local task", "Queue C: third local task"];
+const replies = ["Local task A completed.", "Local task B completed.", "Local task C completed."];
+const attachmentFixtures: { first: QueueImageFixture; second: QueueImageFixture } = {
+	first: { name: "queue-a-red.png", mimeType: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" },
+	second: { name: "queue-b-white.png", mimeType: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==" },
+};
+const requests: { body: Record<string, unknown>; response: ServerResponse; released: boolean }[] = [];
+const queueAttachmentFailures: string[] = [];
+let fixtureError: unknown;
 let modelHits = 0;
-const held: Server = createServer(() => {
+async function writeRequestEvidence(output: string): Promise<void> {
+	await writeFile(join(output, "request-summaries.json"), JSON.stringify({ modelHits, fixtureError: fixtureError ? String(fixtureError) : undefined, queueAttachmentFailures, requests: requests.map(row => summarizeQueueRequest(row.body)) }, null, 2));
+}
+const held: Server = createServer(async (request, response) => {
 	modelHits += 1;
-	/* never responds: no provider call in this run may complete */
+	if (!executeMode) return; // Drop proof deliberately never answers.
+	try {
+		check(request.method === "POST" && request.url === "/v1/chat/completions", "execution fixture receives only chat completions");
+		let body = "";
+		for await (const chunk of request) {
+			body += chunk.toString();
+			check(Buffer.byteLength(body) < 2_000_000, "fixture request is bounded");
+		}
+		const parsed = record(JSON.parse(body));
+		check(parsed.model === "cedia-queue-fixture-model" && parsed.stream === true, "execution fixture receives the selected streaming model");
+		check(requests.length < 3 && requests.every(row => row.released), "requests are sequential with no retry or duplicate");
+		requests.push({ body: parsed, response, released: false });
+	} catch (error) { fixtureError = error; response.writeHead(500).end("Fixture rejected request"); }
 });
+async function until(predicate: () => boolean, description: string) {
+	const deadline = Date.now() + 20_000;
+	while (!predicate() && !fixtureError && Date.now() < deadline) await new Promise(resolveWait => setTimeout(resolveWait, 25));
+	check(!fixtureError && predicate(), `${description}${fixtureError ? `: ${fixtureError}` : ""}`);
+}
 await new Promise<void>(ready => held.listen(0, "127.0.0.1", () => ready()));
 held.unref();
 const address = held.address();
@@ -75,7 +114,7 @@ const modelsYaml = `providers:
         name: Cedia queue smoke fixture
         api: openai-completions
         reasoning: false
-        input: [text]
+        input: ${attachmentsMode ? "[text, image]" : "[text]"}
         cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0}
         contextWindow: 128000
         maxTokens: 4096
@@ -117,12 +156,17 @@ try {
 const hostStateDir = await mkdtemp(join(tmpdir(), "cedia-queue-host-state-"));
 const hostProfileDir = await mkdtemp(join(tmpdir(), "cedia-queue-host-profile-"));
 const hostWorkDir = await mkdtemp(join(tmpdir(), "cedia-queue-host-work-"));
+const boundaries: { sequence: number; frame: Record<string, unknown> }[] = [];
 await writeFile(join(hostProfileDir, "models.yml"), modelsYaml, { mode: 0o600 });
 const started = await startHostServer({
 	stateDir: hostStateDir,
 	port: 0,
 	ompExecutable: executable,
 	virtualUi: true,
+	onEvent(event) {
+		const frame = record(event.frame);
+		if (frame.type === "cedia_turn_boundary") boundaries.push({ sequence: event.sequence, frame });
+	},
 	ompEnv: { HOME: hostProfileDir, PI_CODING_AGENT_DIR: hostProfileDir, PI_NO_PTY: "1", PI_NOTIFICATIONS: "off" },
 });
 try {
@@ -176,7 +220,12 @@ try {
 		payload: { provider: "cedia-queue-fixture", modelId: "cedia-queue-fixture-model" },
 	});
 	check(["completed", "acknowledged"].includes(model.status), "the held-turn fixture model is accepted by OMP");
-	const composerMode = process.argv.includes("--composer");
+	const composerMode = process.argv.includes("--composer") || executeMode;
+	const executionCommandIds: string[] = [];
+	if (executeMode) {
+		const mode = await started.host.command(session.id, "owner", { commandId: "queue-execution-mode", incarnation, command: "set_follow_up_mode", payload: { mode: "one-at-a-time" } });
+		check(["completed", "acknowledged"].includes(mode.status), "OMP accepts explicit one-at-a-time follow-up mode");
+	}
 	let runningCommandId = "queue-smoke-running-turn";
 	let queuedCommandId = "queue-smoke-follow-up";
 	if (!composerMode) {
@@ -212,10 +261,62 @@ try {
 
 	const browserProof = (process.argv.includes("--browser") || composerMode) ? await dropQueueThroughBrowser({
 		root: resolve(import.meta.dir, ".."), stateDir: hostStateDir,
-		sessionTitle: session.title, queuedText: "drop this queued local submission",
+		sessionTitle: session.title, queuedText: executeMode ? executionTexts[1]! : "drop this queued local submission",
+		...(executeMode ? { execution: { thirdText: executionTexts[2]!, replies, ...(attachmentsMode ? { attachments: attachmentFixtures } : {}), capture: writeRequestEvidence, afterReload: attachmentsMode ? async () => check(modelHits === 3, "page reload does not create another model request") : undefined, validate: attachmentsMode ? async () => check(queueAttachmentFailures.length === 0, queueAttachmentFailures.join("; ")) : undefined, finish: async (page: unknown) => {
+			for (let index = 0; index < 3; index++) {
+				await until(() => requests.length === index + 1, `request ${index + 1} arrived exactly once`);
+				const current = requests[index]!;
+				const messages = current.body.messages as Record<string, unknown>[];
+				const lastUser = messages.filter(message => message.role === "user").at(-1);
+				const content = typeof lastUser?.content === "string" ? lastUser.content : JSON.stringify(lastUser?.content);
+				check(content.includes(executionTexts[index]!), `request ${index + 1} executes the expected prompt`);
+				for (const later of executionTexts.slice(index + 1)) check(!content.includes(later), "later prompts are not batched into this request");
+				if (attachmentsMode) {
+					const expectedFixture = index === 0 ? attachmentFixtures.first : index === 1 ? attachmentFixtures.second : undefined;
+					const parts = queueImageParts(lastUser);
+					check(parts.length === (expectedFixture ? 1 : 0), `request ${index + 1} carries the expected image count (${parts.length})`);
+					if (expectedFixture) {
+						const url = queueImageDataUrl(parts[0]?.image_url);
+						check(typeof url === "string", `request ${index + 1} carries a data image URL`);
+						const match = /^data:([^;,]+);base64,([\s\S]*)$/.exec(url!);
+						check(!!match, `request ${index + 1} carries a decodable data image URL`);
+						const decoded = await decodeQueueImagePair(page, url!, expectedFixture);
+						const normalized = match![1] !== expectedFixture.mimeType
+							|| decoded.actual.width !== decoded.expected.width
+							|| decoded.actual.height !== decoded.expected.height;
+						console.log(`IMAGE request ${index + 1} ${JSON.stringify({ expected: { name: expectedFixture.name, mimeType: expectedFixture.mimeType, width: decoded.expected.width, height: decoded.expected.height, pixel: decoded.expected.pixel }, actual: { mimeType: match![1], encodedChars: match![2]!.length, width: decoded.actual.width, height: decoded.actual.height, pixel: decoded.actual.pixel }, normalized })}`);
+						if (!normalized) check(match![2] === expectedFixture.base64, `request ${index + 1} image bytes match ${expectedFixture.name}`);
+						else check(queuePixelsMatch(decoded.actual.pixel, decoded.expected.pixel), `request ${index + 1} normalized image pixels match ${expectedFixture.name}`);
+					}
+				}
+				await until(() => started.host.store.getTurnIntentByCommand(session.id, executionCommandIds[index]!)?.state === "running", `intent ${index + 1} is running`);
+				check(executionCommandIds.every((id, position) => started.host.store.getTurnIntentByCommand(session.id, id)?.state === (position < index ? "completed" : position === index ? "running" : "queued")), "durable intents distinguish completed, current and waiting work");
+				const queue = record((await started.router({ method: "GET", path: `/v1/sessions/${session.id}/queue`, token: owner })).body);
+				const queueRows = queue.followUp as Record<string, unknown>[];
+				check(JSON.stringify(queueRows.map(row => row.text)) === JSON.stringify(executionTexts.slice(index + 1)), "OMP queue retains only the later prompts in order");
+				if (attachmentsMode) {
+					const expectedQueueImages = index === 0 ? [1, 0] : index === 1 ? [0] : [];
+					const actualQueueImages = queueRows.map(row => row.images);
+					if (JSON.stringify(actualQueueImages) !== JSON.stringify(expectedQueueImages)) {
+						const failure = `request ${index + 1} queue image counts expected ${JSON.stringify(expectedQueueImages)} but received ${JSON.stringify(queueRows.map(row => ({ text: row.text, images: row.images })))}`;
+						queueAttachmentFailures.push(failure);
+						console.log(`DEFERRED ${failure}`);
+					}
+				}
+				current.released = true;
+				const chunk = (delta: unknown, finish_reason: string | null = null) => ({ id: `queue-${index}`, object: "chat.completion.chunk", created: 0, model: "cedia-queue-fixture-model", choices: [{ index: 0, delta, finish_reason }] });
+				current.response.writeHead(200, { "content-type": "text/event-stream" });
+				current.response.end([chunk({ role: "assistant", content: replies[index] }), chunk({}, "stop"), "[DONE]"].map(event => `data: ${typeof event === "string" ? event : JSON.stringify(event)}\n\n`).join(""));
+				await until(() => started.host.store.getTurnIntentByCommand(session.id, executionCommandIds[index]!)?.state === "completed", `intent ${index + 1} completed`);
+			}
+			await new Promise(resolveWait => setTimeout(resolveWait, 500));
+			check(modelHits === 3 && !fixtureError, "exactly three loopback model requests after completion");
+			return { mode: "one-at-a-time", modelHits, boundaries, intents: executionCommandIds.map(id => started.host.store.getTurnIntentByCommand(session.id, id)), queueAttachmentFailures, requestSummaries: requests.map(row => summarizeQueueRequest(row.body)) };
+		} } } : {}),
 		...(composerMode ? { composer: {
-			firstText: "hold this local request while the queue drop is tested",
+			firstText: executeMode ? executionTexts[0]! : "hold this local request while the queue drop is tested",
 			onSubmitted: async (commandId: string, phase: "running" | "queued") => {
+				if (executeMode) executionCommandIds.push(commandId);
 				if (phase === "running") runningCommandId = commandId; else queuedCommandId = commandId;
 				const deadline = Date.now() + 20_000;
 				while ((started.host.store.getTurnIntentByCommand(session.id, commandId)?.state !== phase || modelHits !== 1) && Date.now() < deadline) await new Promise(resolveWait => setTimeout(resolveWait, 25));
@@ -224,6 +325,10 @@ try {
 			},
 		} } : {}),
 	}) : null;
+	if (executeMode && browserProof) {
+		await writeFile(join(browserProof.output, "result.json"), JSON.stringify({ ...browserProof, runtime, ok: true, modelHits, executeMode }, null, 2));
+		console.log(`Execution proof: ${browserProof.output}`);
+	} else {
 	const liveDrop = browserProof ? { status: 200, body: browserProof.body } : await started.router({
 		method: "POST",
 		path: `/v1/sessions/${session.id}/queue/drop`,
@@ -244,13 +349,15 @@ try {
 	await new Promise(resolveWait => setTimeout(resolveWait, 100));
 	check(modelHits === 1, "dropping the queued turn does not submit another provider request");
 	if (browserProof) {
-		await writeFile(join(browserProof.output, "result.json"), JSON.stringify({ ...browserProof, ok: true, modelHits, composerMode, intentState: started.host.store.getTurnIntentByCommand(session.id, queuedCommandId)?.state }, null, 2));
+		await writeFile(join(browserProof.output, "result.json"), JSON.stringify({ ...browserProof, runtime, ok: true, modelHits, composerMode, intentState: started.host.store.getTurnIntentByCommand(session.id, queuedCommandId)?.state }, null, 2));
 		console.log(`Browser proof: ${browserProof.output}`);
+	}
 	}
 
 	const notOwner = await started.router({ method: "GET", path: `/v1/sessions/${session.id}/queue` });
 	check(notOwner.status === 401 || notOwner.status === 403, `the queue routes are owner-only (${notOwner.status})`);
 } finally {
+	held.closeAllConnections();
 	await started.close();
 }
 

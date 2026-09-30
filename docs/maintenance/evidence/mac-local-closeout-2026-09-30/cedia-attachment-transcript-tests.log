@@ -1,0 +1,16 @@
+bun test v1.4.2 (744846f84)
+
+apps/macos/agent-window/test/attachment-transcript.test.ts:
+(pass) OMP image transcript projection > projects one user image from raw message content and keeps a safe preview after reload [4.54ms]
+(pass) OMP image transcript projection > reuses validated bytes for an unchanged cached transcript entry [1.41ms]
+(pass) OMP image transcript projection > takes the latest authoritative user content when a message lifecycle replaces its image [0.15ms]
+(pass) OMP image transcript projection > keeps punctuation-distinct message ids distinct after safe id encoding [0.20ms]
+(pass) OMP image transcript projection > drops malformed, unsupported, and over-limit image payloads [22.76ms]
+(pass) OMP image transcript projection > keeps the legacy attachment route when a read-model image has no inline preview [0.12ms]
+(pass) OMP image transcript projection > retains a validated inline preview through a stale and live-hot-path snapshot [0.64ms]
+(pass) OMP image transcript projection > rejects remote, SVG, and malformed inline previews at the read-model boundary [0.56ms]
+
+ 8 pass
+ 0 fail
+ 26 expect() calls
+Ran 8 tests across 1 file. [395.00ms]

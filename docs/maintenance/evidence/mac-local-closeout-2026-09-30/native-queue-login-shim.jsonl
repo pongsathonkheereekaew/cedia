@@ -1,0 +1,2 @@
+{"event":"intercept-set-login-item","settings":{"openAtLogin":true,"openAsHidden":true}}
+{"event":"simulated-login-state","isPackaged":true,"openedAtLogin":false}

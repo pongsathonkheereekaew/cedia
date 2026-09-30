@@ -368,6 +368,62 @@ export const ChatImageAttachment = Schema.Struct({
 });
 export type ChatImageAttachment = typeof ChatImageAttachment.Type;
 
+const READ_MODEL_IMAGE_PREVIEW_PREFIX = /^data:(image\/(?:png|jpeg|gif|webp));base64,/;
+export const READ_MODEL_IMAGE_BASE64_MAX_CHARS = Math.ceil(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / 3) * 4;
+/** Maximum encoded preview length accepted in a read-model message. */
+export const READ_MODEL_IMAGE_PREVIEW_MAX_CHARS =
+  READ_MODEL_IMAGE_BASE64_MAX_CHARS + "data:image/jpeg;base64,".length;
+
+function readModelBase64Digit(value: number): number {
+  if (value >= 65 && value <= 90) return value - 65;
+  if (value >= 97 && value <= 122) return value - 71;
+  if (value >= 48 && value <= 57) return value + 4;
+  if (value === 43) return 62;
+  if (value === 47) return 63;
+  return -1;
+}
+
+export function readModelImageBase64ByteLength(value: unknown): number | undefined {
+  if (typeof value !== "string" || value.length === 0 || value.length > READ_MODEL_IMAGE_BASE64_MAX_CHARS || value.length % 4 !== 0) return undefined;
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  const dataLength = value.length - padding;
+  for (let index = 0; index < dataLength; index += 1) {
+    if (readModelBase64Digit(value.charCodeAt(index)) < 0) return undefined;
+  }
+  for (let index = dataLength; index < value.length; index += 1) {
+    if (value[index] !== "=") return undefined;
+  }
+  if (padding === 2 && (readModelBase64Digit(value.charCodeAt(dataLength - 1)) & 0x0f) !== 0) return undefined;
+  if (padding === 1 && (readModelBase64Digit(value.charCodeAt(dataLength - 1)) & 0x03) !== 0) return undefined;
+  const byteLength = value.length / 4 * 3 - padding;
+  return byteLength > 0 && byteLength <= PROVIDER_SEND_TURN_MAX_IMAGE_BYTES ? byteLength : undefined;
+}
+
+/** Guard untrusted read-model values before they reach an <img> source. */
+export function isSafeReadModelImagePreview(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > READ_MODEL_IMAGE_PREVIEW_MAX_CHARS) return false;
+  const prefix = value.match(READ_MODEL_IMAGE_PREVIEW_PREFIX)?.[0];
+  if (!prefix) return false;
+  const byteLength = readModelImageBase64ByteLength(value.slice(prefix.length));
+  return byteLength !== undefined && byteLength > 0 && byteLength <= PROVIDER_SEND_TURN_MAX_IMAGE_BYTES;
+}
+
+const ReadModelImagePreviewDataUrl = Schema.String.check(
+  Schema.isMaxLength(READ_MODEL_IMAGE_PREVIEW_MAX_CHARS),
+  Schema.makeFilter((value) => isSafeReadModelImagePreview(value)),
+);
+
+/** Read-model-only image metadata; upload commands intentionally keep ChatImageAttachment. */
+export const ReadModelChatImageAttachment = Schema.Struct({
+  type: Schema.Literal("image"),
+  id: ChatAttachmentId,
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  mimeType: TrimmedNonEmptyString.check(Schema.isMaxLength(100), Schema.isPattern(/^image\//i)),
+  sizeBytes: NonNegativeInt.check(Schema.isLessThanOrEqualTo(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES)),
+  previewUrl: Schema.optional(ReadModelImagePreviewDataUrl),
+});
+export type ReadModelChatImageAttachment = typeof ReadModelChatImageAttachment.Type;
+
 export const ChatFileAttachment = Schema.Struct({
   type: Schema.Literal("file"),
   id: ChatAttachmentId,
@@ -399,6 +455,12 @@ export const ChatAttachment = Schema.Union([
   ChatAssistantSelectionAttachment,
 ]);
 export type ChatAttachment = typeof ChatAttachment.Type;
+const ReadModelChatAttachment = Schema.Union([
+  ReadModelChatImageAttachment,
+  ChatFileAttachment,
+  ChatAssistantSelectionAttachment,
+]);
+export type ReadModelChatAttachment = typeof ReadModelChatAttachment.Type;
 const ChatAttachmentList = Schema.Array(ChatAttachment).check(
   Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_ATTACHMENTS),
 );
@@ -543,9 +605,11 @@ export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
+  /** Provider-owned transcript order; unlike createdAt, this remains causal when queued turns overlap. */
+  transcriptOrder: Schema.optional(NonNegativeInt),
   textSegments: Schema.optional(Schema.Array(OrchestrationMessageTextSegment)),
   asyncUserInput: Schema.optional(AsyncUserInput),
-  attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  attachments: Schema.optional(Schema.Array(ReadModelChatAttachment)),
   skills: Schema.optional(Schema.Array(ProviderSkillReference)),
   mentions: Schema.optional(Schema.Array(ProviderMentionReference)),
   dispatchMode: Schema.optional(TurnDispatchMode),

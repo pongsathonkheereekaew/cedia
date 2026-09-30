@@ -54,6 +54,7 @@ frame({ type: "available_commands_update", commands: [{ name: "fixture-command",
 let permissionPromptId;
 // The submission OMP would be running right now, reported back through `cedia_turn_queue`.
 let runningIntentId;
+let runningBatchIds = [];
 let runningModelId;
 let gatedSchemesOnce = false;
 // The submissions a bridge-aware runtime would be holding, in drain order (steering first).
@@ -731,7 +732,7 @@ const handle = command => {
     }
     // `hold-turn` accepts the prompt and reports the turn starting, then stays silent: the
     // fixture a test uses to observe what Cedia knows while a turn is still running.
-    if (mode === "hold-turn") {
+    if (mode === "hold-turn" || mode === "queue-boundaries") {
       response(command.type, command.id, { accepted: true, fixture: "hold-turn" });
       runningIntentId = command.cediaIntentId;
       frame({
@@ -783,6 +784,26 @@ const handle = command => {
     return;
   }
   if (command.type === "bash") {
+    if (mode === "queue-boundaries") {
+      if (command.command === "fixture:tool-round") {
+        frame({ type: "turn_end", cediaIntentId: runningIntentId });
+        frame({ type: "turn_start", cediaIntentId: runningIntentId });
+      } else if (command.command === "fixture:follow-up-batch") {
+        const next = queuedIntents.splice(0).map(entry => entry.intentId);
+        frame({ type: "cedia_turn_boundary", completedIntentIds: [runningIntentId], runningIntentIds: next });
+        runningIntentId = next[0];
+        runningModelId = "fixture-model-2";
+        runningBatchIds = next;
+        fixtureQueue.followUp.length = 0;
+        fixtureQueueIntentIds.followUp.length = 0;
+        frame({ type: "turn_start", cediaIntentId: runningIntentId, cediaModel: "fixture/fixture-model-2", cediaThinkingLevel: "medium" });
+      } else if (command.command === "fixture:finish-batch") {
+        frame({ type: "cedia_turn_boundary", completedIntentIds: runningBatchIds, runningIntentIds: [] });
+        frame({ type: "agent_end", cediaIntentId: runningIntentId, isTerminal: true });
+        runningIntentId = undefined;
+        runningBatchIds = [];
+      }
+    }
     // The real runtime answers its own BashResult; the fixture mirrors that shape so host
     // tests prove strict parsing instead of a second shape. Output names the command, which
     // is also how a replay test tells a re-run apart from a receipt.

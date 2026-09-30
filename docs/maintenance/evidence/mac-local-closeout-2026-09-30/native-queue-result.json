@@ -1,0 +1,69 @@
+{
+  "body": {
+    "state": "available",
+    "revision": 11,
+    "steering": [],
+    "followUp": [],
+    "dropped": [
+      {
+        "text": "drop this queued local submission",
+        "truncated": false,
+        "images": 0
+      }
+    ]
+  },
+  "commandId": "2e543ccd-b6fe-4a52-947f-accccee23f6b",
+  "output": "/Users/pond/cedia/dist/queue-browser-proof/2026-09-30T06-05-59.983Z",
+  "assets": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-native-queue.4EyGOv7QYc/Cedia.app/Contents/Resources/app/out/vs/cedia/agent",
+  "nativeApp": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-native-queue.4EyGOv7QYc/Cedia.app",
+  "assetSha256": "41344f5ef6dd24dbd4c82538aa45f9eaee2ac6be79a8659a24540b796a51f2c7",
+  "errors": [],
+  "submissions": [
+    {
+      "type": "thread.turn.start",
+      "commandId": "671b27bb-fbb6-405b-ba57-91771feca8fe",
+      "threadId": "df8659af-3dab-45f3-aea9-710eb91eb4a8",
+      "message": {
+        "messageId": "9a30652b-0f3c-42f7-89a6-89802ec223a6",
+        "role": "user",
+        "text": "hold this local request while the queue drop is tested",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T06:06:11.445Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "ea1ac0ae-f785-4587-8d39-1beb01f3c951",
+      "threadId": "df8659af-3dab-45f3-aea9-710eb91eb4a8",
+      "message": {
+        "messageId": "195ef85f-e791-4a81-9af7-a765f5490269",
+        "role": "user",
+        "text": "drop this queued local submission",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T06:06:12.311Z",
+      "proofSettled": true
+    }
+  ],
+  "ok": true,
+  "modelHits": 1,
+  "composerMode": true,
+  "intentState": "cancelled"
+}

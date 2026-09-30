@@ -1,0 +1,50 @@
+OK   OMP runtime is present at /Users/pond/cedia/VSCode-darwin-arm64/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+OK   OMP accepts explicit one-at-a-time follow-up mode
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   composer submission is running in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+OK   request 1 arrived exactly once
+OK   request 1 executes the expected prompt
+OK   later prompts are not batched into this request
+OK   later prompts are not batched into this request
+OK   intent 1 is running
+OK   OMP queue retains only the later prompts in order
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+24 | import { OMP_BASELINE_VERSION, OmpRpcClient, isSupportedOmpVersion } from "../packages/omp-adapter/src/index.ts";
+25 | import { startHostServer } from "../apps/host/src/server.ts";
+26 | import { dropQueueThroughBrowser } from "./lib/queue-browser-proof.ts";
+27 | 
+28 | function check(value: unknown, message: string): asserts value {
+29 | 	if (!value) throw new Error(`OMP queue smoke failed: ${message}`);
+                            ^
+error: OMP queue smoke failed: intent 1 completed
+      at check (/Users/pond/cedia/scripts/omp-queue-smoke.ts:29:24)
+      at until (/Users/pond/cedia/scripts/omp-queue-smoke.ts:85:2)
+      at async <anonymous> (/Users/pond/cedia/scripts/omp-queue-smoke.ts:262:11)
+      at async dropQueueThroughBrowser (/Users/pond/cedia/scripts/lib/queue-browser-proof.ts:123:47)
+
+Bun v1.4.2 (macOS arm64)

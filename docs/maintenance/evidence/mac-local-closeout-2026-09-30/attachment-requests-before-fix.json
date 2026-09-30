@@ -1,0 +1,139 @@
+{
+  "modelHits": 3,
+  "queueAttachmentFailures": [
+    "request 1 queue image counts expected [1,0] but received [{\"text\":\"Queue B: second local task\",\"images\":0},{\"text\":\"Queue C: third local task\",\"images\":0}]"
+  ],
+  "requests": [
+    {
+      "model": "cedia-queue-fixture-model",
+      "stream": true,
+      "messageCount": 2,
+      "userMessages": [
+        {
+          "content": [
+            {
+              "type": "text",
+              "chars": 209
+            },
+            {
+              "type": "text",
+              "chars": 25
+            },
+            {
+              "type": "image_url",
+              "image": {
+                "representation": "data-uri",
+                "mediaType": "image/webp",
+                "encodedChars": 288,
+                "payloadBytes": 216,
+                "signature": "52494646d000000057454250"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "model": "cedia-queue-fixture-model",
+      "stream": true,
+      "messageCount": 4,
+      "userMessages": [
+        {
+          "content": [
+            {
+              "type": "text",
+              "chars": 209
+            },
+            {
+              "type": "text",
+              "chars": 25
+            },
+            {
+              "type": "image_url",
+              "image": {
+                "representation": "data-uri",
+                "mediaType": "image/webp",
+                "encodedChars": 288,
+                "payloadBytes": 216,
+                "signature": "52494646d000000057454250"
+              }
+            }
+          ]
+        },
+        {
+          "content": [
+            {
+              "type": "text",
+              "chars": 26
+            },
+            {
+              "type": "image_url",
+              "image": {
+                "representation": "data-uri",
+                "mediaType": "image/webp",
+                "encodedChars": 184,
+                "payloadBytes": 138,
+                "signature": "524946468200000057454250"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "model": "cedia-queue-fixture-model",
+      "stream": true,
+      "messageCount": 6,
+      "userMessages": [
+        {
+          "content": [
+            {
+              "type": "text",
+              "chars": 209
+            },
+            {
+              "type": "text",
+              "chars": 25
+            },
+            {
+              "type": "image_url",
+              "image": {
+                "representation": "data-uri",
+                "mediaType": "image/webp",
+                "encodedChars": 288,
+                "payloadBytes": 216,
+                "signature": "52494646d000000057454250"
+              }
+            }
+          ]
+        },
+        {
+          "content": [
+            {
+              "type": "text",
+              "chars": 26
+            },
+            {
+              "type": "image_url",
+              "image": {
+                "representation": "data-uri",
+                "mediaType": "image/webp",
+                "encodedChars": 184,
+                "payloadBytes": 138,
+                "signature": "524946468200000057454250"
+              }
+            }
+          ]
+        },
+        {
+          "content": [
+            {
+              "type": "text",
+              "chars": 25
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

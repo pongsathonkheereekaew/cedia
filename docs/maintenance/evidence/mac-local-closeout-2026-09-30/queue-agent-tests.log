@@ -1,0 +1,592 @@
+bun test v1.4.2 (744846f84)
+
+apps/macos/agent-window/test/native-handoff.test.ts:
+(pass) IDE return selects the exact durable task, even when another project was active [1.60ms]
+(pass) folder handoff reuses an existing project and task [0.31ms]
+(pass) window-local task navigation keeps each task runtime distinct without an OMP retarget command [0.13ms]
+
+apps/macos/agent-window/test/cedia-context.test.ts:
+(pass) Cedia native context adapter > reads context and fills command identity for both controls [2.67ms]
+(pass) Cedia native context adapter > preserves a typed host refusal reason and code [0.94ms]
+(pass) Cedia native context adapter > posts a context shake with generated command identity and the session incarnation [0.16ms]
+
+apps/macos/agent-window/test/provider-ordering.test.ts:
+(pass) provider picker ordering > moves one provider while preserving every other provider [0.18ms]
+
+apps/macos/agent-window/test/cedia-memory-surface.test.tsx:
+(pass) Cedia context memory section > renders the runtime backend and Mnemopi state without memory content [9.17ms]
+(pass) Cedia context memory section > renders Hindsight state and an honest absence when the backend has no live block [1.57ms]
+(pass) Cedia context memory section > shows only an unavailable memory reason and no memory controls [0.45ms]
+
+apps/macos/agent-window/test/cedia-tools-catalog.test.tsx:
+(pass) Cedia tool catalog > strictly parses the runtime catalog rows [0.78ms]
+(pass) Cedia tool catalog > renders registry rows, source class, activation, and truncation without toggles [0.83ms]
+(pass) Cedia tool catalog > keeps the unavailable state honest [0.09ms]
+(pass) Cedia tool catalog > uses the tool catalog route through the adapter [0.40ms]
+(pass) Cedia tool catalog > names the requirements for provider tools the catalog lacks [2.69ms]
+(pass) Cedia tool catalog > derives absent provider tools from live rows only [0.13ms]
+(pass) Cedia tool catalog > proves prelude namespaces through the Code Mode partition, never the catalog [6.11ms]
+(pass) Cedia tool catalog > pins dependency names against the dated audit [0.29ms]
+(pass) Cedia tool catalog > diagnoses which half is responsible once the setting is known [0.05ms]
+(pass) Cedia tool catalog > renders the diagnosed sentence per dependency row [0.39ms]
+(pass) Cedia tool catalog > re-reads missing session panels until the runtime answers [0.12ms]
+
+apps/macos/agent-window/test/provider.test.ts:
+(pass) OMP provider identity > keeps one picker row per provider-qualified OMP model [0.22ms]
+(pass) OMP provider identity > normalizes OMP's live thinking arrays and host descriptors without widening the ladder [0.04ms]
+(pass) OMP provider identity > accepts omp in the native provider and model-selection schemas [0.25ms]
+(pass) OMP provider identity > has no fabricated OMP model or default model [0.07ms]
+(pass) OMP provider identity > exposes only OMP as a selectable provider [0.06ms]
+(pass) OMP provider identity > keeps runtime model ids and upstream provider provenance [0.24ms]
+
+apps/macos/agent-window/test/onboarding-brand.test.tsx:
+(pass) Onboarding brand boundary > tells the local-first story with no foreign-harness copy [0.44ms]
+(pass) Onboarding brand boundary > walks welcome, tour, project, done without auto-closing past setup choices [0.05ms]
+(pass) Onboarding brand boundary > shows the tour exactly on fresh installs with no completion marker [0.05ms]
+(pass) Onboarding brand boundary > ignores a completion marker recorded against another installation [0.02ms]
+
+apps/macos/agent-window/test/model-state-handoff.test.ts:
+(pass) preserves OMP effort beside its nested model in a restored get_state frame [0.11ms]
+
+apps/macos/agent-window/test/sidechat-source.test.ts:
+(pass) promotes an OMP draft before forking it without sending a prompt [0.17ms]
+(pass) does not recreate a persisted source task [0.04ms]
+
+apps/macos/agent-window/test/omp-slash-dispatch.test.ts:
+(pass) Cedia slash dispatch > keeps the audit's reachable set non-empty and recognisably split from the TUI-only one [0.17ms]
+(pass) Cedia slash dispatch > sends a slash command, its subcommand and an alias to the session exactly as typed [1.37ms]
+(pass) Cedia slash dispatch > sends a slash command with trailing arguments unchanged too [0.08ms]
+(pass) Cedia slash dispatch > marks only menu-selected commands and leaves ordinary slash-like prompt text unmarked [0.10ms]
+(pass) Cedia slash dispatch > refuses to downgrade a selected command to steer or follow-up text [0.12ms]
+
+apps/macos/agent-window/test/session-normalization.test.ts:
+(pass) OMP session remains OMP in the renderer store so sends use its availability [0.10ms]
+(pass) the held model change survives normalization instead of being dropped by the store [0.18ms]
+(pass) the archive receipt survives normalization so a restored row can say where it resumed [0.05ms]
+(pass) the turn projection survives normalization so a surface can say what OMP is holding [0.07ms]
+
+apps/macos/agent-window/test/omp-progress.test.ts:
+(pass) Cedia OMP goal projection > uses the latest goal_updated frame for goal timing and status [1.58ms]
+(pass) Cedia OMP goal projection > projects the pause timestamp only while OMP reports a paused goal [0.14ms]
+(pass) Cedia OMP goal projection > falls back to the host goal read when no goal frame has arrived [0.12ms]
+(pass) Cedia OMP goal projection > maps goal metadata edits to native set/replace, pause/resume and drop operations [0.24ms]
+(pass) Cedia OMP goal projection > projects live OMP subagents into the vendor work-log decoder shape [1.94ms]
+
+apps/macos/agent-window/test/remote-devices-adapter.test.ts:
+(pass) Cedia remote devices adapter > reads the gateway state, issues one code, lists devices and revokes one [0.17ms]
+
+apps/macos/agent-window/test/cedia-advisor-surface.test.tsx:
+(pass) Cedia advisor surface > renders the runtime's three switch state wordings [0.86ms]
+(pass) Cedia advisor surface > does not render the stale roster while the runtime says the advisor is off [0.15ms]
+(pass) Cedia advisor surface > renders advisor status, context, spend, and message counts verbatim [0.25ms]
+(pass) Cedia advisor surface > renders the inactive transcript sentence and bounded notice [0.42ms]
+(pass) Cedia advisor surface > renders an unavailable reason without a switch or empty advisor [0.05ms]
+(pass) Cedia advisor surface > parses the advisor and transcript routes defensively [0.12ms]
+
+apps/macos/agent-window/test/worktree-dirty-picker.test.tsx:
+(pass) dirty-file selection defaults > carries every dirty file until the user touches the picker [0.02ms]
+(pass) dirty-file selection defaults > keeps an explicit selection verbatim, including carry-none
+(pass) dirty-file checklist > checks everything by default and names each path once [0.30ms]
+(pass) dirty-file checklist > reflects a partial selection without touching the host default [0.08ms]
+(pass) dirty-file selection reaches the send pipeline > the draft builder keeps the selection set through the workspace patch [0.08ms]
+(pass) dirty-file selection reaches the send pipeline > the local draft thread carries the selection to thread.create [0.04ms]
+(pass) dirty-file selection reaches the send pipeline > persists selected and carry-none choices across the shared draft round trip [0.58ms]
+
+apps/macos/agent-window/test/browser-home-theme.test.tsx:
+(pass) browser home follows the theme > shows a Codex-like light empty state instead of the dark server home [0.32ms]
+(pass) browser home follows the theme > keeps the dark home dark with the same copy [0.11ms]
+(pass) browser home follows the theme > still lists local servers when the adapter reports them [0.65ms]
+(pass) browser error follows the theme > keeps its copy in both themes with a themed surface [0.36ms]
+
+apps/macos/agent-window/test/optimistic-message.test.ts:
+(pass) OMP authoritative messages replace optimistic bubbles without dropping repeated sends [0.12ms]
+
+apps/macos/agent-window/test/cedia-capabilities.test.ts:
+(pass) reads the host snapshot through the Cedia namespace and the shared query cache [0.45ms]
+(pass) leaves every row unknown when the host cannot answer [0.07ms]
+
+apps/macos/agent-window/test/cedia-context-menu.test.ts:
+(pass) Cedia context menu bridge > forwards thread menu items and pointer position to the Synara presenter [0.06ms]
+
+apps/macos/agent-window/test/host-error-codes.test.ts:
+(pass) Cedia host error transport > round-trips a code and the host's own words through the Electron message [0.05ms]
+(pass) Cedia host error transport > leaves an untagged error as the renderer already had it [0.01ms]
+
+apps/macos/agent-window/test/cedia-owner-surface.test.tsx:
+(pass) Cedia owner listing > strictly parses owner states and keeps the bounded identity projection [0.16ms]
+(pass) Cedia owner listing > refreshes the owner probe before posting attach [0.15ms]
+(pass) Cedia owner listing > renders selected attached rows with an attach action and names unsafe states [0.34ms]
+(pass) Cedia owner listing > does not offer attach for an absent or stale selection [0.35ms]
+(pass) Cedia owner listing > uses live re-reads when the owner list query is configured [0.03ms]
+
+apps/macos/agent-window/test/slash-command-coverage.test.tsx:
+(pass) Cedia equivalents for selected TUI slash commands > /git is backed by GitActionsControl's real commit/push menu [0.31ms]
+(pass) Cedia equivalents for selected TUI slash commands > /copy is backed by the transcript MessageCopyButton action [3.90ms]
+(pass) Cedia equivalents for selected TUI slash commands > /extensions is backed by the Tool catalog panel's per-row extension toggles [0.30ms]
+(pass) Cedia equivalents for selected TUI slash commands > /agents is backed by the Agents panel roster, transcript viewer and lifecycle toggles [0.70ms]
+(pass) Cedia equivalents for selected TUI slash commands > /open is backed by the conversation InlineLinkChip browser action [2.44ms]
+
+apps/macos/agent-window/test/adapter.test.ts:
+(pass) Cedia Agent Window native adapter > projects live goal details and routes budget changes to OMP [0.51ms]
+(pass) Cedia Agent Window native adapter > reads advisor config text and routes validated writes to OMP [0.21ms]
+(pass) Cedia Agent Window native adapter > reads the run-pause gate and routes pause writes to OMP [0.21ms]
+(pass) Cedia Agent Window native adapter > runs shell commands and aborts through OMP without inventing output [0.22ms]
+(pass) Cedia Agent Window native adapter > runs Python code and aborts through OMP without inventing output [0.20ms]
+(pass) Cedia Agent Window native adapter > shows no terminal transport rows in the chat transcript [0.44ms]
+(pass) Cedia Agent Window native adapter > projects pending UI requests without forwarding rich approval payloads [0.54ms]
+(pass) Cedia Agent Window native adapter > synthesizes user-input.requested activities from broker select frames [0.58ms]
+(pass) Cedia Agent Window native adapter > synthesizes approval.requested activities from broker confirm frames [0.58ms]
+(pass) Cedia Agent Window native adapter > replays the synthesized confirm approval through the bundle derivation [1.82ms]
+(pass) Cedia Agent Window native adapter > projects a pending confirm while a context refresh for the same running task is blocked [2.69ms]
+(pass) Cedia Agent Window native adapter > refreshes OMP context occupancy after messages without polling its own state replies [2.29ms]
+(pass) Cedia Agent Window native adapter > carries a forked task's source task from the session row into both snapshots [1.41ms]
+(pass) Cedia Agent Window native adapter > forks side chats through OMP without submitting renderer-provided history [0.18ms]
+(pass) Cedia Agent Window native adapter > projects durable Cedia projects and sessions into a Synara shell snapshot [0.48ms]
+(pass) Cedia Agent Window native adapter > loads the shell without replaying every task transcript [0.58ms]
+(pass) Cedia Agent Window native adapter > updates background task lifecycle from host metadata without replaying history [0.40ms]
+(pass) Cedia Agent Window native adapter > hydrates OMP events into thread messages without inventing provider output [0.36ms]
+(pass) Cedia Agent Window native adapter > projects an active OMP turn and tool history while hiding control frames [0.89ms]
+(pass) Cedia Agent Window native adapter > does not put a finished turn back into running when its command ack arrives [0.31ms]
+(pass) Cedia Agent Window native adapter > keeps OMP lifecycle frames out of the transcript after an auto-retry storm [1.01ms]
+(pass) Cedia Agent Window native adapter > prints the provider's own sentence when a turn ends on a provider error [0.88ms]
+(pass) Cedia Agent Window native adapter > dispatches a turn through the OMP command envelope with the durable incarnation [0.84ms]
+(pass) Cedia Agent Window native adapter > never sends the UI-only unresolved model sentinel to OMP [0.36ms]
+(pass) Cedia Agent Window native adapter > uses the native bootstrap paths in server configuration [0.37ms]
+(pass) Cedia Agent Window native adapter > reads and writes the real keybindings file through the bridge (item 57) [0.16ms]
+(pass) Cedia Agent Window native adapter > emits a snapshot envelope to subscribers after a refresh [0.39ms]
+(pass) Cedia Agent Window native adapter > stays quiet when a poll finds nothing new, and speaks when it does [1.69ms]
+(pass) Cedia Agent Window native adapter > keeps the workspace metadata the renderer asserts, without patching the host for it [0.67ms]
+(pass) Cedia Agent Window native adapter > projects the host-created worktree cwd and branch before renderer setup [0.18ms]
+(pass) Cedia Agent Window native adapter > archives a thread the window put away, and only an explicit delete removes one [0.27ms]
+(pass) Cedia Agent Window native adapter > carries a turn id so the window offers its edit affordance [0.39ms]
+(pass) Cedia Agent Window native adapter > rewinds through OMP's own branch and resubmits the edited text [0.70ms]
+(pass) Cedia Agent Window native adapter > rewinds to a message that is not the last one, and sends nothing after it [0.59ms]
+(pass) Cedia Agent Window native adapter > puts the rewound message back into the composer and focuses it [0.22ms]
+(pass) Cedia Agent Window native adapter > refuses to rewind when OMP's rewind points and the transcript disagree [0.40ms]
+(pass) Cedia Agent Window native adapter > finds the rewind point by text when OMP lists a message the window never rendered [0.20ms]
+(pass) Cedia Agent Window native adapter > refuses to rewind a running task, like the edit path does [0.07ms]
+(pass) Cedia Agent Window native adapter > keeps the pure projection stable for an empty host [0.05ms]
+(pass) Cedia Agent Window native adapter > discovers models through the global host catalog without starting a task [0.21ms]
+(pass) Cedia Agent Window native adapter > reads a live task's model catalog from its session owner [0.10ms]
+(pass) Cedia Agent Window native adapter > falls back to the global catalog only when a task has no live owner [0.08ms]
+(pass) Cedia Agent Window native adapter > does not hide a live session catalog failure behind the global catalog [0.07ms]
+(pass) Cedia Agent Window native adapter > refuses a catalog answer that carries no model list [0.09ms]
+(pass) Cedia Agent Window native adapter > persists the picker selection through OMP before Synara submits the turn [0.11ms]
+(pass) Cedia Agent Window native adapter > resolves a selected provider-qualified model from the global catalog [0.10ms]
+(pass) Cedia Agent Window native adapter > validates a selected model against the live task catalog [0.09ms]
+(pass) Cedia Agent Window native adapter > defers a model change while a turn is running instead of restating that turn's model [0.16ms]
+(pass) Cedia Agent Window native adapter > forwards a selected baseRef only when creating a worktree task [0.10ms]
+(pass) Cedia Agent Window native adapter > forwards a dirty-file selection only when creating a worktree task [0.25ms]
+(pass) Cedia Agent Window native adapter > surfaces host workspace refusals as actionable rendered error state [0.52ms]
+(pass) Cedia Agent Window native adapter > creates the project through host POST /v1/projects (item 59) [0.11ms]
+(pass) routes duplicate model IDs by upstream provider and passes the selected thinking level [0.32ms]
+(pass) attachments, mentions and skills reach OMP (Cedia §10 items 61-62) > folds image bytes into OMP's images[] and names files/mentions [1.72ms]
+(pass) attachments, mentions and skills reach OMP (Cedia §10 items 61-62) > refuses to drop an image whose bytes cannot be read [0.19ms]
+(pass) attachments, mentions and skills reach OMP (Cedia §10 items 61-62) > advertises the real capabilities and splits OMP's catalogue by source [0.25ms]
+(pass) attachments, mentions and skills reach OMP (Cedia §10 items 61-62) > projects pushed command catalogs into live task events and observes removals [0.52ms]
+(pass) attachments, mentions and skills reach OMP (Cedia §10 items 61-62) > asks no OMP catalogue without a host session, and compaction runs on OMP [0.12ms]
+(pass) repaints the task when only its held model change moved [0.29ms]
+(pass) carries what an archive kept, and how Continue resumed, onto the task [0.22ms]
+(pass) carries the bounded turn projection onto the task, without this device's identity [0.16ms]
+
+apps/macos/agent-window/test/cedia-usage.test.ts:
+(pass) Cedia native usage adapter > reads usage through the owner session route [0.10ms]
+(pass) Cedia native usage adapter > preserves a typed host refusal reason and code [0.08ms]
+(pass) Cedia native usage adapter > reads saved reset credits and fills identity for an explicit redeem [0.15ms]
+(pass) Cedia native usage adapter > preserves a typed host refusal for the credits route [0.11ms]
+
+apps/macos/agent-window/test/cedia-model-state.test.ts:
+(pass) Cedia O03 model and account adapter > reads model state and accounts, and fills durable command identity for owner writes [0.26ms]
+(pass) Cedia O03 model and account adapter > preserves a typed owner refusal for account pinning [0.07ms]
+(pass) Cedia O03 model and account parsers > keeps null model and effort values explicit, including auto-resolved effort [0.16ms]
+(pass) Cedia O03 model and account parsers > distinguishes unsupported accounts from an empty supported list [0.13ms]
+(pass) Cedia O03 model and account parsers > rejects malformed model state and mutation projections [0.11ms]
+(pass) Cedia O03 model and account parsers > keeps host unavailable reasons and avoids a polling interval [0.06ms]
+
+apps/macos/agent-window/test/thread-workspace-policy.test.ts:
+(pass) new-task workspace presentation > offers only local refs when a worktree draft picks its base [0.07ms]
+(pass) new-task workspace presentation > detects an active task in the same Git project for the isolated default [0.04ms]
+(pass) new-task workspace presentation > names shared-folder and busy-Git identity states [0.03ms]
+(pass) new-task workspace presentation > turns host admission failures into actionable rendered toast copy [0.06ms]
+
+apps/macos/agent-window/test/shared-ui-draft.test.ts:
+(pass) does not replace an unsaved edit when focus hydration reads older state [0.97ms]
+(pass) serializes saves so a delayed old write cannot win after the latest flush [2.87ms]
+(pass) carries the host revision between writes and adopts a newer revision when nothing is pending [0.19ms]
+(pass) keeps the local text when another window won, and lets the window choose a side [2.22ms]
+(pass) re-sends the local text on top of the winning revision when the window keeps its own side [1.30ms]
+(pass) adopts the other window's pushed revision while nothing is pending here [0.25ms]
+(pass) adopts a host draft when the embedded IDE misses the other window's push [1.26ms]
+(pass) hydrates the newly routed task when app history changes without a hashchange event [1.27ms]
+(pass) shares menu-selected command provenance across renderer reload and host revisions [0.34ms]
+(pass) keeps both texts when a pushed revision meets an unsaved local edit [0.14ms]
+(pass) treats a delivered draft as a fresh revision space without discarding what is being typed [0.14ms]
+(pass) stops listening when the renderer is torn down [0.04ms]
+
+apps/macos/agent-window/test/omfg-rule-surface.test.tsx:
+(pass) Rule-forging surface > reviews the bounded draft and offers scope, overwrite, save, and amend [0.65ms]
+(pass) Rule-forging surface > names unvalidated drafts instead of offering a blind save [0.32ms]
+(pass) Rule-forging surface > stays honest while drafting, failed, or without a runtime [0.30ms]
+(pass) Rule-forging surface > strictly parses the forging state and the save answer [0.21ms]
+(pass) Rule-forging surface > polls while a draft runs and never once it settles [0.05ms]
+(pass) Rule-forging surface > drafts, saves, and aborts through the adapter routes with the durable envelope [0.50ms]
+
+apps/macos/agent-window/test/cedia-usage-surface.test.tsx:
+(pass) Cedia usage surface > renders provider metadata, reported amounts, reset credits, and manual refresh copy [1.63ms]
+(pass) Cedia usage surface > requires a named two-step confirmation before redeeming and reports OMP outcomes [0.70ms]
+(pass) Cedia usage surface > shows account listing errors without turning them into zero credits [0.21ms]
+(pass) Cedia usage surface > shows a host reason or runtime caveat without inventing account rows [0.35ms]
+(pass) Cedia usage surface > keeps omitted amount fields unknown instead of inventing zeroes [0.33ms]
+(pass) Cedia usage surface > distinguishes runtime caveats, unsupported usage, and an owner-requested empty result [0.47ms]
+(pass) Cedia usage surface > shows the host reason when the route is unavailable, with a way to ask again [0.07ms]
+(pass) Cedia usage surface > carries no refresh control when there is nothing to call it with [0.06ms]
+(pass) Cedia usage surface > rejects malformed answers and leaves optional amount fields absent [0.25ms]
+(pass) Cedia usage surface > parses saved reset answers defensively and requires a redeem outcome on redeem answers [0.21ms]
+(pass) Cedia usage surface > starts disabled and does not configure polling or focus refetch [0.06ms]
+
+apps/macos/agent-window/test/cedia-progress.test.ts:
+(pass) Cedia native progress adapter > reads progress through the exact host route [0.15ms]
+(pass) Cedia native progress adapter > preserves a typed host refusal reason and code [0.09ms]
+
+apps/macos/agent-window/test/omp-policy-surface.test.tsx:
+(pass) OMP credit policy settings surface > reads policy through the adapter's owner route and preserves typed host errors [0.24ms]
+(pass) OMP credit policy settings surface > parses available and unavailable answers, and refuses malformed policy data [0.12ms]
+(pass) OMP credit policy settings surface > re-reads on focus without configuring a polling interval [0.03ms]
+(pass) OMP credit policy settings surface > explains a guarded override with stored and effective values [0.34ms]
+(pass) OMP credit policy settings surface > says when the owner's no setting applies and Cedia agrees [0.07ms]
+(pass) OMP credit policy settings surface > explains an unguarded process without claiming a Cedia guard [0.06ms]
+(pass) OMP credit policy settings surface > shows only the host reason when policy is unavailable [0.06ms]
+
+apps/macos/agent-window/test/tool-extensions-section.test.tsx:
+(pass) Extension catalog section > renders records with roots, states, and reasons [0.16ms]
+(pass) Extension catalog section > stays honest with no extensions and with an absent runtime [0.05ms]
+(pass) Extension catalog section > strictly parses the catalog and refuses the raw discovery bag [0.30ms]
+(pass) Extension catalog section > re-reads a missing catalog answer like the other session panels [0.04ms]
+(pass) Extension catalog section > offers a per-row enable/disable toggle except where another extension shadows the row [0.18ms]
+(pass) Extension catalog section > drives the toggle through the owner-only durable set route and re-reads the catalog [0.27ms]
+(pass) Extension catalog section > reads the catalog through the adapter route [0.09ms]
+
+apps/macos/agent-window/test/cedia-advisor.test.ts:
+(pass) Cedia native advisor adapter > reads, switches, and reads history through the exact host routes [0.45ms]
+(pass) Cedia native advisor adapter > preserves a typed host refusal reason and code [0.19ms]
+
+apps/macos/agent-window/test/cedia-queue-surface.test.tsx:
+(pass) Cedia queue surface > renders steering and follow-up text with truncation and image counts [0.95ms]
+(pass) Cedia queue surface > distinguishes an empty queue from an unavailable queue [0.35ms]
+(pass) Cedia queue surface > shows what a drop removed, including an explicit empty result [0.87ms]
+(pass) Cedia queue surface > shows mutation refusals and keeps queue parsing strict [0.47ms]
+(pass) Cedia queue surface > does not configure a polling interval [0.08ms]
+
+apps/macos/agent-window/test/browser-agent-attach-bar.test.tsx:
+(pass) BrowserAgentAttachBar > renders nothing without a capable bridge [0.34ms]
+(pass) BrowserAgentAttachBar > renders attach affordance and off state with a capable bridge [0.21ms]
+(pass) BrowserAgentAttachBar > attaches then steers the runtime, and detaches then clears steering [0.43ms]
+(pass) BrowserAgentAttachBar > does nothing when the confirm is declined [0.15ms]
+(pass) steeringConflictWarning > warns only when the relay is on [0.02ms]
+(pass) steeringConflictWarning > prepends the warning to the attach confirm [0.11ms]
+(pass) browserDisabledWarning > warns only when browser tools are disabled [0.02ms]
+
+apps/macos/agent-window/test/cedia-shell-surface.test.tsx:
+(pass) Cedia shell surface > offers Run idle and Abort while running, and shows the result plainly [0.75ms]
+(pass) Cedia shell surface > keeps shell parsing strict about the result shape [0.23ms]
+(pass) Cedia shell surface > names the shell mutation keys per session [0.06ms]
+
+apps/macos/agent-window/test/cedia-agents.test.ts:
+(pass) Cedia agents adapter > reads the roster through the exact encoded host path [0.16ms]
+(pass) Cedia agents adapter > reads a transcript with an explicit offset and defaults the offset to zero [0.13ms]
+(pass) Cedia agents adapter > kills and revives through the durable owner-only envelope [0.25ms]
+(pass) Cedia agents adapter > preserves a typed host refusal reason and code [0.08ms]
+
+apps/macos/agent-window/test/btw-side-question.test.tsx:
+(pass) Side-question surface > asks from the panel and offers branch plus copy on a ready answer [0.48ms]
+(pass) Side-question surface > names the branch refusal instead of offering a doomed branch [0.16ms]
+(pass) Side-question surface > stays honest while idle, failed, or without a runtime [0.20ms]
+(pass) Side-question surface > strictly parses the side-question state and the branch answer [0.18ms]
+(pass) Side-question surface > re-reads like the other session panels [0.03ms]
+(pass) Side-question surface > polls while an ask runs and never once it settles [0.03ms]
+(pass) Side-question surface > asks and branches through the adapter routes with the durable envelope [0.29ms]
+
+apps/macos/agent-window/test/capability-gate.test.ts:
+(pass) parses only the recognisable host rows and never invents one [0.03ms]
+(pass) maps host availability to a row state, keeping unknown distinct from missing [0.04ms]
+(pass) hides only what the host says is integration-missing [0.01ms]
+(pass) takes the gated sidebar row out only on an explicit host answer [0.02ms]
+(pass) names the known host capabilities and falls back to the id [0.01ms]
+(pass) gates rows only on capability ids the host actually advertises [1.75ms]
+(pass) offers the capability status destination and keeps unknown deep links on general [0.05ms]
+(pass) gates a settings destination the same way as a sidebar row [0.03ms]
+(pass) falls back out of a deep link into a destination the host reports as missing [0.05ms]
+(pass) keeps search results out of a destination that is gone [1.55ms]
+(pass) binds every gated settings destination to a capability the host advertises [0.64ms]
+
+apps/macos/agent-window/test/thread-retention.test.ts:
+(pass) says what an archive kept, in the host's own terms [0.08ms]
+(pass) says where Continue resumed, including the case where the branch had to change [0.12ms]
+(pass) says nothing when the host recorded nothing [0.02ms]
+
+apps/macos/agent-window/test/tool-codemode-section.test.tsx:
+(pass) Code Mode partition section > renders an engaged partition with direct names and prelude flags [0.20ms]
+(pass) Code Mode partition section > renders a disengaged partition without a direct list [0.04ms]
+(pass) Code Mode partition section > renders absence with the runtime reason [0.03ms]
+(pass) Code Mode partition section > strictly parses the Code Mode answer and refuses prelude sources [0.28ms]
+(pass) Code Mode partition section > re-reads a missing Code Mode answer like the other session panels [0.04ms]
+(pass) Code Mode partition section > reads the partition through the adapter route [0.23ms]
+
+apps/macos/agent-window/test/attachment-staging.test.ts:
+(pass) native staging never uploads (Cedia §10 item 61) > stages the locally created ids without a server round-trip [0.56ms]
+(pass) native staging never uploads (Cedia §10 item 61) > keeps assistant selections inline alongside staged ids [0.16ms]
+
+apps/macos/agent-window/test/cedia-agents-surface.test.tsx:
+(pass) Cedia agents surface > shows kind, status, activity, and nested ancestry [0.43ms]
+(pass) Cedia agents surface > labels an agent without a transcript and offers no transcript control [0.19ms]
+(pass) Cedia agents surface > renders an empty roster as nothing to show [0.15ms]
+(pass) Cedia agents surface > renders only the host reason when the roster is unavailable [0.06ms]
+(pass) Cedia agents surface > renders transcript roles, text, non-text part counts, and a reset notice [0.34ms]
+(pass) Cedia agents surface > appends a truncated transcript page and offers load more [0.71ms]
+(pass) Cedia agent lifecycle controls > offers Kill to live rows, Revive to parked rows, and nothing to terminal or advisor rows [0.30ms]
+(pass) Cedia agent lifecycle controls > renders the lifecycle error without touching the roster [0.51ms]
+(pass) Cedia agent lifecycle controls > parses kill/revive answers strictly [0.22ms]
+(pass) Cedia agent lifecycle controls > drives kill/revive mutations through the owner-only routes and re-reads the roster [0.75ms]
+(pass) agents config section > renders Roster and Config section tabs [1.16ms]
+(pass) agents config section > renders the config table with effective values and Configure buttons [0.68ms]
+(pass) agents config section > offers no Configure button without a configure handler [0.18ms]
+(pass) agents config section > shows the config absence reason honestly [0.11ms]
+(pass) agents config section > parses config list and config answers strictly [0.16ms]
+(pass) agents config section > names its own mutation key [0.03ms]
+
+apps/macos/agent-window/test/queue-transcript-order.test.ts:
+(pass) OMP transcript order keeps queued user/reply pairs in visible turn order [0.40ms]
+(pass) OMP activity sequence stays inside its queued turn when timestamps invert [0.97ms]
+(pass) message normalization preserves an authoritative transcript order [0.11ms]
+(pass) messages without transcript order retain chronological fallback ordering [0.05ms]
+
+apps/macos/agent-window/test/effort-picker.test.ts:
+(pass) uses only the selected OMP model's advertised effort options [0.47ms]
+(pass) preserves the selected OMP effort through draft normalization [0.17ms]
+(pass) uses OMP thinkingLevel for effort selection and reads it back [0.13ms]
+
+apps/macos/agent-window/test/loop-mode-chip.test.tsx:
+(pass) Loop mode chip > renders nothing unless loop mode is on [0.29ms]
+(pass) Loop mode chip > names a paused loop without offering a second pause control [0.11ms]
+(pass) Loop mode chip > strictly parses the loop mode answer [0.24ms]
+(pass) Loop mode chip > re-reads a missing loop answer like the other session panels [0.04ms]
+(pass) Loop mode chip > disables loop mode through the adapter route with the durable envelope [0.33ms]
+
+apps/macos/agent-window/test/cedia-model-state-surface.test.tsx:
+(pass) Cedia runtime model state surface > uses the open task session for settings and keeps the no-task case honest [0.07ms]
+(pass) Cedia runtime model state surface > shows configured and auto-resolved effort without guessing unknown values [0.45ms]
+(pass) Cedia runtime model state surface > shows the host reason when runtime state is unavailable [0.03ms]
+(pass) Cedia runtime model state surface > distinguishes unsupported and empty provider account lists [0.70ms]
+(pass) Cedia runtime model state surface > offers only runtime-published tiers and keeps no-vocabulary state read-only [0.35ms]
+
+apps/macos/agent-window/test/prewalk-status-chip.test.tsx:
+(pass) Prewalk armed chip > renders nothing unless armed [0.07ms]
+(pass) Prewalk armed chip > strictly parses the prewalk state answer [0.44ms]
+(pass) Prewalk armed chip > re-reads a missing prewalk answer like the other session panels [0.03ms]
+(pass) Prewalk armed chip > reads prewalk state through the adapter route [0.13ms]
+
+apps/macos/agent-window/test/composer-image-turn.test.ts:
+(pass) a pasted composer image reaches the OMP turn (Cedia §10 item 61) > carries the pasted bytes in images[] after the send clears the composer draft [1.65ms]
+(pass) a pasted composer image reaches the OMP turn (Cedia §10 item 61) > still sends an image-only turn the bootstrap message OMP can read [0.14ms]
+(pass) a pasted composer image reaches the OMP turn (Cedia §10 item 61) > releases the staged bytes once the turn settles [0.13ms]
+
+apps/macos/agent-window/test/cedia-send-reservation.test.ts:
+(pass) reserves the draft revision before dispatch and releases it after acceptance [0.21ms]
+(pass) stops a send whose revision was already sent with different text [0.11ms]
+(pass) sends with its own command id when the draft owner cannot answer [0.09ms]
+(pass) reports a failed post-acceptance draft clear without undoing the accepted send [3.88ms]
+
+apps/macos/agent-window/test/ide-theme-overlay.test.ts:
+(pass) IDE theme overlay respects user choice > follows the IDE pack when storage is still default [0.44ms]
+(pass) IDE theme overlay respects user choice > keeps the stored pack for unknown IDE names [0.12ms]
+(pass) IDE theme overlay respects user choice > lets a stored pack override the IDE mapping [0.18ms]
+(pass) IDE theme overlay respects user choice > keeps an explicit mode instead of forcing the host mode [0.03ms]
+
+apps/macos/agent-window/test/cedia-python-surface.test.tsx:
+(pass) Cedia Python surface > renders Python labels, display-output notes, and the language toggle [0.79ms]
+(pass) Cedia Python surface > reports a cancelled run without an exit code [1.94ms]
+(pass) Cedia Python surface > keeps Python parsing strict about the result shape [0.31ms]
+(pass) Cedia Python surface > names the Python mutation keys per session [0.06ms]
+
+apps/macos/agent-window/test/cedia-plan.test.ts:
+(pass) Cedia native plan adapter > reads and writes the session plan through the exact host routes and body [0.91ms]
+(pass) Cedia native plan adapter > preserves the host's typed refusal reason and code [0.15ms]
+
+apps/macos/agent-window/test/model-roles-surface.test.tsx:
+(pass) Cedia model roles surface > lists configured roles with their models and an apply action [0.71ms]
+(pass) Cedia model roles surface > renders per-row assignment and a new-role form [1.66ms]
+(pass) Cedia model roles surface > renders rows in the runtime cycle order, unknown roles last [0.65ms]
+(pass) Cedia model roles surface > stays honest with no configured roles and with an absent runtime [0.06ms]
+(pass) Cedia model roles surface > strictly parses the roles mapping and the apply answer [0.27ms]
+(pass) Cedia model roles surface > reads the mapping through the adapter routes with the durable envelope [0.36ms]
+
+apps/macos/agent-window/test/context-usage.test.ts:
+(pass) maps OMP current occupancy, including zero, without confusing lifetime usage [0.20ms]
+
+apps/macos/agent-window/test/selected-slash-provenance.test.ts:
+(pass) selected slash command provenance > keeps menu provenance across a rejected send and retry, then clears after success [0.04ms]
+(pass) selected slash command provenance > does not mark a manually typed slash prompt or another thread's draft [0.01ms]
+(pass) selected slash command provenance > fails closed before queueing a menu-selected slash draft and preserves its selection [0.06ms]
+
+apps/macos/agent-window/test/keyboard-shortcuts-panel.test.ts:
+(pass) Keybindings row editor predicate > keeps the editor closed for a command-less row when nothing is being edited [0.01ms]
+(pass) Keybindings row editor predicate > opens the editor only for the row whose command is the editing target
+(pass) Keybindings row editor predicate > keeps the editor closed for the other rows and for the new-binding form
+(pass) Keybindings capture target > ignores a capture on a row that is not being edited [0.01ms]
+(pass) Keybindings capture target > captures for the row being edited and for the new-binding form
+(pass) Keybindings save payload > carries the row's command with the captured chord and condition [0.03ms]
+(pass) Keybindings save payload > omits the condition and the replaced rule when there are none
+(pass) Keybindings save payload > stays inert while no chord has been captured
+
+apps/macos/agent-window/test/cedia-memory.test.ts:
+(pass) Cedia memory adapter > reads memory and fills command identity when applying the selected backend [0.29ms]
+(pass) Cedia memory adapter > preserves a typed host refusal reason and code [0.11ms]
+(pass) Cedia memory query contract > parses both shape-only state blocks and keeps absent blocks absent [0.27ms]
+(pass) Cedia memory query contract > rejects malformed blocks and only accepts an applied mutation answer when marked applied [0.13ms]
+(pass) Cedia memory query contract > does not configure a polling interval [0.03ms]
+
+apps/macos/agent-window/test/sidebar-toggle-icon.test.ts:
+(pass) fills the selected side inside the shared sidebar mark [4.18ms]
+
+apps/macos/agent-window/test/cedia-plan-surface.test.tsx:
+(pass) Cedia plan surfaces > renders review content and honestly marks bounded content [0.88ms]
+(pass) Cedia plan surfaces > renders unavailable state as a reason without a working-looking toggle [0.15ms]
+(pass) Cedia plan surfaces > keeps the runtime's paused plan state distinct from off [0.27ms]
+(pass) Cedia plan surfaces > prevents vibe start while plan mode is active and preserves the runtime hint [0.20ms]
+
+apps/macos/agent-window/test/omp-settings-adapter.test.ts:
+(pass) Cedia OMP settings adapter > forwards inventory, value and revision-checked write routes [0.25ms]
+(pass) Cedia OMP settings adapter > restores the host code the Electron transport flattened [0.12ms]
+(pass) Cedia OMP settings adapter > rejects with the host's typed code and message [0.07ms]
+
+apps/macos/agent-window/test/cedia-progress-surface.test.tsx:
+(pass) Cedia progress surface > renders every runtime status, blocker text, and presentation counts [0.46ms]
+(pass) Cedia progress surface > renders no panel when the runtime returns an empty phase list [0.03ms]
+(pass) Cedia progress surface > renders an unavailable reason without a working list [0.03ms]
+(pass) Cedia progress surface > parses the host answer defensively while preserving runtime order [0.07ms]
+
+apps/macos/agent-window/test/cedia-history.test.ts:
+(pass) Cedia native history adapter > reads history and transcript, and fills command identity for reset controls [0.29ms]
+(pass) Cedia native history adapter > preserves a typed owner refusal from a history control [0.08ms]
+(pass) Cedia history query parsers > normalizes the host history and transcript answers without inventing fields [0.11ms]
+(pass) Cedia history query parsers > rejects malformed or incomplete host answers [0.09ms]
+(pass) Cedia history query parsers > keeps history owner-triggered without a polling interval [0.05ms]
+
+apps/macos/agent-window/test/cedia-context-surface.test.tsx:
+(pass) Cedia context surface > renders usage, runtime maintenance, and active controls [1.20ms]
+(pass) Cedia context surface > renders absent usage as unavailable without inventing zeroes [0.66ms]
+(pass) Cedia context surface > requires a confirmation affordance for dropping images and reports the answer [0.82ms]
+(pass) Cedia context surface > requires a strategy confirmation and reports the runtime shake result [4.99ms]
+(pass) Cedia context surface > renders only the host reason when unavailable [0.27ms]
+(pass) Cedia context surface > parses usage defensively and leaves absent usage absent [0.83ms]
+(pass) Cedia context surface > does not configure a polling interval [0.04ms]
+(pass) Cedia context surface > renders runtime checkpoint and rewind facts in the History section [0.74ms]
+(pass) Cedia context surface > states plainly when the runtime has no checkpoint or rewind yet [0.61ms]
+(pass) Cedia context surface > shows the host reason when history is unavailable [0.45ms]
+(pass) Cedia context surface > warns when the runtime transcript is truncated [0.58ms]
+(pass) Cedia context surface > requires explicit confirmation for both destructive history controls [0.72ms]
+
+apps/macos/agent-window/test/turn-queue.test.ts:
+(pass) says how much work OMP is holding, and which model is running [0.10ms]
+(pass) never presents an unproven outcome as finished work [0.01ms]
+(pass) says nothing when there is nothing to say, and nothing it cannot prove [0.02ms]
+
+apps/macos/agent-window/test/cedia-tree.test.tsx:
+(pass) Cedia session tree > strictly parses the runtime tree and its lineage [0.20ms]
+(pass) Cedia session tree > renders the runtime rows, active path, lineage, and truncation without inventing points [0.50ms]
+(pass) Cedia session tree > keeps unavailable, parked, cancelled, and summarized navigation states honest [0.38ms]
+(pass) Cedia session tree > uses the tree routes and durable command envelope through the adapter [0.62ms]
+
+apps/macos/agent-window/test/host-preferences.test.ts:
+(pass) projects only the bound keys the host owns [0.28ms]
+(pass) takes the host's record into the window's own settings store and leaves the rest alone [71.88ms]
+(pass) hydrates a fresh profile with no stored entry instead of throwing [9.22ms]
+(pass) groups what this window holds by the host's own category [0.42ms]
+(pass) sends this window's change with the revision it read, and only for keys the host owns [12.05ms]
+(pass) applies the other window's committed revision when the main process publishes it [2.61ms]
+(pass) keeps this window's change and adopts the other window's when the host refuses a stale revision [2.85ms]
+(pass) keeps a change it could not save visible instead of reporting it as saved [38.48ms]
+(pass) is unavailable, not destructive, when the host cannot answer [0.49ms]
+(pass) stops listening when the renderer is torn down [0.07ms]
+
+apps/macos/agent-window/test/model-trigger-stability.test.tsx:
+(pass) shows the selected model while keeping width fixed across names and efforts [4.06ms]
+
+apps/macos/agent-window/test/cleanse-run-surface.test.tsx:
+(pass) Cleanse run surface > renders progress rows and the bounded held report [0.43ms]
+(pass) Cleanse run surface > offers abort while running and run while idle [0.18ms]
+(pass) Cleanse run surface > stays honest on failure and without a runtime [0.15ms]
+(pass) Cleanse run surface > strictly parses the run state and refuses repair bodies [0.28ms]
+(pass) Cleanse run surface > polls while a batch runs and never once it settles [0.07ms]
+(pass) Cleanse run surface > runs and aborts through the adapter routes with the durable envelope [0.36ms]
+
+apps/macos/agent-window/test/sidebar-ui-state.test.ts:
+(pass) restores a collapsed sidebar and preserves it through other sidebar updates [0.19ms]
+(pass) notifies a mounted shell when another window changes visibility [0.07ms]
+
+apps/macos/agent-window/test/provider-tabs.test.ts:
+(pass) derives one user-facing tab per OMP upstream provider and never exposes OMP [0.27ms]
+(pass) opens on the upstream tab that owns the selected provider-qualified model [0.05ms]
+(pass) resolves the proof target by stable tab id and supports the sole visible upstream tab fallback [0.04ms]
+(pass) moves upstream provider tabs without changing their stable ids [0.06ms]
+(pass) projects upstream provider additions and removals from updated OMP model catalogs [0.08ms]
+(pass) resolves bundled marks for upstream providers instead of falling back to a globe [0.14ms]
+(pass) renders a real SVG mark after provider-id resolution [0.09ms]
+
+apps/macos/agent-window/test/browser-steering-guard.test.tsx:
+(pass) reconcileBrowserSteering > re-steers to the new thread's live endpoint [0.15ms]
+(pass) reconcileBrowserSteering > clears steering when the new thread has nothing attached [0.03ms]
+(pass) reconcileBrowserSteering > always clears in split view, without even asking the endpoint [0.02ms]
+(pass) reconcileBrowserSteering > clears instead of steering when the relay voids the endpoint [0.03ms]
+(pass) reconcileBrowserSteering > clears instead of steering when browser tools are disabled [0.03ms]
+(pass) reconcileBrowserSteering > steers when the backend selection cannot be read [0.06ms]
+(pass) reconcileBrowserSteering > leaves steering untouched when the endpoint cannot be read [0.05ms]
+(pass) BrowserSteeringGuard > renders nothing [0.08ms]
+
+apps/macos/agent-window/test/ide-theme-pack.test.ts:
+(pass) packForIdeThemeName > maps exact and decorated IDE theme names [0.07ms]
+(pass) packForIdeThemeName > is case- and punctuation-insensitive [0.02ms]
+(pass) packForIdeThemeName > maps the stock VS Code themes to VS Code Plus [0.03ms]
+(pass) packForIdeThemeName > refuses packs that lack the requested variant [0.01ms]
+(pass) packForIdeThemeName > keeps the stored pack for unknown or missing names [0.02ms]
+
+apps/macos/agent-window/test/desktop-zoom.test.ts:
+(pass) hydrates the restored native zoom factor and publishes later changes [0.15ms]
+(pass) ignores invalid native values instead of collapsing the layout [0.05ms]
+
+apps/macos/agent-window/test/cedia-pause-surface.test.tsx:
+(pass) Cedia run pause surface > offers Pause while running and Resume with a badge while paused [0.42ms]
+(pass) Cedia run pause surface > keeps pause parsing strict about the gate shape [0.17ms]
+(pass) Cedia run pause surface > does not configure a polling interval [0.05ms]
+
+apps/macos/agent-window/test/ios-simulator.test.ts:
+(pass) discovers an installed Xcode when xcode-select still points at CommandLineTools [3.86ms]
+
+apps/macos/agent-window/test/cedia-advisor-config-surface.test.tsx:
+(pass) Cedia advisor config surface > offers Configure without opening the editor [0.30ms]
+(pass) Cedia advisor config surface > renders scope tabs, the file path, and the draft text [0.34ms]
+(pass) Cedia advisor config surface > names a missing file instead of an empty editor [0.23ms]
+(pass) Cedia advisor config surface > reports the applied roster and refuses loudly [0.39ms]
+(pass) Cedia advisor config surface > keeps config parsing strict about the file shape [0.18ms]
+(pass) Cedia advisor config surface > does not configure a polling interval [0.03ms]
+
+apps/macos/agent-window/test/cedia-status-bar.test.tsx:
+(pass) Cedia status bar values (item 55) > maps the live thread to host, model, session and branch [0.24ms]
+(pass) Cedia status bar values (item 55) > marks error and connecting sessions honestly [0.05ms]
+(pass) Cedia status bar values (item 55) > falls back to dashes without model or branch [0.01ms]
+(pass) Cedia status bar values (item 55) > returns null without a thread
+(pass) Cedia status bar values (item 55) > covers every session phase label [0.04ms]
+(pass) Cedia status bar values (item 55) > paints on the shared statusBar tokens [0.14ms]
+(pass) Cedia status bar values (item 55) > says a held model change is waiting for OMP instead of calling it the model [0.04ms]
+(pass) Cedia status bar values (item 55) > reports what OMP committed, and that a runtime without the boundary applied it at once [0.02ms]
+(pass) Cedia status bar values (item 55) > draws the queue OMP is holding, and nothing when it holds none [0.05ms]
+(pass) Cedia status bar values (item 55) > repeats the runtime's refusal and says nothing when no change is held [0.02ms]
+
+apps/macos/agent-window/test/cedia-queue.test.ts:
+(pass) Cedia native queue adapter > reads and drops queued submissions through the exact host routes [0.28ms]
+(pass) Cedia native queue adapter > preserves a typed host refusal reason and code [0.10ms]
+
+ 428 pass
+ 0 fail
+ 1537 expect() calls
+Ran 428 tests across 79 files. [1.55s]

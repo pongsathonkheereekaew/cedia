@@ -3690,7 +3690,7 @@ export class CediaHost {
       for (const intent of this.store.listOpenTurnIntents(runtime.session.id)) {
         const position = queued.findIndex(entry => entry.intentId === intent.turnIntentId);
         if (intent.turnIntentId === current) {
-          this.#recordTurn(runtime, intent, "running", { queuePosition: 0, ...(running ?? {}), reason: "OMP reported this turn running." });
+          this.#recordTurn(runtime, intent, "running", { ...(running ?? {}), reason: "OMP reported this turn running." });
         } else if (position >= 0) {
           const entry = queued[position]!;
           const next = typeof entry.position === "number" ? entry.position : position + 1;
@@ -3713,7 +3713,11 @@ export class CediaHost {
    */
   #recordTurn(runtime: Runtime, intent: TurnIntent | undefined, state: TurnState, fields: { evidenceSequence?: number; reason?: string; queuePosition?: number; model?: string; thinkingLevel?: string } = {}): void {
     if (intent === undefined) return;
-    if (intent.state === state) return;
+    // A submission boundary may precede the named model boundary. Retain later
+    // execution metadata even when the intent is already running.
+    if (intent.state === state
+      && (fields.model === undefined || fields.model === intent.model)
+      && (fields.thinkingLevel === undefined || fields.thinkingLevel === intent.thinkingLevel)) return;
     if (intent.state === "completed" || intent.state === "failed" || intent.state === "cancelled") return;
     // A turn never moves backwards. OMP can report a boundary before the transport ACK is
     // processed, so the acknowledgement of a turn that already started must not restate it as
@@ -4808,6 +4812,26 @@ export class CediaHost {
         }
       }
       const commandId = typeof frame.id === "string" ? runtime.wireCommands.get(frame.id) : undefined;
+      if (frame.type === "cedia_turn_boundary" && Array.isArray(frame.completedIntentIds) && Array.isArray(frame.runningIntentIds)) {
+        // OMP can drain several submitted follow-ups inside one agent run. Only
+        // its explicit submission boundary settles that batch; a tool/model
+        // turn_end does not. Keep activeCommand until the outer run finishes so
+        // a new prompt cannot overlap the queued work still executing.
+        for (const intentId of frame.completedIntentIds) {
+          if (typeof intentId !== "string") continue;
+          this.#recordTurn(runtime, this.store.getTurnIntent(runtime.session.id, intentId), "completed", {
+            evidenceSequence: event.sequence, reason: "OMP reported this submission batch finishing.",
+          });
+        }
+        for (const intentId of frame.runningIntentIds) {
+          if (typeof intentId !== "string") continue;
+          this.#recordTurn(runtime, this.store.getTurnIntent(runtime.session.id, intentId), "running", {
+            evidenceSequence: event.sequence, reason: "OMP reported this submission batch starting.",
+            ...(typeof frame.cediaModel === "string" ? { model: frame.cediaModel } : {}),
+            ...(typeof frame.cediaThinkingLevel === "string" ? { thinkingLevel: frame.cediaThinkingLevel } : {}),
+          });
+        }
+      }
       if (frame.type === "agent_start" || frame.type === "turn_start") {
         // A runtime with the turn bridge names the submission outright; otherwise the oldest
         // open intent is the only honest answer Cedia has.

@@ -1,0 +1,274 @@
+{
+  "body": {
+    "mode": "one-at-a-time",
+    "modelHits": 3,
+    "boundaries": [
+      {
+        "sequence": 147,
+        "frame": {
+          "cediaModel": "cedia-queue-fixture/cedia-queue-fixture-model",
+          "completedIntentIds": [
+            "turn-a195b167-3acf-42e6-9856-ae1fce1d4ed8"
+          ],
+          "runningIntentIds": [
+            "turn-01e5ef56-b2c5-4a3e-9223-2a18ddff7be5"
+          ],
+          "type": "cedia_turn_boundary"
+        }
+      },
+      {
+        "sequence": 161,
+        "frame": {
+          "cediaModel": "cedia-queue-fixture/cedia-queue-fixture-model",
+          "completedIntentIds": [
+            "turn-01e5ef56-b2c5-4a3e-9223-2a18ddff7be5"
+          ],
+          "runningIntentIds": [
+            "turn-8fa75f07-4b68-43ef-8b8a-afb0ce022f7b"
+          ],
+          "type": "cedia_turn_boundary"
+        }
+      },
+      {
+        "sequence": 182,
+        "frame": {
+          "cediaModel": "cedia-queue-fixture/cedia-queue-fixture-model",
+          "completedIntentIds": [
+            "turn-8fa75f07-4b68-43ef-8b8a-afb0ce022f7b"
+          ],
+          "runningIntentIds": [],
+          "type": "cedia_turn_boundary"
+        }
+      }
+    ],
+    "intents": [
+      {
+        "turnIntentId": "turn-a195b167-3acf-42e6-9856-ae1fce1d4ed8",
+        "commandId": "a195b167-3acf-42e6-9856-ae1fce1d4ed8",
+        "deviceId": "6b2cd274-8537-4bc9-bb3e-e3aa5e234d32",
+        "incarnation": "5e6f329d-df28-414b-a9f3-836f27ef106c",
+        "payloadHash": "df406a8c9b447295097473e658530ea10610b333c77cc935452f6406c9d881d0",
+        "acceptedSequence": 1,
+        "state": "completed",
+        "createdAt": "2026-09-30T07:34:00.564Z",
+        "updatedAt": "2026-09-30T07:34:01.901Z",
+        "evidenceSequence": 147,
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model",
+        "reason": "OMP reported this submission batch finishing."
+      },
+      {
+        "turnIntentId": "turn-01e5ef56-b2c5-4a3e-9223-2a18ddff7be5",
+        "commandId": "01e5ef56-b2c5-4a3e-9223-2a18ddff7be5",
+        "deviceId": "6b2cd274-8537-4bc9-bb3e-e3aa5e234d32",
+        "incarnation": "5e6f329d-df28-414b-a9f3-836f27ef106c",
+        "payloadHash": "277336be95baa9992acc96e75a6a264ad0275ae822463d31bba50d246ae28ea0",
+        "acceptedSequence": 2,
+        "state": "completed",
+        "createdAt": "2026-09-30T07:34:01.315Z",
+        "updatedAt": "2026-09-30T07:34:01.920Z",
+        "queuePosition": 1,
+        "evidenceSequence": 161,
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model",
+        "reason": "OMP reported this submission batch finishing."
+      },
+      {
+        "turnIntentId": "turn-8fa75f07-4b68-43ef-8b8a-afb0ce022f7b",
+        "commandId": "8fa75f07-4b68-43ef-8b8a-afb0ce022f7b",
+        "deviceId": "6b2cd274-8537-4bc9-bb3e-e3aa5e234d32",
+        "incarnation": "5e6f329d-df28-414b-a9f3-836f27ef106c",
+        "payloadHash": "62225d23df3d4899f3ea30aacc8751f59865bfd91346dbc28684cb289fa09d65",
+        "acceptedSequence": 3,
+        "state": "completed",
+        "createdAt": "2026-09-30T07:34:01.498Z",
+        "updatedAt": "2026-09-30T07:34:02.048Z",
+        "queuePosition": 1,
+        "evidenceSequence": 182,
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model",
+        "reason": "OMP reported this submission batch finishing."
+      }
+    ],
+    "requestUserMessages": [
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "<system-reminder>\nToday: 2026-09-30; current working directory: '/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-host-work-ud105H'. Do not repeat this information in your reply.\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "Queue A: first local task"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "<system-reminder>\nToday: 2026-09-30; current working directory: '/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-host-work-ud105H'. Do not repeat this information in your reply.\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "Queue A: first local task"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Queue B: second local task"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "<system-reminder>\nToday: 2026-09-30; current working directory: '/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-host-work-ud105H'. Do not repeat this information in your reply.\n</system-reminder>"
+            },
+            {
+              "type": "text",
+              "text": "Queue A: first local task"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Queue B: second local task"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Queue C: third local task"
+            }
+          ]
+        }
+      ]
+    ]
+  },
+  "output": "/Users/pond/cedia/dist/queue-browser-proof/2026-09-30T07-33-47.008Z",
+  "assets": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-native-final-uvGwzw/Cedia.app/Contents/Resources/app/out/vs/cedia/agent",
+  "nativeApp": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-native-final-uvGwzw/Cedia.app",
+  "assetSha256": "1af1db63f37d06e0c23ef2566d4eca21b2a4a7108af551c08ae850bcf0bde6a9",
+  "errors": [],
+  "submissions": [
+    {
+      "type": "thread.turn.start",
+      "commandId": "a195b167-3acf-42e6-9856-ae1fce1d4ed8",
+      "threadId": "ab09cc66-171d-48df-afda-6c14dc68059f",
+      "message": {
+        "messageId": "4fc39e20-5d9e-4329-ac80-1435e2a2ed10",
+        "role": "user",
+        "text": "Queue A: first local task",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T07:34:00.059Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "01e5ef56-b2c5-4a3e-9223-2a18ddff7be5",
+      "threadId": "ab09cc66-171d-48df-afda-6c14dc68059f",
+      "message": {
+        "messageId": "a8b9d719-030d-4363-ae97-6d12a1d87eff",
+        "role": "user",
+        "text": "Queue B: second local task",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T07:34:01.186Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "8fa75f07-4b68-43ef-8b8a-afb0ce022f7b",
+      "threadId": "ab09cc66-171d-48df-afda-6c14dc68059f",
+      "message": {
+        "messageId": "f37f6e45-0a5c-4231-b0e9-ffcca4918052",
+        "role": "user",
+        "text": "Queue C: third local task",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T07:34:01.413Z",
+      "proofSettled": true
+    }
+  ],
+  "transcript": {
+    "text": "Queue A: first local task\n\n2:34 PM\nLocal task A completed.\n\n2:34 PM\nQueue B: second local task\n\n2:34 PM\nLocal task B completed.\n\n2:34 PM\nQueue C: third local task\n\n2:34 PM\nLocal task C completed.\n\n2:34 PM",
+    "visualRows": [
+      {
+        "text": "Queue A: first local task\n\n2:34 PM",
+        "top": -79
+      },
+      {
+        "text": "Local task A completed.\n\n2:34 PM",
+        "top": 4
+      },
+      {
+        "text": "Queue B: second local task\n\n2:34 PM",
+        "top": 62
+      },
+      {
+        "text": "Local task B completed.\n\n2:34 PM",
+        "top": 145
+      },
+      {
+        "text": "Queue C: third local task\n\n2:34 PM",
+        "top": 203
+      },
+      {
+        "text": "Local task C completed.\n\n2:34 PM",
+        "top": 286
+      }
+    ],
+    "orderedUniqueMessages": 6,
+    "stopControlHidden": true
+  },
+  "runtime": {
+    "executable": "/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-native-final-uvGwzw/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/omp/omp",
+    "version": "omp/18.4.3",
+    "executableSha256": "bfafe01e3106dfc3fb28b6ce32d86157a11e3ebc965b573b23a36d262e6fe954"
+  },
+  "ok": true,
+  "modelHits": 3,
+  "executeMode": true
+}

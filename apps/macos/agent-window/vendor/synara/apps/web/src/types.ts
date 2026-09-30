@@ -108,6 +108,8 @@ export interface ChatMessage {
   id: MessageId;
   role: "user" | "assistant" | "system";
   text: string;
+  /** Provider-owned causal order, when the runtime exposes one. */
+  transcriptOrder?: number;
   /** Slices of streamed assistant text between row-making provider events. */
   textSegments?: OrchestrationMessageTextSegment[];
   asyncUserInput?: import("@synara/contracts").AsyncUserInput;

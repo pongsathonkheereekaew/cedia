@@ -1,0 +1,421 @@
+{
+  "body": {
+    "mode": "one-at-a-time",
+    "modelHits": 3,
+    "boundaries": [
+      {
+        "sequence": 202,
+        "frame": {
+          "cediaModel": "cedia-queue-fixture/cedia-queue-fixture-model",
+          "completedIntentIds": [
+            "turn-b373975f-26fd-4114-89b4-e78d257ff9f1"
+          ],
+          "runningIntentIds": [
+            "turn-ed9d0cd8-5a81-42da-8423-4489edb7d6c1"
+          ],
+          "type": "cedia_turn_boundary"
+        }
+      },
+      {
+        "sequence": 219,
+        "frame": {
+          "cediaModel": "cedia-queue-fixture/cedia-queue-fixture-model",
+          "completedIntentIds": [
+            "turn-ed9d0cd8-5a81-42da-8423-4489edb7d6c1"
+          ],
+          "runningIntentIds": [
+            "turn-b0bcc0f6-e9c8-411a-8e25-8568a996fb76"
+          ],
+          "type": "cedia_turn_boundary"
+        }
+      },
+      {
+        "sequence": 234,
+        "frame": {
+          "cediaModel": "cedia-queue-fixture/cedia-queue-fixture-model",
+          "completedIntentIds": [
+            "turn-b0bcc0f6-e9c8-411a-8e25-8568a996fb76"
+          ],
+          "runningIntentIds": [],
+          "type": "cedia_turn_boundary"
+        }
+      }
+    ],
+    "intents": [
+      {
+        "turnIntentId": "turn-b373975f-26fd-4114-89b4-e78d257ff9f1",
+        "commandId": "b373975f-26fd-4114-89b4-e78d257ff9f1",
+        "deviceId": "38d9d038-3918-4a68-8644-e07d34a6e119",
+        "incarnation": "20ef48df-ff6c-40e7-ad68-e56209e2aff6",
+        "payloadHash": "8f5c7216b61f41dab37f984bceb37fe09205801c4a2f76e5f0b53ad75b134b51",
+        "acceptedSequence": 1,
+        "state": "completed",
+        "createdAt": "2026-09-30T08:24:21.058Z",
+        "updatedAt": "2026-09-30T08:24:27.776Z",
+        "evidenceSequence": 202,
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model",
+        "reason": "OMP reported this submission batch finishing."
+      },
+      {
+        "turnIntentId": "turn-ed9d0cd8-5a81-42da-8423-4489edb7d6c1",
+        "commandId": "ed9d0cd8-5a81-42da-8423-4489edb7d6c1",
+        "deviceId": "38d9d038-3918-4a68-8644-e07d34a6e119",
+        "incarnation": "20ef48df-ff6c-40e7-ad68-e56209e2aff6",
+        "payloadHash": "559fe1ffe4d5bde10fe4dd1a152ab2a3cfc55cfe581ff22eae2c552c5a77f037",
+        "acceptedSequence": 2,
+        "state": "completed",
+        "createdAt": "2026-09-30T08:24:23.593Z",
+        "updatedAt": "2026-09-30T08:24:27.953Z",
+        "queuePosition": 1,
+        "evidenceSequence": 219,
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model",
+        "reason": "OMP reported this submission batch finishing."
+      },
+      {
+        "turnIntentId": "turn-b0bcc0f6-e9c8-411a-8e25-8568a996fb76",
+        "commandId": "b0bcc0f6-e9c8-411a-8e25-8568a996fb76",
+        "deviceId": "38d9d038-3918-4a68-8644-e07d34a6e119",
+        "incarnation": "20ef48df-ff6c-40e7-ad68-e56209e2aff6",
+        "payloadHash": "131fab0ea1d9f9a288a14529d6fe8b8678f8e112c653d54d8a8e7f902ac4372d",
+        "acceptedSequence": 3,
+        "state": "completed",
+        "createdAt": "2026-09-30T08:24:26.995Z",
+        "updatedAt": "2026-09-30T08:24:28.106Z",
+        "queuePosition": 1,
+        "evidenceSequence": 234,
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model",
+        "reason": "OMP reported this submission batch finishing."
+      }
+    ],
+    "queueAttachmentFailures": [],
+    "requestSummaries": [
+      {
+        "model": "cedia-queue-fixture-model",
+        "stream": true,
+        "messageCount": 2,
+        "userMessages": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "chars": 209
+              },
+              {
+                "type": "text",
+                "chars": 25
+              },
+              {
+                "type": "image_url",
+                "image": {
+                  "representation": "data-uri",
+                  "mediaType": "image/webp",
+                  "encodedChars": 288,
+                  "payloadBytes": 216,
+                  "signature": "52494646d000000057454250"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "model": "cedia-queue-fixture-model",
+        "stream": true,
+        "messageCount": 4,
+        "userMessages": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "chars": 209
+              },
+              {
+                "type": "text",
+                "chars": 25
+              },
+              {
+                "type": "image_url",
+                "image": {
+                  "representation": "data-uri",
+                  "mediaType": "image/webp",
+                  "encodedChars": 288,
+                  "payloadBytes": 216,
+                  "signature": "52494646d000000057454250"
+                }
+              }
+            ]
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "chars": 26
+              },
+              {
+                "type": "image_url",
+                "image": {
+                  "representation": "data-uri",
+                  "mediaType": "image/webp",
+                  "encodedChars": 184,
+                  "payloadBytes": 138,
+                  "signature": "524946468200000057454250"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "model": "cedia-queue-fixture-model",
+        "stream": true,
+        "messageCount": 6,
+        "userMessages": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "chars": 209
+              },
+              {
+                "type": "text",
+                "chars": 25
+              },
+              {
+                "type": "image_url",
+                "image": {
+                  "representation": "data-uri",
+                  "mediaType": "image/webp",
+                  "encodedChars": 288,
+                  "payloadBytes": 216,
+                  "signature": "52494646d000000057454250"
+                }
+              }
+            ]
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "chars": 26
+              },
+              {
+                "type": "image_url",
+                "image": {
+                  "representation": "data-uri",
+                  "mediaType": "image/webp",
+                  "encodedChars": 184,
+                  "payloadBytes": 138,
+                  "signature": "524946468200000057454250"
+                }
+              }
+            ]
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "chars": 25
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "output": "/Users/pond/cedia/dist/queue-browser-proof/2026-09-30T08-24-02.606Z",
+  "assets": "/Users/pond/cedia/dist/agent-window",
+  "assetSha256": "9a961514bb0cac76b8840060e7a8a94382e090037eb625e4642c0541659fa80c",
+  "errors": [],
+  "submissions": [
+    {
+      "type": "thread.turn.start",
+      "commandId": "b373975f-26fd-4114-89b4-e78d257ff9f1",
+      "threadId": "c6d5cfbf-78fa-477f-b64b-30859223562f",
+      "message": {
+        "messageId": "8e9b9441-9119-4562-b99e-69136783babf",
+        "role": "user",
+        "text": "Queue A: first local task",
+        "attachments": [
+          {
+            "type": "image",
+            "id": "0130e7f8-877f-4cc0-ac49-86ee893d302c",
+            "name": "queue-a-red.png",
+            "mimeType": "image/png",
+            "sizeBytes": 70
+          }
+        ]
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T08:24:20.581Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "ed9d0cd8-5a81-42da-8423-4489edb7d6c1",
+      "threadId": "c6d5cfbf-78fa-477f-b64b-30859223562f",
+      "message": {
+        "messageId": "7374d1ec-d477-4ea8-9911-284c1c85a1eb",
+        "role": "user",
+        "text": "Queue B: second local task",
+        "attachments": [
+          {
+            "type": "image",
+            "id": "87c0adb4-a1e9-4ab4-bc1a-128dcbbb2c08",
+            "name": "queue-b-white.png",
+            "mimeType": "image/png",
+            "sizeBytes": 70
+          }
+        ]
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T08:24:23.453Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "b0bcc0f6-e9c8-411a-8e25-8568a996fb76",
+      "threadId": "c6d5cfbf-78fa-477f-b64b-30859223562f",
+      "message": {
+        "messageId": "851431b9-1e58-430e-905d-2c33c9ee6a61",
+        "role": "user",
+        "text": "Queue C: third local task",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T08:24:26.738Z",
+      "proofSettled": true
+    }
+  ],
+  "transcript": {
+    "text": "Queue A: first local task\n\n3:24 PM\nLocal task A completed.\n\n3:24 PM\nQueue B: second local task\n\n3:24 PM\nLocal task B completed.\n\n3:24 PM\nQueue C: third local task\n\n3:24 PM\nLocal task C completed.\n\n3:24 PM",
+    "visualRows": [
+      {
+        "text": "Queue A: first local task\n\n3:24 PM",
+        "top": -105
+      },
+      {
+        "text": "Local task A completed.\n\n3:24 PM",
+        "top": 43
+      },
+      {
+        "text": "Queue B: second local task\n\n3:24 PM",
+        "top": 101
+      },
+      {
+        "text": "Local task B completed.\n\n3:24 PM",
+        "top": 249
+      },
+      {
+        "text": "Queue C: third local task\n\n3:24 PM",
+        "top": 307
+      },
+      {
+        "text": "Local task C completed.\n\n3:24 PM",
+        "top": 390
+      }
+    ],
+    "orderedUniqueMessages": 6,
+    "stopControlHidden": true,
+    "images": [
+      {
+        "text": "Queue A: first local task",
+        "imageCount": 1,
+        "decoded": {
+          "naturalWidth": 200,
+          "naturalHeight": 200,
+          "pixel": [
+            255,
+            0,
+            0,
+            127
+          ],
+          "src": "data:image/webp;base64,UklGRtAAAABXRUJQVlA4WAoAAAAQAAAAxwAAxwAAQUxQSBUAAAABB9C/iAgoSNuAqX/73Ynof3L/PQQAVlA4IJQAAADQDACdASrIAMgAPm02mUmkIyKhIEgAgA2JaW7hdrEe3AfgAAAnteirhBkENVSa7bRcIMghqqTXbaLhBkENVSa7bRcIMghqqTXbaLhBkENVSa7bRcIMghqqTXbaLhBkENVSa7bRcIMghqqTXbaLOAAA/v9wPf//+QXLC65Gv//5Af8gP+QH/8fFNNpxC5wIAAAAAAAA"
+        }
+      },
+      {
+        "text": "Queue B: second local task",
+        "imageCount": 1,
+        "decoded": {
+          "naturalWidth": 200,
+          "naturalHeight": 200,
+          "pixel": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "src": "data:image/webp;base64,UklGRoIAAABXRUJQVlA4IHYAAABQDACdASrIAMgAPm02mUmkIyKhIEgAgA2JaW7hdrEbQBPa9FXCDIIaqk122i4QZBDVUmu20XCDIIaqk122i4QZBDVUmu20XCDIIaqk122i4QZBDVUmu20XCDIIaqk122i4QZBDVUmu20WcAAD+/9GgAAAAAAAA"
+        }
+      },
+      {
+        "text": "Queue C: third local task",
+        "imageCount": 0
+      }
+    ],
+    "restoredImages": [
+      {
+        "text": "Queue A: first local task",
+        "imageCount": 1,
+        "decoded": {
+          "naturalWidth": 200,
+          "naturalHeight": 200,
+          "pixel": [
+            255,
+            0,
+            0,
+            127
+          ],
+          "src": "data:image/webp;base64,UklGRtAAAABXRUJQVlA4WAoAAAAQAAAAxwAAxwAAQUxQSBUAAAABB9C/iAgoSNuAqX/73Ynof3L/PQQAVlA4IJQAAADQDACdASrIAMgAPm02mUmkIyKhIEgAgA2JaW7hdrEe3AfgAAAnteirhBkENVSa7bRcIMghqqTXbaLhBkENVSa7bRcIMghqqTXbaLhBkENVSa7bRcIMghqqTXbaLhBkENVSa7bRcIMghqqTXbaLOAAA/v9wPf//+QXLC65Gv//5Af8gP+QH/8fFNNpxC5wIAAAAAAAA"
+        }
+      },
+      {
+        "text": "Queue B: second local task",
+        "imageCount": 1,
+        "decoded": {
+          "naturalWidth": 200,
+          "naturalHeight": 200,
+          "pixel": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "src": "data:image/webp;base64,UklGRoIAAABXRUJQVlA4IHYAAABQDACdASrIAMgAPm02mUmkIyKhIEgAgA2JaW7hdrEbQBPa9FXCDIIaqk122i4QZBDVUmu20XCDIIaqk122i4QZBDVUmu20XCDIIaqk122i4QZBDVUmu20XCDIIaqk122i4QZBDVUmu20WcAAD+/9GgAAAAAAAA"
+        }
+      },
+      {
+        "text": "Queue C: third local task",
+        "imageCount": 0
+      }
+    ]
+  },
+  "runtime": {
+    "executable": "/Users/pond/cedia/dist/omp/omp",
+    "version": "omp/18.4.3",
+    "executableSha256": "f78a41a46ca6f76240f4e0c6c07dcc9b6537823babbe97cc5872cdc435a1c107"
+  },
+  "ok": true,
+  "modelHits": 3,
+  "executeMode": true
+}

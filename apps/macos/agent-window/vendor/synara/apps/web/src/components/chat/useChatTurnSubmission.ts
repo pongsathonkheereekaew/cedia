@@ -825,7 +825,7 @@ export function useChatTurnSubmission({
       // A native OMP follow-up is only queued, not transcript history yet.
       // Its queue receipt is visible in Task controls; a dropped entry will
       // never produce the user echo that normally reconciles optimistic rows.
-      const isOmpQueuedFollowUp = selectedProviderForSend === "omp" && hasQueueableLiveTurn && dispatchMode === "queue";
+      const isOmpQueuedFollowUp = selectedProviderForSend === "omp" && hasLiveTurn && dispatchMode === "queue";
       if (!isOmpQueuedFollowUp) {
         setOptimisticUserMessages((existing) => [
           ...existing,

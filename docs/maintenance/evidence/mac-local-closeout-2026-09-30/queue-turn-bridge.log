@@ -1,0 +1,70 @@
+$ bun scripts/omp-turn-bridge-smoke.ts
+{
+  "ok": true,
+  "runtime": {
+    "executable": "/Users/pond/cedia/dist/omp/omp",
+    "version": "omp/18.4.3",
+    "binarySha256": "f78a41a46ca6f76240f4e0c6c07dcc9b6537823babbe97cc5872cdc435a1c107"
+  },
+  "advertisedTurnBridge": true,
+  "echoedOn": [
+    "agent_start",
+    "turn_start",
+    "turn_end",
+    "agent_end"
+  ],
+  "currentIntent": "turn-smoke-1",
+  "currentModel": "fixture/fixture-model",
+  "queued": [
+    {
+      "intentId": "turn-smoke-2",
+      "kind": "followUp",
+      "position": 1
+    }
+  ],
+  "pendingModelRevision": 1,
+  "appliedModel": "fixture/fixture-model-2",
+  "framesSeen": [
+    "ready",
+    "extension_ui_request",
+    "response",
+    "response",
+    "available_commands_update",
+    "available_commands_update",
+    "agent_start",
+    "response",
+    "response",
+    "response",
+    "response",
+    "response",
+    "turn_start",
+    "message_start",
+    "message_end",
+    "response",
+    "message_start",
+    "message_end",
+    "turn_end",
+    "cedia_turn_boundary",
+    "agent_end",
+    "extension_ui_request",
+    "response",
+    "prompt_result",
+    "model_changed",
+    "response",
+    "thinking_level_changed",
+    "agent_start",
+    "turn_start",
+    "message_start",
+    "message_end",
+    "response",
+    "message_start",
+    "message_end",
+    "turn_end",
+    "cedia_turn_boundary",
+    "agent_end",
+    "extension_ui_request",
+    "response",
+    "prompt_result",
+    "extension_ui_request"
+  ]
+}

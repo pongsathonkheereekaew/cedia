@@ -2282,6 +2282,21 @@ function compareActivityLifecycleRank(kind: string): number {
 }
 
 function compareTimelineEntries(left: TimelineEntry, right: TimelineEntry): number {
+  const leftMessage =
+    left.kind === "message" || left.kind === "message-segment" ? left.message : undefined;
+  const rightMessage =
+    right.kind === "message" || right.kind === "message-segment" ? right.message : undefined;
+  const leftTranscriptOrder =
+    leftMessage?.transcriptOrder ?? (left.kind === "work" ? left.entry.sequence : undefined);
+  const rightTranscriptOrder =
+    rightMessage?.transcriptOrder ?? (right.kind === "work" ? right.entry.sequence : undefined);
+  if (
+    leftTranscriptOrder !== undefined &&
+    rightTranscriptOrder !== undefined &&
+    leftTranscriptOrder !== rightTranscriptOrder
+  ) {
+    return leftTranscriptOrder - rightTranscriptOrder;
+  }
   if (
     "sequence" in left &&
     "sequence" in right &&
@@ -2295,6 +2310,32 @@ function compareTimelineEntries(left: TimelineEntry, right: TimelineEntry): numb
 }
 
 type TimelineComparator = (left: TimelineEntry, right: TimelineEntry) => number;
+
+function compareMessagesByTranscriptOrder(left: ChatMessage, right: ChatMessage): number {
+  if (
+    left.transcriptOrder !== undefined &&
+    right.transcriptOrder !== undefined &&
+    left.transcriptOrder !== right.transcriptOrder
+  ) {
+    return left.transcriptOrder - right.transcriptOrder;
+  }
+  return left.createdAt.localeCompare(right.createdAt);
+}
+
+function messagesWithTranscriptOrderAreOrdered(messages: ReadonlyArray<ChatMessage>): boolean {
+  for (let index = 1; index < messages.length; index += 1) {
+    const previous = messages[index - 1]!;
+    const current = messages[index]!;
+    if (
+      previous.transcriptOrder === undefined ||
+      current.transcriptOrder === undefined ||
+      previous.transcriptOrder > current.transcriptOrder
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function areTimelineEntriesOrdered(
   entries: ReadonlyArray<TimelineEntry>,
@@ -2505,15 +2546,31 @@ export function deriveTimelineEntries(
   // Late tool completion/replay timestamps must not move an earlier turn's
   // work below a new user request and inflate that request's tool disclosure.
   const userStarts: string[] = [];
+  const userStartTranscriptOrders: Array<{ transcriptOrder: number; order: number }> = [];
   const messageOrder = new Map<string, number>();
   const turnOrder = new Map<string, number>();
-  const messagesOrdered = messages.every(
-    (message, index) =>
-      index === 0 || messages[index - 1]!.createdAt.localeCompare(message.createdAt) <= 0,
+  const allMessagesHaveTranscriptOrder =
+    messages.length > 0 && messages.every((message) => message.transcriptOrder !== undefined);
+  const noMessagesHaveTranscriptOrder = messages.every(
+    (message) => message.transcriptOrder === undefined,
   );
-  const orderedMessages = messagesOrdered
-    ? messages
-    : messages.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // A mixed snapshot can contain an optimistic row that has no provider order.
+  // Keep that source order intact rather than comparing an authoritative rank to
+  // a local timestamp (which is not a transitive ordering). Once the provider
+  // owns every row, its causal order is the primary key; legacy providers keep
+  // the established chronological fallback.
+  const orderedMessages = allMessagesHaveTranscriptOrder
+    ? messagesWithTranscriptOrderAreOrdered(messages)
+      ? messages
+      : messages.toSorted(compareMessagesByTranscriptOrder)
+    : noMessagesHaveTranscriptOrder
+      ? messages.every(
+          (message, index) =>
+            index === 0 || messages[index - 1]!.createdAt.localeCompare(message.createdAt) <= 0,
+        )
+        ? messages
+        : messages.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
+      : messages;
   for (const message of orderedMessages) {
     // Effective dispatch semantics are recorded before an emulated steer waits
     // for interruption/promotion. Fall back to turn binding for events written
@@ -2524,6 +2581,12 @@ export function deriveTimelineEntries(
         (message.turnId !== null && message.turnId !== undefined));
     if (message.role === "user" && startsNewTurn) {
       userStarts.push(message.createdAt);
+      if (message.transcriptOrder !== undefined) {
+        userStartTranscriptOrders.push({
+          transcriptOrder: message.transcriptOrder,
+          order: userStarts.length,
+        });
+      }
     }
     const order = userStarts.length;
     messageOrder.set(message.id, order);
@@ -2531,14 +2594,28 @@ export function deriveTimelineEntries(
   }
   // Unattributed legacy activity keeps its chronological position.
   const chronologicalOrder = (createdAt: string): number => {
-    let low = 0;
-    let high = userStarts.length;
-    while (low < high) {
-      const mid = (low + high) >>> 1;
-      if (userStarts[mid]!.localeCompare(createdAt) <= 0) low = mid + 1;
-      else high = mid;
+    let order = 0;
+    for (let index = 0; index < userStarts.length; index += 1) {
+      if (userStarts[index]!.localeCompare(createdAt) <= 0) {
+        order = Math.max(order, index + 1);
+      }
     }
-    return low;
+    return order;
+  };
+  // Cedia's OMP adapter uses the same transcript index for message rows and
+  // activity sequence values. Use the authoritative subset even when a local
+  // optimistic row is present; its missing rank must not move an older queued
+  // work row across a later provider-owned turn.
+  const transcriptTurnOrder = (transcriptOrder: number): number | undefined => {
+    if (!Number.isSafeInteger(transcriptOrder) || userStartTranscriptOrders.length === 0) {
+      return undefined;
+    }
+    let order = 0;
+    for (const boundary of userStartTranscriptOrders) {
+      if (boundary.transcriptOrder > transcriptOrder) break;
+      order = boundary.order;
+    }
+    return order;
   };
   const orderByEntry = new Map<TimelineEntry, number>();
   for (const entry of [...messageRows, ...proposedPlanRows, ...workRows]) {
@@ -2556,9 +2633,19 @@ export function deriveTimelineEntries(
       (entry.kind === "work" ? entry.entry.turnId : entry.proposedPlan.turnId) ?? undefined;
     const turnBlock = turnId === undefined ? undefined : turnOrder.get(turnId);
     const chronological = chronologicalOrder(entry.createdAt);
+    const coordinateTurnBlock =
+      userStartTranscriptOrders.length > 0 &&
+      entry.kind === "work" &&
+      entry.entry.sequence !== undefined
+        ? transcriptTurnOrder(entry.entry.sequence)
+        : undefined;
     orderByEntry.set(
       entry,
-      turnBlock === undefined ? chronological : Math.min(turnBlock, chronological),
+      coordinateTurnBlock !== undefined
+        ? coordinateTurnBlock
+        : turnBlock === undefined
+          ? chronological
+          : Math.min(turnBlock, chronological),
     );
   }
   const compare: TimelineComparator = (left, right) =>

@@ -1,0 +1,1842 @@
+$ bun test packages/omp-adapter packages/relay apps/host apps/macos/test scripts/lib
+bun test v1.4.2 (744846f84)
+
+scripts/lib/packaged-shared-state-window-monitor.test.ts:
+(pass) captures page errors from a second Electron window without duplicate listeners [0.26ms]
+
+scripts/lib/omp-native-confirm-editor.test.ts:
+(pass) selects the renderer showing the edited buffer after the approval handoff [0.04ms]
+(pass) uses the disk baseline to find the editor immediately after opening [0.01ms]
+
+scripts/lib/packaged-settings-conflict.test.ts:
+(pass) selects two distinct scratch-safe enum writers from the live value [0.12ms]
+(pass) rejects a protected or non-enum key instead of inventing a UI setting [0.10ms]
+(pass) recognizes only the typed stale revision response and both native conflict labels [0.03ms]
+
+scripts/lib/typesafe-shadow-eval.test.ts:
+(pass) shadow eval corpus > round-trips a corpus through JSONL [0.14ms]
+(pass) shadow eval corpus > fails loudly on a malformed line instead of dropping it [0.10ms]
+(pass) shadow eval corpus > keeps the prompt and the project separate in the state payload [0.02ms]
+(pass) shadow eval corpus > builds a state the judge can answer without a provider [0.10ms]
+(pass) shadow eval scoring > counts agreement, disagreement, and abstention separately [0.63ms]
+(pass) shadow eval scoring > treats a low-confidence answer as no decision [0.07ms]
+(pass) shadow eval scoring > refuses to report accuracy before enough cases carry a label [0.12ms]
+(pass) shadow eval scoring > does not call a run measured when the calls failed [0.12ms]
+(pass) shadow eval scoring > records latency and token usage for the run [0.07ms]
+(pass) shadow eval report > exports prompts from a journal copy and leaves no copy behind [8.81ms]
+(pass) shadow eval report > never copies prompt text into the shareable summary [0.11ms]
+(pass) shadow eval report > counts a failed case instead of aborting the run [0.14ms]
+
+scripts/lib/personal-argv.test.ts:
+(pass) personal Cedia argv > uses the basic password store so a local build does not wait on Keychain [0.01ms]
+(pass) personal Cedia argv > keeps secret storage in memory so a re-signed bundle cannot stall on a Keychain prompt
+
+scripts/lib/agent-window-assets.test.ts:
+(pass) Agent Window receipt changes when a renderer asset or main bridge changes [1.54ms]
+
+scripts/lib/packaged-proof-catalog.test.ts:
+(pass) packaged catalog proof model envelopes > rejects a missing or non-array models field instead of treating it as empty [0.06ms]
+(pass) packaged catalog proof model envelopes > rejects malformed model rows instead of creating an empty or partial slug [0.04ms]
+(pass) packaged catalog proof model envelopes > keeps provider-qualified identities and baseline rows after removal [0.02ms]
+
+scripts/lib/app-icon.test.ts:
+(pass) macOS app icon propagation > writes the brand icon under the name the bundle declares [48.29ms]
+(pass) macOS app icon propagation > moves the bundle timestamp so Finder and the Dock drop the cached icon [10.69ms]
+(pass) macOS app icon propagation > stays silent for paths that are not macOS bundles [1.24ms]
+/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-app-icon-Hmtqzt/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleIconFile
+(pass) macOS app icon propagation > fails loud when a bundle declares no icon [4.34ms]
+(pass) dev shell removal > removes a payload-less shell under the build tree [8.68ms]
+(pass) dev shell removal > refuses a bundle outside the build tree, so the packaged app survives a mis-resolved path [1.01ms]
+(pass) dev shell removal > refuses a bundle that carries the real sessions payload [0.81ms]
+
+scripts/lib/omp-coverage.test.ts:
+(pass) OMP coverage comparison > a complete audited fixture with explicit handlers passes [0.42ms]
+(pass) OMP coverage comparison > reports an audited record with no Cedia disposition as unmapped [0.07ms]
+(pass) OMP coverage comparison > reports a Cedia entry without an audited record as orphan [0.06ms]
+(pass) OMP coverage comparison > reports duplicate audited and Cedia mappings [0.07ms]
+(pass) OMP coverage comparison > reports invalid families and rows absent from the audit classification [0.08ms]
+(pass) OMP coverage comparison > blocks F only for the plan's two unsettled states [0.29ms]
+(pass) OMP coverage comparison > detects a source hash that no longer matches an existing file [0.03ms]
+(pass) SDK source links > accepts a link whose audited command the adapter really sends [0.08ms]
+(pass) SDK source links > refuses a link the audit does not record as an RPC command [0.02ms]
+(pass) SDK source links > refuses a link whose command the adapter stopped sending [0.01ms]
+(pass) SDK source links > refuses to vouch for anything when the adapter source cannot be read [0.01ms]
+(pass) SDK source links > the shipped table is the one the adapter proves [0.02ms]
+(pass) SDK source links > accepts SDK links carried by a reachable slash path or the OMP settings surface [0.05ms]
+(pass) SDK source links > accepts an SDK link carried by another RPC command [0.11ms]
+(pass) SDK source links > refuses an SDK command link when its carrying RPC literal is gone [0.02ms]
+(pass) SDK source links > refuses an SDK slash link the audit does not mark reachable [0.02ms]
+(pass) SDK source links > refuses an SDK settings link the runtime schema does not define [0.01ms]
+(pass) SDK source links > refuses SDK other-path links when Cedia no longer sends the carrying surface [0.03ms]
+(pass) SDK source links > does not let an unrelated Cedia source stand in for the adapter path [0.01ms]
+(pass) SDK source links > accepts a direct SDK link proven by another Cedia client source
+(pass) SDK source links > refuses a direct SDK link when no Cedia source sends the audited command
+(pass) SDK source links > refuses an SDK link whose method is no longer in the dated SDK audit [0.01ms]
+(pass) SDK source links > the shipped other-path table names unique SDK methods and audited paths [0.02ms]
+(pass) SDK source links > accepts an SDK link carried by a named Cedia host caller [0.04ms]
+(pass) SDK source links > refuses a caller link the caller stopped sending, an unaudited command and a stale SDK name [0.04ms]
+(pass) SDK source links > the shipped caller table names a distinct SDK method, a distinct command and a readable caller [2.20ms]
+(pass) SDK source links > accepts an SDK operation performed by a reachable slash command [0.03ms]
+(pass) SDK source links > refuses a slash link with a stale SDK name, an unreachable slash, or a dead prompt path [0.03ms]
+(pass) SDK source links > the shipped slash table names a distinct SDK method per reachable command [1.44ms]
+(pass) SDK source links > the shipped operation table names a distinct SDK method and a capable operation id [0.07ms]
+(pass) SDK window-local links > accepts a window-local link only when source and behavioral receipt are readable [0.07ms]
+(pass) SDK window-local links > refuses stale or unreadable window-local links [0.05ms]
+(pass) SDK window-local links > the shipped window-local table has no RPC carrier and names one audited SDK method [0.02ms]
+(pass) RPC paths that are not a direct caller > accepts a slash path, a settings path and another Cedia command [0.01ms]
+(pass) RPC paths that are not a direct caller > refuses a slash command the audit does not mark reachable [0.01ms]
+(pass) RPC paths that are not a direct caller > refuses a setting the runtime's schema does not define
+(pass) RPC paths that are not a direct caller > refuses a link to a command Cedia no longer sends, and to a name that is not an RPC command [0.01ms]
+(pass) RPC paths that are not a direct caller > every uncarried command names a packet and a reason [0.03ms]
+(pass) RPC paths that are not a direct caller > a disposition that is OMP's own behaviour carries source evidence the gate re-reads [3.08ms]
+
+scripts/lib/packaged-proof-http.test.ts:
+(pass) packaged proof response references > reassembles chunked JSON and asks for each contiguous offset [0.89ms]
+(pass) packaged proof response references > rejects references outside the bounded response contract [0.09ms]
+(pass) packaged proof response references > rejects malformed chunks and integrity failures [0.16ms]
+
+scripts/lib/patch-set-digest.test.ts:
+(pass) patchSetDigest > is deterministic for the same manifest [1.11ms]
+(pass) patchSetDigest > changes when a patch sha256 changes [0.73ms]
+(pass) patchSetDigest > changes when two entries swap order [0.67ms]
+(pass) patchSetDigest > changes when the base revision changes [1.52ms]
+(pass) readPatchSet > returns the manifest and its digest for a fixture whose bytes match [0.73ms]
+(pass) readPatchSet > throws when a patch file's bytes were tampered with [0.63ms]
+(pass) readPatchSet > throws when a patch file is missing [0.70ms]
+(pass) readPatchSet > throws when the manifest is missing [0.21ms]
+(pass) fileSha256 > hashes a file and stays undefined for a path that cannot be read [0.29ms]
+(pass) newestPatchMtime > returns a number for a fixture with patch files [0.56ms]
+(pass) newestPatchMtime > returns undefined when no patch can be stat'ed [0.28ms]
+(pass) isShellFresh > treats unknown patch time as fresh [0.01ms]
+(pass) isShellFresh > treats a bundle at or after the newest patch as fresh
+(pass) isShellFresh > treats a bundle older than the newest patch as stale
+(pass) isShellFresh > treats a missing bundle as stale when a patch time is known
+
+scripts/lib/refresh-omp-patch.test.ts:
+(pass) refreshes the active rolling-pin patch without rewriting historical entries or the source index [182.81ms]
+
+scripts/lib/typesafe-tasks.test.ts:
+(pass) review ranking > reads the changed files out of a unified diff, in first-seen order [0.09ms]
+(pass) review ranking > keeps each file's own hunks together so a ranking sees that file's change [0.05ms]
+(pass) review ranking > orders by importance, then by how sure the answer was [0.05ms]
+(pass) review ranking > keeps unanswered files visible instead of dropping them from the review [0.03ms]
+(pass) review ranking > ranks the focus variant on the probability that a file carries the change [0.04ms]
+(pass) review ranking > ignores an answer of the wrong type rather than inventing a rank
+(pass) receipt citations > keeps repo-relative paths and ignores bare or absolute ones [0.09ms]
+(pass) receipt citations > pairs a claim with the files it cites and respects the caps [0.08ms]
+(pass) receipt citations > finds nothing in a receipt that cites no repository path [0.01ms]
+(pass) excerpt selection > centres the excerpt on a line that shares a word with the claim [0.10ms]
+(pass) excerpt selection > falls back to the head of the file when nothing matches [0.03ms]
+
+apps/macos/test/settings-revision.test.ts:
+(pass) SETTINGS_SCOPES > advertises global, project, and session
+(pass) settingsSourcePath > labels global as this Mac product prefs [0.01ms]
+(pass) settingsSourcePath > marks project and session read-only until a scoped write contract exists
+(pass) settingsScopeWritable > allows only global writes from this helper
+(pass) beginSettingsDraft > defaults scope to global and snapshots values for local edit [0.02ms]
+(pass) beginSettingsDraft > keeps project and session drafts presentable without making them writable [0.01ms]
+(pass) applySettingsSection > applies a matching global draft and increments revision [0.02ms]
+(pass) applySettingsSection > rejects stale revisions so Apply keeps the draft and old active value
+(pass) applySettingsSection > does not advertise project or session writes even when the revision matches [0.01ms]
+(pass) previewResetOverride > previews the inherited value and names only the selected override to remove
+(pass) nextSettingsRevision > increments a non-negative integer [0.02ms]
+(pass) nextSettingsRevision > increments safely to an integer >= 0 [0.01ms]
+
+apps/macos/test/approval-runtime.test.ts:
+(pass) approval runtime > keeps two concurrent approvals independently pending; answering one does not resolve the other [0.10ms]
+(pass) approval runtime > rejects an answer when the incarnation is stale [0.01ms]
+(pass) approval runtime > rejects a double response for the same token
+(pass) approval runtime > does not allow timeout or stale cards to resubmit [0.08ms]
+(pass) approval runtime > rejects answers for a different session
+
+apps/macos/test/terminal-context.test.ts:
+(pass) terminal citation > quotes the real selection under a terminal: label [0.08ms]
+(pass) terminal citation > refuses an empty or whitespace-only selection instead of sending scrollback [0.01ms]
+(pass) terminal citation > normalizes CRLF so a Windows terminal reads the same as a Mac one [0.02ms]
+(pass) terminal citation > keeps leading indentation but drops the trailing newline a selection carries
+(pass) terminal citation > truncates at the budget and says so, keeping the real length [0.02ms]
+(pass) terminal citation > falls back to a plain terminal label rather than emitting an empty one
+
+apps/macos/test/settings-catalog-rows.test.ts:
+(pass) bindSettingsCatalogRows > binds one Models/providers row per advertised model [0.14ms]
+(pass) bindSettingsCatalogRows > uses an explicit source when the host already fetched one [0.01ms]
+(pass) bindSettingsCatalogRows > binds Agents/OMP and Tools/MCP from login providers only [0.10ms]
+(pass) bindSettingsCatalogRows > lists advertised MCP servers without treating login providers as servers [0.04ms]
+(pass) bindSettingsCatalogRows > binds Skills/rules/hooks/commands from slash commands only [0.05ms]
+(pass) bindSettingsCatalogRows > keeps empty skills, hooks, and automations honest [0.03ms]
+(pass) bindSettingsCatalogRows > lists advertised skills and hooks without inventing Cloud [0.05ms]
+(pass) bindSettingsCatalogRows > binds the skills collection OMP advertises as slash commands [0.02ms]
+(pass) bindSettingsCatalogRows > returns no rows for Appearance, unknown sections, or empty fetched lists [0.02ms]
+(pass) bindSettingsCatalogRows > does not invent billed fallback, Cloud, voice, automations, or MCP marketplace rows [0.06ms]
+(pass) bindSettingsCatalogRows > keeps every bound row global and never advertises project or session writes [0.03ms]
+(pass) skillsFromSlashCommands > keeps only skill-sourced commands, deduped in first-seen order [0.03ms]
+(pass) jsonPickerCommands > omits commands with dedicated Cedia UI while preserving order [0.01ms]
+
+apps/macos/test/session-event-kinds.test.ts:
+(pass) Cedia session-event kind registry > covers exactly the union the dated audit extracted from the pinned source [0.02ms]
+(pass) Cedia session-event kind registry > gives every audited kind a deterministic outcome and drops none [0.59ms]
+(pass) Cedia session-event kind registry > labels the three recognition-gap signals and keeps their order and bound [0.14ms]
+(pass) Cedia session-event kind registry > recognises the signals by name, not by the shape of an unknown frame [0.02ms]
+
+apps/macos/test/layout-tree.test.ts:
+(pass) Agents pane layout tree > create starts one leaf; empty sessionId is New task (null), no fake sess- [0.11ms]
+(pass) Agents pane layout tree > split right at 800px ok; two leaves same sessionId; different viewId/draftViewId; paneDraftKeys differ [0.09ms]
+(pass) Agents pane layout tree > split right at 700px unchanged + canSplit reason NEED_MORE_SPACE_REASON (700 < 720) [0.02ms]
+(pass) Agents pane layout tree > split down at 480 ok; at 400 unchanged [0.02ms]
+(pass) Agents pane layout tree > close one of two returns single remaining leaf, active is neighbor [0.05ms]
+(pass) Agents pane layout tree > close last leaf → sessionId null, same projectId [0.01ms]
+(pass) Agents pane layout tree > maximize then visibleLeaves is one; restore shows both [0.03ms]
+(pass) Agents pane layout tree > parseLayout rejects { sessionId: "invented" } garbage / missing type [0.05ms]
+(pass) Agents pane layout tree > serialize/parse roundtrip [0.03ms]
+(pass) Agents pane layout tree > moveActive left/right swaps row children; up on a row is unchanged [0.07ms]
+(pass) Agents pane layout tree > assignActive clears sessionId on the focused leaf only and does not invent one [0.05ms]
+(pass) Agents pane layout tree > open in split assigns the focused leaf to that session without minting an owner [0.08ms]
+
+apps/macos/test/terminal.test.ts:
+(pass) Cedia OMP terminal views > preserves output when OMP ends before the view opens, including reopening ended history [0.55ms]
+(pass) Cedia OMP terminal views > reopens a closed view, replays retained output, and rejects stale input/close callbacks [0.29ms]
+(pass) Cedia OMP terminal views > marks bounded history explicitly when the retained tail is truncated [81.91ms]
+(pass) Cedia OMP terminal views > forwards modified F3 and strips emulator queries from written output [0.60ms]
+
+apps/macos/test/attachment-runtime.test.ts:
+(pass) attachment upload state machine > moves local → uploading → ready and requires an immutable contentRef [0.07ms]
+(pass) attachment upload state machine > retries a failed upload with the same identity and supports conceptual Retry/Remove [0.02ms]
+(pass) attachment upload state machine > blocks dispatch while any attachment is pending or failed, and only yields ready hashes [0.06ms]
+(pass) attachment upload state machine > does not invent an unlimited size when the host limit is unknown [0.03ms]
+(pass) attachment upload state machine > detects an already-attached name or contentRef without blocking a second explicit add [0.03ms]
+
+apps/macos/test/code-actions.test.ts:
+(pass) cedia code actions > offers nothing when there is no real task surface [0.02ms]
+(pass) cedia code actions > offers the selection actions plus review when text is highlighted [0.02ms]
+(pass) cedia code actions > offers only review when nothing is highlighted [0.01ms]
+(pass) cedia code actions > only names commands the manifest declares [0.15ms]
+
+apps/macos/test/view-registry.test.ts:
+(pass) view registry fan-out > keeps every resolved surface so both the sidebar and dock get snapshots [0.05ms]
+(pass) view registry fan-out > drops a surface when it is disposed, not when another one appears [0.02ms]
+(pass) view registry fan-out > does not double-count the same surface
+(pass) pending composer focus > holds a focus request made before any view existed [0.02ms]
+(pass) pending composer focus > does nothing when no focus was requested
+
+apps/macos/test/thinking-params.test.ts:
+(pass) projectThinkingParams > stays empty until OMP advertises levels and does not invent Fast or High [0.12ms]
+(pass) projectThinkingParams > lists only advertised levels and keeps the current value [0.04ms]
+(pass) parentSessionFromOmpState > reads a parent session id without inventing one [0.01ms]
+(pass) messagesPageFromOmp > marks a page advertised only when the payload is an object [0.03ms]
+(pass) ompCommandData > unwraps result.data when present [0.02ms]
+
+apps/macos/test/user-pty.test.ts:
+(pass) userPtyRows > maps live and exited receipts without embedding a shell [0.06ms]
+(pass) userPtyRows > labels an empty cwd as unknown [0.01ms]
+(pass) newUserPtyPlan > opens a native Code-OSS PTY and does not embed in the webview [0.02ms]
+(pass) focusUserPtyPlan > focuses the native terminal without a second renderer [0.01ms]
+
+apps/macos/test/shortcut-rows.test.ts:
+(pass) shortcutRowsFromContributes > returns one cedia row per command that already has a keybinding [0.08ms]
+(pass) shortcutRowsFromContributes > returns no rows for empty or malformed contributes [0.02ms]
+(pass) shortcutRowsFromContributes > reads advertised cedia.* chords from the Mac package contributes [0.21ms]
+(pass) shortcutRowsFromContributes > does not invent Cloud rows or chords [0.02ms]
+
+apps/macos/test/task-chrome.test.ts:
+(pass) cediaWindowTitle > uses task — project — Cedia in Agents when a task title exists [0.03ms]
+(pass) cediaWindowTitle > drops the project segment when Agents has a task but no project [0.01ms]
+(pass) cediaWindowTitle > uses New task — Cedia for an Agents empty draft and never invents a session id [0.04ms]
+(pass) cediaWindowTitle > uses file — project — Cedia in IDE when a file is open
+(pass) cediaWindowTitle > uses file — Cedia in IDE when a file is open without a project
+(pass) cediaWindowTitle > uses project — Cedia or Cedia in IDE when no file is open
+(pass) taskHeaderMeta > shows an advertised branch and never invents one [0.07ms]
+(pass) taskHeaderMeta > labels a no-git folder as Folder, not Branch, and includes path or cwd [0.04ms]
+(pass) taskHeaderMeta > does not invent main/master when git metadata is absent [0.02ms]
+(pass) taskHeaderMeta > shows an advertised parent session and never invents one [0.02ms]
+(pass) moreMenuActions > returns D04 More labels in order and keeps Stop out of the menu [0.07ms]
+(pass) moreMenuActions > toggles Pin/Unpin and Archive/Restore and adds Reconcile only when recovery is required [0.04ms]
+(pass) moreMenuActions > keeps Fork present but disabled when OMP has not advertised a parent [0.02ms]
+(pass) moreMenuActions > treats Mark unread as a local presentation action and Open IDE as secondary [0.04ms]
+(pass) moreMenuActions > disables split when the active pane cannot fit another min size [0.02ms]
+(pass) moreMenuActions > adds Maximize pane only when more than one pane is visible [0.03ms]
+(pass) moreMenuActions > adds Move actions only when more than one pane is visible [0.02ms]
+(pass) unreadJumpLabel > says Jump to latest when there is no unread count [0.02ms]
+(pass) unreadJumpLabel > appends the unread count when N > 0
+
+apps/macos/test/terminal-conformance.test.ts:
+(pass) terminal conformance > holds every required case against the engine the workbench ships [27.78ms]
+(pass) terminal conformance > keeps the cases Cedia's own surfaces depend on [0.05ms]
+
+apps/macos/test/agent-window-theme-publisher.test.ts:
+(pass) agents workspace theme settings > reads the theme keys and ignores the rest [0.08ms]
+(pass) agents workspace theme settings > maps uiTheme values and theme names onto kinds [0.05ms]
+(pass) agents workspace theme settings > finds an installed theme file by id or label [0.15ms]
+(pass) agents workspace theme settings > reads an installed theme file palette for the snapshot allowlist [0.11ms]
+(pass) published snapshot resolution > follows the OS scheme and preferred theme under auto-detect [0.05ms]
+(pass) published snapshot resolution > uses the installed theme file kind for explicit themes [0.02ms]
+(pass) theme publisher > writes on change and stays quiet otherwise [1.47ms]
+(pass) theme publisher > publishes exact theme-file colors so linked windows match [0.73ms]
+(pass) theme publisher > ignores a workspace file it cannot read [0.23ms]
+
+apps/macos/test/agent-git-pane-roundtrip.test.ts:
+(pass) the Git pane through the host, on a real checkout > reads status, branches, commits and blame for the pane's views [83.84ms]
+(pass) the Git pane through the host, on a real checkout > stages, unstages, and reports both through the same status [59.81ms]
+(pass) the Git pane through the host, on a real checkout > commits from the pane's action stream and reports every phase to the webview [119.70ms]
+(pass) the Git pane through the host, on a real checkout > pulls a real fast-forward, and refuses to invent a merge when the branch diverged [554.97ms]
+(pass) the Git pane through the host, on a real checkout > stashes, inspects, restores and drops — the branch picker's recovery path [279.18ms]
+(pass) the Git pane through the host, on a real checkout > initialises a folder the pane opens as a project and removes a stale index lock [68.89ms]
+(pass) the Git pane through the host, on a real checkout > creates, hands off to, and removes a detached worktree with live progress [260.80ms]
+(pass) the Git pane through the host, on a real checkout > pushes a committed branch and tracks a remote ref from the pane's branch picker [527.06ms]
+(pass) the Git pane through the host, on a real checkout > refuses a path outside the checkout before the host ever sees it [0.20ms]
+(pass) the Git pane through the host, on a real checkout > refuses the pull-request methods with the reason Cedia can state [0.06ms]
+(pass) the Git pane through the host, on a real checkout > refuses a path the host does not own before any git process starts [0.76ms]
+
+apps/macos/test/product-prefs.test.ts:
+(pass) product prefs > defaults to comfortable density, an Agents-first startup, and a right work panel [0.06ms]
+(pass) product prefs > rejects unknown density instead of inventing a theme [0.02ms]
+(pass) product prefs > normalizes garbage to defaults and keeps startup and window prefs [0.03ms]
+
+apps/macos/test/provider-registry.test.ts:
+(pass) provider concern registry > promises a non-trivial surface, so the extraction cannot silently pass [0.10ms]
+(pass) provider concern registry > installs every promised method on the prototype [24.87ms]
+(pass) provider concern registry > keeps every concern's methods inside one slice file [0.22ms]
+(pass) provider concern registry > keeps the wiring root under the item's budget [0.05ms]
+
+apps/macos/test/workbench-mode.test.ts:
+(pass) Agent ↔ IDE workbench mode > recognises both agent-window identities [0.04ms]
+(pass) Agent ↔ IDE workbench mode > does not emit chrome commands when already in the requested mode [0.02ms]
+(pass) Agent ↔ IDE workbench mode > closes sidebar and auxiliary bar only when entering Agents [0.01ms]
+(pass) Agent ↔ IDE workbench mode > restores the saved IDE chrome instead of using startup defaults [0.02ms]
+(pass) Agent ↔ IDE workbench mode > keeps drafts when switching A → B → A without changing session ownership fields [0.18ms]
+(pass) Agent ↔ IDE workbench mode > uses window-local task selection while keeping each durable runtime identity distinct [0.03ms]
+(pass) Agent ↔ IDE workbench mode > treats workbench mode as view state that survives task reset [0.03ms]
+(pass) Agent ↔ IDE workbench mode > queues the latest pending native destination
+(pass) Agent ↔ IDE workbench mode > makes a pending Explorer destination authoritative over remembered Agents mode [0.03ms]
+(pass) Agent ↔ IDE workbench mode > opens the full-window Cedia shell by default, with the IDE an explicit choice [0.02ms]
+(pass) Agent ↔ IDE workbench mode > keeps a plain IDE window on full chrome and opens it clean [0.01ms]
+(pass) Agent ↔ IDE workbench mode > consumes pending explorer only after switching to IDE [0.01ms]
+(pass) Agent ↔ IDE workbench mode > does not consume a pending Files destination on the dying instance after openFolder [0.01ms]
+(pass) Agent ↔ IDE workbench mode > keeps the same session and draft across Agents → IDE → Agents [0.05ms]
+(pass) Agent ↔ IDE workbench mode > merges observed IDE chrome without dropping saved layout [0.03ms]
+(pass) Agent ↔ IDE workbench mode > round-trips the breadcrumbs toggle through the IDE snapshot
+(pass) Agent ↔ IDE workbench mode > never reads Cedia's own hidden chrome back as the IDE layout [0.03ms]
+(pass) Agent ↔ IDE workbench mode > keeps applying chrome commands after one rejects [0.10ms]
+(pass) Agent ↔ IDE workbench mode > names the extensions that paint the theme the user selected [0.07ms]
+(pass) Agent ↔ IDE workbench mode > hands over the theme the window actually shows [0.02ms]
+(pass) Agent ↔ IDE workbench mode > merges the theme into the Agents window's own workspace file [0.09ms]
+
+apps/macos/test/artifacts.test.ts:
+(pass) artifact download verifies all ranges and final bytes against the immutable receipt [0.97ms]
+
+apps/macos/test/search-palette.test.ts:
+(pass) buildSearchHits > labels New task without inventing a file index note on empty search [0.02ms]
+(pass) buildSearchHits > stays empty until there is a query and does not invent a hit [0.08ms]
+(pass) buildSearchHits > scopes tasks, files, actions, and settings without creating a task on no-match [0.06ms]
+(pass) buildSearchHits > limits a scoped search to that tab [0.01ms]
+(pass) buildSearchHits > matches advertised settings row labels without inventing a marketplace [0.02ms]
+(pass) buildSearchHits > finds a task from a transcript snippet without creating a new task [0.02ms]
+
+apps/macos/test/omp-owner.test.ts:
+(pass) single execution owner > starts only the host helper from the Mac extension [0.22ms]
+(pass) single execution owner > has no OMP launcher in the client [0.29ms]
+(pass) single execution owner > launches the agent runtime from the host package instead [0.16ms]
+
+apps/macos/test/ide-native-host.test.ts:
+(pass) ide-native surface with a live host > reports the real connection instead of a placeholder [4.02ms]
+(pass) ide-native surface with a live host > surfaces a project the host really stores [0.31ms]
+(pass) ide-native surface with a live host > does not need to spawn a host helper when the descriptor is live [0.22ms]
+(pass) ide-native surface with a live host > lists a task the host really stores [14.46ms]
+(pass) ide-native surface with a live host > forwards another window's committed draft into the IDE webview [1514.25ms]
+(pass) ide-native surface with a live host > pairs a device through the host and shows a real QR code [181.21ms]
+(pass) ide-native surface with a live host > offers native code actions once a real task surface exists [33.56ms]
+
+apps/macos/test/editor.test.ts:
+(pass) Cedia editor bridge guard > keeps workspace path boundaries exact [0.04ms]
+(pass) Cedia editor bridge guard > accepts an exact version/hash/handle and reports each stale reason [0.07ms]
+(pass) Cedia editor bridge request boundary > parses serializable read, inventory and guarded apply requests [0.21ms]
+(pass) Cedia editor bridge request boundary > rejects malformed or under-specified writes before vscode is involved [0.04ms]
+(pass) Cedia editor bridge request boundary > parses create, delete and move and rejects overwrite [0.05ms]
+(pass) preserves editor open errors instead of advertising a missing file [1.02ms]
+(pass) Cedia editor create/delete/move/untitled > inventories untitled buffers and snapshots them without realpath [0.61ms]
+(pass) Cedia editor create/delete/move/untitled > creates a missing workspace file then applies unsaved content without save [1.07ms]
+(pass) Cedia editor create/delete/move/untitled > deletes an open document through WorkspaceEdit and fails closed on a stale guard [0.81ms]
+(pass) Cedia editor create/delete/move/untitled > renames an open document and refuses an existing destination [1.10ms]
+(pass) Cedia editor create/delete/move/untitled > closes untitled documents without deleteFile and honors the live-request gate [0.43ms]
+(pass) Cedia editor create/delete/move/untitled > rejects moving an untitled document instead of writing a workspace path [0.32ms]
+(pass) Cedia editor bridge applied-edit report > reports the geometry, the produced version, and the pre-edit text without saving [0.98ms]
+(pass) Cedia editor bridge applied-edit report > reports nothing when the apply is rejected [0.63ms]
+
+apps/macos/test/artifact-preview.test.ts:
+(pass) classifyArtifactPreview > classifies image, audio, video, pdf, and text from MIME first [0.17ms]
+(pass) classifyArtifactPreview > falls back to extension when MIME is missing or unknown [0.08ms]
+(pass) classifyArtifactPreview > does not let a previewable extension override a non-preview MIME [0.03ms]
+(pass) classifyArtifactPreview > treats failed and unknown MIME as download only and never invents execute [0.04ms]
+(pass) classifyArtifactPreview > builds a header from name, MIME, size, 12-char hash prefix, and buildId [0.02ms]
+(pass) retainLastGoodPreview > keeps a good inline preview when the incoming build is failed or unknown [0.04ms]
+(pass) retainLastGoodPreview > replaces last-good when the incoming preview is a good inline build [0.02ms]
+(pass) retainLastGoodPreview > maps failed builds to last-good without executing [0.05ms]
+(pass) retainLastGoodPreview > inlines only small raster images and text, never SVG or unknown MIME [0.07ms]
+
+apps/macos/test/composer-runtime.test.ts:
+(pass) composer runtime axes > marks non-whitespace draft as a usable send payload when connected and idle [0.17ms]
+(pass) composer runtime axes > uses Queue as the primary follow-up action while running with a payload [0.03ms]
+(pass) composer runtime axes > maps reconnecting to waiting_host instead of check_status [0.01ms]
+(pass) composer runtime axes > keeps offline composers draft-only with no send, queue, or steer [0.01ms]
+(pass) composer runtime axes > treats unknown command outcome as Check status instead of Retry [0.03ms]
+(pass) composer runtime axes > keeps Stop available while running even when the payload is empty [0.02ms]
+(pass) composer runtime axes > resolves structured model readiness and gates every action with a reason [0.02ms]
+(pass) composer runtime axes > drives sendIntent from the OMP catalog snapshot, not a hardcoded id [0.18ms]
+(pass) composer runtime axes > disables Send when the payload is empty [0.01ms]
+(pass) composer runtime axes > counts a ready attachment as usable payload [0.01ms]
+(pass) composer runtime axes > blocks dispatch while an attachment is pending or failed [0.02ms]
+(pass) composer runtime axes > maps awaiting ACK to Sending… and stopping abort to Stopping… [0.03ms]
+(pass) composer runtime axes > queues while waiting on host input and does not treat it as a question response [0.02ms]
+(pass) composer runtime axes > asks for a project before send when no target exists [0.01ms]
+(pass) composer enter intent > sends on Enter when Send is enabled [0.03ms]
+(pass) composer enter intent > queues on Enter while running with a payload
+(pass) composer enter intent > does not send during IME composition [0.02ms]
+(pass) composer enter intent > inserts a newline on Shift+Enter and queues with Cmd+Enter only while running [0.02ms]
+(pass) composer enter intent > sends with Cmd+Enter when submitEnter is off and idle with a payload [0.01ms]
+(pass) composer enter intent > inserts a newline on Enter without meta when submitEnter is off
+(pass) composer enter intent > queues with Cmd+Enter while running when submitEnter is on
+(pass) composer enter intent > ignores Enter when Send or Queue is disabled
+
+apps/macos/test/browser-search.test.ts:
+(pass) browser search suggestions > reads the engine's reply [0.04ms]
+(pass) browser search suggestions > asks the endpoint whose shape it can read
+(pass) browser search suggestions > returns nothing rather than inventing rows for a reply it cannot read [0.04ms]
+(pass) browser search suggestions > drops blanks, duplicates and extra rows [0.04ms]
+(pass) browser search suggestions > opens a chosen suggestion as a search [0.02ms]
+
+apps/macos/test/ui-a11y.test.ts:
+(pass) tokens, motion, and a11y helpers (UI-S5) > documents contrast floors of 4.5:1 text and 3:1 UI [0.01ms]
+(pass) tokens, motion, and a11y helpers (UI-S5) > keeps mode switch at 0ms and honors reduced motion [0.04ms]
+(pass) tokens, motion, and a11y helpers (UI-S5) > sets desktop hit area to 32px and mentions 44pt for touch
+(pass) tokens, motion, and a11y helpers (UI-S5) > announces connection and run summaries, never every token [0.02ms]
+
+apps/macos/test/agent-window-browser.test.ts:
+(pass) Cedia Agent native browser bridge > allows ordinary page links and blocks privileged redirects [1.62ms]
+(pass) Cedia Agent native browser bridge > opens a sandboxed native tab, attaches bounds, and emits state to its owner [0.23ms]
+(pass) Cedia Agent native browser bridge > keeps the loaded page title after loading stops [0.32ms]
+(pass) Cedia Agent native browser bridge > loads new-tab URLs and reattaches the active native view across tab switches and close [0.31ms]
+(pass) Cedia Agent native browser bridge > rejects unsafe URLs while allowing http and https navigation [0.18ms]
+(pass) Cedia Agent native browser bridge > does not surface subframe or aborted navigation failures as page errors [0.12ms]
+(pass) Cedia Agent native browser bridge > routes renderer calls and state subscriptions through the Cedia channel [0.30ms]
+(pass) Cedia Agent native browser bridge > releases native views when the owning window is destroyed [0.13ms]
+(pass) Cedia agent tab attach for OMP driving > refuses unknown tabs and foreign-attached debuggers [0.29ms]
+(pass) Cedia agent tab attach for OMP driving > serves the attached tab on a loopback endpoint and tears it down on detach [10.88ms]
+(pass) Cedia agent tab attach for OMP driving > detaches the debugger when its tab closes [3.29ms]
+
+apps/macos/test/agent-window-main.test.ts:
+(pass) Agent Window main-process boundary > keeps the normal host request deadline and bounds explicit overrides [0.15ms]
+(pass) Agent Window main-process boundary > scopes native panels to trusted Agent Window senders [0.20ms]
+(pass) Agent Window main-process boundary > finds a host this process never talked to, so a quit stops it instead of guessing [13.21ms]
+(pass) Agent Window main-process boundary > shares the existing host and its durable session IDs without an IDE or provider call [56.07ms]
+(pass) Agent Window main-process boundary > imports an app-side draft file into the real host with its source label [11.78ms]
+(pass) Agent Window main-process boundary > preserves a conflicting cedia.drafts copy as a labeled, recoverable host draft [16.72ms]
+(pass) Agent Window main-process boundary > preserves an app-side draft file when the host already has a different draft [11.75ms]
+(pass) Agent Window main-process boundary > reads and writes the workbench keybindings file through the bridge [1.13ms]
+(pass) Agent Window main-process boundary > rejects an unregistered renderer before dispatching anything [0.04ms]
+(pass) Agent Window main-process boundary > proxies task operations without giving the renderer a host credential [0.12ms]
+(pass) Agent Window main-process boundary > refuses URL escapes, credential management and editor impersonation [0.10ms]
+(pass) Agent Window main-process boundary > forwards every provider auth shape the renderer drives to the host [0.14ms]
+(pass) Agent Window main-process boundary > refuses provider lookalikes instead of treating providers as a prefix [0.15ms]
+(pass) Agent Window main-process boundary > forwards the selected remote-path routes the Remote panel drives to the host [0.09ms]
+(pass) Agent Window main-process boundary > routes an IDE request with the selected workspace and file [0.06ms]
+(pass) Agent Window main-process boundary > allows only web links to leave the application [0.07ms]
+(pass) Agent Window main-process boundary > keeps native zoom behind the authenticated Agent Window boundary [0.09ms]
+(pass) the CEDIA preference owner across the renderer boundary (§6.4) > reaches the host settings route through the application allowlist [0.04ms]
+(pass) the CEDIA preference owner across the renderer boundary (§6.4) > writes with the revision it was handed and publishes the committed snapshot to the other window [0.11ms]
+(pass) the CEDIA preference owner across the renderer boundary (§6.4) > answers a stale revision with the record that won instead of an anonymous failure [0.10ms]
+
+apps/macos/test/projects-welcome.test.ts:
+(pass) projectsWelcomeModel > projectAddPlan > registers a folder the host has never seen and gives it a task [0.01ms]
+(pass) projectsWelcomeModel > projectAddPlan > reuses a project the host already knows, and its open task
+(pass) projectsWelcomeModel > projectAddPlan > un-archives a project Cedia had removed instead of adding a second record
+(pass) projectsWelcomeModel > projectAddPlan > gives a project with only archived tasks a visible one
+(pass) projectsWelcomeModel > disables clone by default and does not invent advertised=true [0.07ms]
+(pass) projectsWelcomeModel > enables clone only when advertised and does not invent a URL [0.03ms]
+(pass) projectsWelcomeModel > keeps a missing recent visible and not openable [0.03ms]
+(pass) projectsWelcomeModel > uses Folder for an empty path and derives the last non-empty segment [0.04ms]
+(pass) projectsWelcomeModel > never includes Cloud in the welcome model [0.02ms]
+
+apps/macos/test/cedia-theme.test.ts:
+(pass) cedia workbench palette > uses the measured anchor values [0.02ms]
+(pass) cedia workbench palette > carries chrome DARKER than the editor, which is what the reference does [0.01ms]
+(pass) cedia workbench palette > covers every variable the agent webview reads [0.02ms]
+(pass) cedia workbench palette > only emits well-formed colours [0.06ms]
+(pass) cedia workbench palette > keeps the dark title bar's inactive foreground at the reference's 60% white
+(pass) cedia workbench palette > ships the reference's light anchors too
+(pass) cedia workbench palette > keeps the chrome darker than the editor in light too, as the reference does
+(pass) cedia workbench palette > covers the same keys in light as in dark so neither kind falls back [0.05ms]
+(pass) cedia workbench palette > selects the palette from the Code-OSS theme kind [0.03ms]
+(pass) cedia workbench palette > ships the reference's high contrast anchors [0.01ms]
+(pass) cedia workbench palette > covers the same keys in high contrast as in dark, and keeps a visible focus ring [0.05ms]
+(pass) cedia workbench palette > recognises its own palettes so its footprint is not read as a user choice [0.14ms]
+(pass) cedia workbench palette > ships the reference's dark midnight palette [0.02ms]
+(pass) cedia workbench palette > derives light colorblind from light, differing only in the accent family [0.02ms]
+(pass) cedia workbench palette > picks midnight and colorblind by theme name, since they share a kind [0.03ms]
+(pass) cedia workbench palette > keeps the unfocused chrome at the palette's own colour in every kind [0.02ms]
+(pass) Cedia's own token scale > declares every token the workbench palette is mapped onto [0.03ms]
+(pass) Cedia's own token scale > declares the full spacing and radius steps the reference scale was measured for [0.03ms]
+(pass) Cedia's own token scale > renders the declaration block from the same map, in order [0.09ms]
+
+apps/macos/test/bridge-contract.test.ts:
+(pass) bridge contract > keeps the handler kinds and the bundle sends equal
+(pass) bridge contract > sends no kind the contract does not list [1.73ms]
+(pass) bridge contract > imports the channel from one module, never a string repeat [0.40ms]
+
+apps/macos/test/destination-picker.test.ts:
+(pass) destinationOptions > keeps Run on / Connect via / Workspace separate and does not invent Cloud [0.07ms]
+(pass) destinationOptions > enables a new worktree only when Git is present [0.02ms]
+
+apps/macos/test/agent-window-terminal.test.ts:
+(pass) Cedia Agent terminal service > owns a PTY per sender/thread/terminal and streams the full terminal lifecycle [1.13ms]
+(pass) Cedia Agent terminal service > keeps bounded scrollback and isolates terminals by renderer sender [1.56ms]
+(pass) Cedia Agent terminal service > validates cwd, dimensions, and bounded input before spawning [0.31ms]
+(pass) Cedia Agent native terminal renderer bridge > routes terminal calls through the panel surface and forwards native events [0.14ms]
+
+apps/macos/test/agent-window-device.test.ts:
+(pass) keeps frame authorization when Electron wraps one WebContents across invokes [2.68ms]
+(pass) routes Synara simulator lifecycle, input, and state events through the native service [0.91ms]
+(pass) fans out the exact Synara device-frame envelope over the native IPC channel [1.67ms]
+(pass) cleans all sender-owned frame subscriptions when the renderer is destroyed [1.96ms]
+(pass) rejects malformed or unauthorized frame requests at the IPC boundary [0.45ms]
+(pass) uses the native bridge for Synara device methods and decodes IPC frame envelopes [0.41ms]
+(pass) keeps one native frame subscription for multiple sources and reports subscribe errors [1.27ms]
+(pass) acknowledges malformed native frames so the bounded host queue cannot stall [0.11ms]
+
+apps/macos/test/shared-draft.test.ts:
+(pass) extracts the readable composer text from the renderer payload [0.02ms]
+(pass) imports the pre-host draft into the host exactly once [1.60ms]
+(pass) reports a conflict with the winning payload instead of overwriting it [2.98ms]
+(pass) keeps the text when the host is unreachable and serves it from the cache [1.53ms]
+(pass) reserves one command per draft revision and refuses the same revision with different text [1.24ms]
+(pass) releases a delivered draft only while its revision still matches [3.12ms]
+(pass) never lets the reservation path throw when the host cannot answer [0.20ms]
+(pass) exposes the reservation and the release through the Agent Window handler [1.21ms]
+(pass) tells the other Mac window the revision the host just committed, and the delivery that emptied it [2.88ms]
+(pass) starts the next draft instead of refusing forever once a Send delivered the previous one [2.58ms]
+(pass) publishes the committed revision through the Agent Window handler [1.24ms]
+(pass) sends a committed revision to every other window and never back to the sender [0.09ms]
+(pass) keeps every renderer-facing event channel in the namespace the preload delivers [0.01ms]
+
+apps/macos/test/restricted.test.ts:
+(pass) restricted shell exposes only trust management and disposes before activating execution [0.23ms]
+
+apps/macos/test/review-snapshot.test.ts:
+(pass) parsePorcelainStatus > separates tracked, untracked, and conflict rows [0.16ms]
+(pass) parsePorcelainStatus > marks common binary extensions without opening the file
+(pass) reviewFromGitStatus > parses unified hunks without executing them [0.03ms]
+(pass) reviewFromGitStatus > keeps an honest error and does not invent files [0.03ms]
+(pass) reviewSummary > counts porcelain statuses without inventing plus/minus [0.04ms]
+(pass) reviewSummary > fills plus/minus only when hunks are provided [0.03ms]
+(pass) reviewPlusMinus > counts added and removed content lines and ignores @@ and \ markers [0.02ms]
+(pass) markReviewStale > sets stale and the default English apply-block copy without mutating the input [0.03ms]
+(pass) reviewWorkspaceLabel > labels a folder when no branch is supplied and never invents one [0.01ms]
+(pass) binary review projection > marks binaries without fabricating a text diff [0.02ms]
+(pass) reviewCommitPreview > counts staged vs unstaged and never enables auto-push [0.04ms]
+(pass) markReviewDirtyConflict > flags overlapping dirty buffers and does not invent an apply path [0.06ms]
+(pass) conflict and bring-back honesty > marks conflicts and keeps bring-back disabled until OMP advertises a checkpoint [0.03ms]
+(pass) ideLandingForWorkTab > never lands Review on SCM and explains a non-Git folder [0.03ms]
+(pass) splitHunkColumns > places deletions on the left and additions on the right [0.02ms]
+
+apps/macos/test/mention-context.test.ts:
+(pass) mentionRows > filters by query against label, path, and title [0.18ms]
+(pass) mentionRows > disables selection when the window has no editor selection [0.02ms]
+(pass) mentionRows > enables selection and inserts a trimmed 80-character preview [0.03ms]
+(pass) mentionRows > states path-reference upload reason when upload is not advertised [0.05ms]
+(pass) mentionRows > includes the Terminal logs row without treating it as a user PTY [0.02ms]
+(pass) mentionRows > never claims a file was uploaded and does not invent Cloud or voice rows [0.05ms]
+(pass) mentionRows > returns stubs plus capped files, sessions, and artifacts when the query is empty [0.06ms]
+(pass) mentionRows > lists unique parent folders as path references without claiming upload [0.03ms]
+
+apps/macos/test/agent-ui-state.test.ts:
+(pass) hands the exact workspace session to IDE and rejects mismatched workspaces [1.94ms]
+(pass) hands off an unsent draft without creating or starting an OMP session [1.01ms]
+
+apps/macos/test/capability-catalog.test.ts:
+(pass) SETTINGS_SECTIONS > lists product settings in declared order
+(pass) ompSettingsCatalog > defaults voice, cloud, automations, and browser to unsupported without inventing a backend [0.11ms]
+(pass) ompSettingsCatalog > never marks gated capabilities available unless input says so [0.02ms]
+(pass) ompSettingsCatalog > marks gated capabilities available only when advertised [0.02ms]
+(pass) ompSettingsCatalog > marks advertised models available [0.04ms]
+(pass) ompSettingsCatalog > marks models needs_auth when the provider is not authenticated [0.04ms]
+(pass) ompSettingsCatalog > keeps blocked_external entries visible instead of hiding them [0.03ms]
+(pass) ompSettingsCatalog > does not add a silent billed fallback entry [0.02ms]
+(pass) ompSettingsCatalog > surfaces error status when advertised
+(pass) omp-sign-in entry > reports available when every advertised provider is signed in [0.01ms]
+(pass) omp-sign-in entry > reports needs_auth naming the pending providers with the /login path [0.01ms]
+(pass) omp-sign-in entry > stays honest with no providers advertised
+
+apps/macos/test/layout-geometry.test.ts:
+(pass) D01 layout geometry > one leaf 800x600 is one box at 0,0,800,600 and no sashes [0.09ms]
+(pass) D01 layout geometry > split right 800x600 ratio 0.5 yields two ~400-wide boxes and one row sash [0.07ms]
+(pass) D01 layout geometry > split down 800x500 stacks heights and emits one column sash [0.03ms]
+(pass) D01 layout geometry > boxes cover the rectangle without overlap except sash thickness [0.04ms]
+(pass) D01 layout geometry > maximized tree is one full-size box and zero sashes [0.02ms]
+(pass) D01 layout geometry > setSplitRatio 0.7 then boxes reflect it [0.05ms]
+(pass) D01 layout geometry > setSplitRatio unknown id leaves the tree unchanged [0.01ms]
+(pass) D01 layout geometry > does not invent Cloud types or session ids [0.03ms]
+(pass) D01 layout geometry > non-finite or non-positive viewport yields empty arrays [0.01ms]
+
+apps/macos/test/agent-window-chrome.test.ts:
+(pass) keeps native traffic lights centered on the renderer header at each supported zoom [0.04ms]
+
+apps/macos/test/selection-actions.test.ts:
+(pass) selection actions > ships Explain and Fix with stable command ids [0.03ms]
+(pass) selection actions > tells the agent not to invent a change when Fix finds no defect
+(pass) selection actions > only names commands the manifest declares [0.12ms]
+(pass) selection actions > cites the instruction, the real range, and the fenced selection [0.03ms]
+(pass) selection actions > states the clip when the caller had to truncate the selection [0.01ms]
+
+apps/macos/test/provider-icons.test.ts:
+(pass) provider marks > bundles a glyph for the providers OMP actually routes to [0.04ms]
+(pass) provider marks > hands back path data only, and nothing for a provider it has no mark for [0.03ms]
+(pass) provider marks > carries path data a browser can draw, for every bundled mark [0.10ms]
+(pass) provider marks > resolves an alias to the vendor's mark [0.03ms]
+
+apps/macos/test/dispatch-guard.test.ts:
+(pass) dispatch guard > freezes a stable envelope for the same revision, attachments, session, and intent [0.05ms]
+(pass) dispatch guard > treats the same commandId/envelope as a duplicate click while in flight [0.03ms]
+(pass) dispatch guard > lets new typing after send dispatch a new revision without clearing the in-flight command [0.02ms]
+(pass) dispatch guard > rejects an empty draft with no attachments
+(pass) dispatch guard > rejects sending an older revision after a newer freeze [0.01ms]
+(pass) dispatch guard > allows dispatch after the in-flight command is acknowledged [0.01ms]
+
+apps/macos/test/omp-result.test.ts:
+(pass) OMP command confirmation > counts only host-confirmed commands as applied [0.02ms]
+(pass) OMP command confirmation > tells the user when a picked thinking level was not applied [0.05ms]
+(pass) OMP command confirmation > tells the user when a fork was not created [0.01ms]
+(pass) OMP command confirmation > does not silently swallow a failed OMP request [0.06ms]
+
+apps/macos/test/app-lifecycle.test.ts:
+(pass) Cedia application lifecycle > treats an unreachable host as idle [0.52ms]
+(pass) Cedia application lifecycle > reports stopped only after lifecycle reports non-accepting [0.06ms]
+(pass) Cedia application lifecycle > closes host admission before asking, and reopens it when the owner cancels [0.09ms]
+(pass) Cedia application lifecycle > stops from an already fenced host without opening admission again [0.06ms]
+(pass) Cedia application lifecycle > does not ask about a quit whose admission never closed [0.14ms]
+(pass) Cedia application lifecycle > reports a cancelled quit whose admission did not reopen [0.06ms]
+(pass) Cedia application lifecycle > does not fence a quit that has nothing to decide [0.03ms]
+(pass) Cedia application lifecycle > asks before stopping active work and leaves the host untouched on cancel [0.04ms]
+(pass) Cedia application lifecycle > proceeds after active work is confirmed to stop [0.03ms]
+(pass) Cedia application lifecycle > fails when the host keeps accepting after the quit request [0.05ms]
+(pass) Cedia application lifecycle > never starts a host just to quit when none is running [0.03ms]
+(pass) Cedia application lifecycle > reports stopped when an acknowledged quit removes the listener and leaves the receipt [0.08ms]
+(pass) Cedia application lifecycle > fails when the listener disappears without a durable stopped receipt [0.06ms]
+(pass) Cedia application lifecycle > fails visibly when the host refuses the shutdown request [0.06ms]
+(pass) Cedia application lifecycle > allows the quit only after the host actually stopped [0.09ms]
+(pass) Cedia application lifecycle > refuses the quit when the owner cancels, before anything is stopped [0.08ms]
+(pass) Cedia application lifecycle > decides without a window, because there is no surface to ask on [0.03ms]
+(pass) Cedia application shutdown join > stops the host without asking again once shutdown is committed [0.11ms]
+(pass) Cedia application shutdown join > logs a host that could not be stopped and still resolves, once [0.06ms]
+(pass) Cedia login item > never registers a development binary [0.03ms]
+(pass) Cedia login item > registers a packaged build hidden, and reports a failure instead of throwing [0.04ms]
+(pass) Cedia login launch > keeps a login launch in the background unless it was given something to open [0.02ms]
+(pass) Cedia dirty editor IPC > rejects dirty counts when the host has not supplied a trusted sender check [0.07ms]
+(pass) Cedia dirty editor IPC > publishes each trusted workbench count and removes it when its sender is destroyed [0.06ms]
+(pass) Cedia dirty editor IPC > feeds the registered IPC listener into lifecycle status and unregisters it [0.16ms]
+(pass) Cedia main-process lifecycle wiring > joins shutdown, registers the login item and decides the login window [0.09ms]
+(pass) Cedia main-process lifecycle wiring > asks the owner through a real dialog before it lets a quit stop running work [0.47ms]
+(pass) Cedia main-process lifecycle wiring > neither registers a login item nor suppresses the window for a development launch [0.02ms]
+
+apps/macos/test/omp-tool-presentation.test.ts:
+(pass) Cedia tool presentation coverage > has at least one name of every audited kind to prove the path with [0.01ms]
+(pass) Cedia tool presentation coverage > renders one complete card per audited tool name, including aliases and dynamic tools [0.60ms]
+(pass) Cedia tool presentation coverage > keeps a failed tool's outcome instead of presenting it as a success [0.05ms]
+(pass) Cedia tool presentation coverage > names an unaudited tool instead of dropping it, so a new tool cannot go unnoticed [0.02ms]
+
+apps/macos/test/command-registry.test.ts:
+(pass) command registry > enumerates every registered command from one module [0.12ms]
+(pass) command registry > matches the manifest except the two documented internals [0.05ms]
+
+apps/macos/test/pane-views.test.ts:
+(pass) paneCacheKey > shares one key for the same sessionId and isolates New-task panes [0.03ms]
+(pass) rememberPaneTranscript > replaces only the target cache key [0.05ms]
+(pass) buildPaneViews > one leaf New task → one view, empty transcript, label New task [0.05ms]
+(pass) buildPaneViews > two leaves same sessionId → same transcript from cache, different draftKeys/drafts [0.06ms]
+(pass) buildPaneViews > two New-task leaves → independent empty transcripts [0.03ms]
+(pass) buildPaneViews > remember then build sees the stored rows [0.02ms]
+(pass) buildPaneViews > maximized tree → only the maximized leaf [0.02ms]
+(pass) buildPaneViews > does not invent session ids or Cloud [0.03ms]
+
+apps/macos/test/sidebar-filters.test.ts:
+(pass) DEFAULT_SIDEBAR_FILTERS > groups by project, orders by last activity, shows active+draft, and hides archived [0.02ms]
+(pass) normalizeSidebarFilters > returns defaults for missing or invalid objects [0.01ms]
+(pass) normalizeSidebarFilters > rejects unknown groupBy, order, show, and status values [0.04ms]
+(pass) normalizeSidebarFilters > keeps known show values and does not invent extras [0.03ms]
+(pass) normalizeSidebarFilters > never invents PR=open, PR=closed, or PR=no [0.02ms]
+(pass) applySessionFilters > keeps active and draft rows under the default filters and hides archived [0.09ms]
+(pass) applySessionFilters > treats empty or New task idle rows as drafts, and completed/idle titled rows as active [0.04ms]
+(pass) applySessionFilters > treats extras.drafts keys as drafts when the row is idle and untitled [0.02ms]
+(pass) applySessionFilters > does not turn a titled idle/completed row into a draft just because extras.drafts has a key [0.02ms]
+(pass) applySessionFilters > treats running, waiting, unknown, and recovery_required as active even when untitled [0.02ms]
+(pass) applySessionFilters > applies status, environment, source, and PR=unknown without inventing open/closed [0.06ms]
+(pass) applySessionFilters > keeps the selected session even when it would otherwise be hidden [0.03ms]
+(pass) applySessionFilters > orders by last activity descending and does not invent a Cloud destination [0.03ms]
+(pass) filterChips > returns no chips for the default filters [0.04ms]
+(pass) filterChips > returns chips only for non-default values and never a PR=no chip [0.05ms]
+(pass) filterEmptyCopy > uses filter-empty copy when sessions exist but none are visible [0.02ms]
+(pass) filterEmptyCopy > uses a different empty-library copy when there are no sessions at all
+(pass) markAllAsReadScope > describes selected results only and never says all projects [0.02ms]
+
+apps/macos/test/state.test.ts:
+(pass) Cedia task reducer > keeps a terminal panel's frames out of the transcript [0.04ms]
+(pass) Cedia task reducer > hydrates OMP-owned fork history from get_messages without replay duplicates [0.12ms]
+(pass) Cedia task reducer > keeps every turn of the history a rewind rebuilds, not just the last [0.07ms]
+(pass) Cedia task reducer > keeps host connectivity while navigating an empty project and clears recovered errors [0.03ms]
+(pass) Cedia task reducer > prepends advertised OMP history without duplicating live rows [0.02ms]
+(pass) Cedia task reducer > projects pinned OMP message snapshots into one stable row per incarnation [0.07ms]
+(pass) Cedia task reducer > renders OMP tool partialResult/result content and isError on one card [0.06ms]
+(pass) Cedia task reducer > ignores events from another session or incarnation [0.03ms]
+(pass) Cedia task reducer > keeps stable message identity while streaming and retains raw OMP frames [0.04ms]
+(pass) Cedia task reducer > projects tool execution frames into one expandable identity [0.04ms]
+(pass) Cedia task reducer > binds interactive requests to the current session incarnation [0.11ms]
+(pass) Cedia task reducer > accepts exact broker interactive envelopes without auto-approving [0.08ms]
+(pass) Cedia task reducer > round-trips every interactive method the wire can carry [0.04ms]
+(pass) Cedia task reducer > states an unknown method instead of dropping the request [0.12ms]
+(pass) Cedia task reducer > does not treat message fragments with no journal sequence as duplicates [0.02ms]
+(pass) Cedia task reducer > marks in-flight commands unknown on disconnect and never makes them replayable [0.02ms]
+(pass) Cedia task reducer > applies the runtime's command-metadata push to the composer menu [0.06ms]
+(pass) Cedia task reducer > keeps commands the pinned runtime cannot run headless out of the composer menu [0.01ms]
+
+apps/macos/test/route-stack.test.ts:
+(pass) route stack > remembers task then projects and back restores the task without inventing a session [0.06ms]
+(pass) route stack > does not push a duplicate consecutive route
+
+apps/macos/test/recovery-ui.test.ts:
+(pass) Mac recovery banner (UI-S4) > shows Thai+English offline copy when a draft persist receipt exists [0.03ms]
+(pass) Mac recovery banner (UI-S4) > warns when the draft is not saved yet [0.01ms]
+(pass) Mac recovery banner (UI-S4) > blocks resend when the command outcome is unknown [0.01ms]
+(pass) Mac recovery banner (UI-S4) > never offers a Retry that auto-runs a destructive command [0.03ms]
+(pass) Mac recovery banner (UI-S4) > does not auto-answer stale approvals on reconnect
+
+apps/macos/test/extension-honesty.test.ts:
+(pass) extension honesty leftovers > opens Cedia settings on the Devices pairing section instead of native host paths [0.10ms]
+(pass) extension honesty leftovers > surfaces pairing failure guidance and does not open SCM welcome [0.18ms]
+(pass) extension honesty leftovers > routes non-Git Review to a task-scoped IDE landing with an explanation [0.01ms]
+(pass) ide-native workbench contributions > docks the agent in the native secondary side bar next to the editor [0.02ms]
+(pass) ide-native workbench contributions > registers the real editor-to-task commands and their menu entries [0.03ms]
+(pass) ide-native workbench contributions > opens task changes in the real Code-OSS diff editor, not a mock diff [0.50ms]
+(pass) ide-native workbench contributions > wires the selection mention and editor command to real cited context [0.30ms]
+(pass) ide-native workbench contributions > renders the status bar from real connection, run, and approval state [0.23ms]
+(pass) ide-native workbench contributions > fans snapshots out to every resolved surface and keeps IDE layout on focus [0.33ms]
+(pass) ide-native workbench contributions > never blocks the mode switch on cosmetic workbench appearance [0.20ms]
+(pass) ide-native workbench contributions > reveals the docked container on the coexistence default [0.22ms]
+(pass) ide-native workbench contributions > wires inline edit to a real prompt on the guarded send path [0.22ms]
+(pass) ide-native workbench contributions > surfaces Cedia in native editor and Source Control chrome [0.03ms]
+(pass) ide-native workbench contributions > never declares a duplicate command id [0.03ms]
+(pass) ide-native workbench contributions > accepts the Source Control resource shape, not only a Uri [0.14ms]
+
+apps/macos/test/approval-view.test.ts:
+(pass) approval view > keeps a current request pending and lists its identity [0.05ms]
+(pass) approval view > marks stale incarnation and timeout as readonly [0.01ms]
+(pass) approval view > classifies exactly the interactive methods OMP can send [0.04ms]
+(pass) approval view > aligns option details by index without inventing extra options [0.04ms]
+(pass) approval view > reports remaining timeout and expired copy without inventing a clock [0.03ms]
+(pass) approval view > blocks submit for required fields and offline hosts, and focuses invalid or dangerous controls [0.06ms]
+
+apps/macos/test/transcript-page.test.ts:
+(pass) transcriptEntriesFromOmpMessages > maps advertised OMP rows and does not invent empty history [0.09ms]
+(pass) prependTranscriptEntries > prepends unique older rows and keeps the live journal identity [0.05ms]
+
+apps/macos/test/host-theme-authority.test.ts:
+(pass) host theme authority > maps every colour the pack layer emits onto a workbench anchor [0.73ms]
+(pass) host theme authority > sources every mapped token from anchors the snapshot is allowed to carry [0.03ms]
+(pass) host theme authority > keeps the shared anchor list exactly as wide as the bundle needs [113.19ms]
+(pass) host theme authority > carries the whole anchor set through the snapshot sanitiser [0.20ms]
+(pass) host theme authority > repaints chips, panels and settings — not only the composer card [0.18ms]
+(pass) host theme authority > falls back through a token's anchors in priority order [0.07ms]
+(pass) host theme authority > leaves the pack alone when there is no snapshot [0.01ms]
+(pass) no agent-side theme editing > has no theme-pack editor, catalog or mode picker left [40.95ms]
+(pass) no agent-side theme editing > keeps the Appearance section read-only about the IDE theme [1.52ms]
+(pass) no agent-side theme editing > has no theme store left to unlink from the IDE [22.16ms]
+
+apps/macos/test/cdp-tab-endpoint.test.ts:
+(pass) CdpTabEndpoint > lists only attached tabs with websocket urls [2.31ms]
+(pass) CdpTabEndpoint > proxies commands and forwards debugger events, refusing unknown tabs and bad frames [105.38ms]
+(pass) CdpTabEndpoint > closes sockets when the debugger detaches and frees the port on close [2.88ms]
+(pass) CdpTabEndpoint browser-level protocol > exposes the browser socket on /json/version and lists page targets [3.13ms]
+(pass) CdpTabEndpoint browser-level protocol > attaches sessions, routes commands flatten-style, and refuses tab lifecycle [55.84ms]
+(pass) CdpTabEndpoint browser-level protocol > emits detachedFromTarget on explicit detach so clients drop the row [3.51ms]
+(pass) CdpTabEndpoint browser-level protocol > ends sessions when the debugger detaches [29.07ms]
+
+apps/macos/test/omp-ui-methods.test.ts:
+(pass) Cedia extension-UI method coverage > classifies exactly the methods the dated audit lists, in the same class [0.12ms]
+(pass) Cedia extension-UI method coverage > carries every audited method through its real Cedia path [0.36ms]
+(pass) Cedia extension-UI method coverage > does not present a method the registry has not classified [0.03ms]
+
+apps/macos/test/command-contract.test.ts:
+(pass) stock command contract > collects a real set of ids, so the scanner cannot pass on nothing [0.02ms]
+(pass) stock command contract > only uses generated ids for views and containers the manifest declares [0.04ms]
+(pass) stock command contract > exists in the pinned checkout, so no executed id is dead [269.23ms]
+
+apps/macos/test/agent-theme.test.ts:
+(pass) Agent theme handoff > keeps only the bounded Code-OSS color allowlist [0.06ms]
+(pass) Agent theme handoff > round-trips a validated snapshot through the shared Agent state directory [0.82ms]
+(pass) Agent theme handoff > serves the latest snapshot to an already-open Agent renderer [0.98ms]
+(pass) retains an effective palette when the same IDE theme republishes its fallback [1.09ms]
+
+apps/macos/test/discard-draft.test.ts:
+(pass) discardDraftPlan > does not confirm or claim a delete when the draft is empty [0.03ms]
+(pass) discardDraftPlan > confirms text discard without deleting the session or stopping OMP [0.01ms]
+(pass) applyDiscardDraft > clears the target key and leaves other drafts in place [0.03ms]
+
+apps/macos/test/chat-sessions-map.test.ts:
+(pass) session resource identity > round-trips a session id through its resource uri [0.03ms]
+(pass) session resource identity > does not claim resources owned by another provider [0.01ms]
+(pass) session resource identity > keeps ids that need escaping reversible [0.02ms]
+(pass) session resource identity > recognizes a draft under either key the workbench builds it with [0.02ms]
+(pass) session resource identity > reads the composer's picked model out of a session's input state [0.05ms]
+(pass) sessionState > maps the four host statuses without inventing a fifth [0.01ms]
+(pass) sessionItemShape > carries title, project name and timings from the host record [0.06ms]
+(pass) sessionItemShape > leaves lastRequestEnded unset while a turn is still running [0.01ms]
+(pass) sessionItemShape > leaves description undefined rather than inventing a project label
+(pass) sessionItemShape > carries the host's archived flag, which is what moves a row to Done
+(pass) sessionItemShape > resolves the project name from the host list [0.02ms]
+(pass) turnPlansFromTranscript > pairs each user request with the assistant and tool work that answered it [0.08ms]
+(pass) turnPlansFromTranscript > drops system entries instead of showing them as assistant text [0.01ms]
+(pass) turnPlansFromTranscript > names a tool run even when the frame carried no label [0.01ms]
+(pass) tool cards (fixtures only) > marks a running tool incomplete and carries its args as input [0.04ms]
+(pass) tool cards (fixtures only) > marks a completed tool complete and names the past action [0.01ms]
+(pass) tool cards (fixtures only) > marks a failed tool as an error that is complete
+(pass) tool cards (fixtures only) > clamps a huge output with the truncation suffix [0.01ms]
+(pass) tool cards (fixtures only) > returns undefined for a non-tool entry
+(pass) command requests > sends a prompt as the OMP prompt command with a {message} payload [0.02ms]
+(pass) command requests > stops a turn with the abort command, never a second prompt
+(pass) command requests > keeps the participant id extension-owned
+(pass) command requests > builds OMP model commands through the host envelope only [0.03ms]
+(pass) composer attachments (fixtures only) > reads binary references into OMP images and skips non-binary ones [0.11ms]
+(pass) composer attachments (fixtures only) > skips a reference whose data() rejects and still returns the others [0.07ms]
+(pass) composer attachments (fixtures only) > labels non-binary references, name first, fsPath then path, without duplicates [0.04ms]
+(pass) composer attachments (fixtures only) > appends labels as one block and leaves the prompt untouched without labels [0.02ms]
+(pass) composer attachments (fixtures only) > carries prompt images only when supplied and non-empty [0.02ms]
+(pass) native UI requests (fixtures only) > maps a confirm to allow and deny in the dock's order [0.04ms]
+(pass) native UI requests (fixtures only) > maps a select to single choice, whose options are their own labels [0.05ms]
+(pass) native UI requests (fixtures only) > renders every method the wire can carry, so no request is left without a question [0.02ms]
+(pass) native UI requests (fixtures only) > maps empty answers to a cancellation and accepts only shaped answers [0.02ms]
+(pass) native UI requests (fixtures only) > carries a placeholder or prefill as the text question's message [0.01ms]
+(pass) native UI requests (fixtures only) > unwraps the workbench's answer objects, whose option values it stringifies [0.02ms]
+(pass) OMP model catalog projection (fixtures only) > normalizes get_available_models ack/result shapes without inventing rows [0.02ms]
+(pass) OMP model catalog projection (fixtures only) > reads the get_state current model id without guessing [0.06ms]
+(pass) OMP model catalog projection (fixtures only) > keeps the current selection only when still advertised (no fallback) [0.04ms]
+(pass) OMP model catalog projection (fixtures only) > marks provider-unauthenticated rows with a needs-auth reason [0.02ms]
+(pass) OMP model catalog projection (fixtures only) > projects an honest picker group (empty catalog stays empty) [0.10ms]
+(pass) OMP model catalog projection (fixtures only) > unwraps a bare {data:'<id>'} current model id (m3) [0.01ms]
+(pass) OMP model catalog projection (fixtures only) > matches a bare get_state id to the catalogue's provider-qualified row [0.06ms]
+(pass) OMP model catalog projection (fixtures only) > keeps the provider get_state names, so a shared id still names one row [0.09ms]
+(pass) OMP model catalog projection (fixtures only) > feeds the guarded send from get_state (item 63c)
+(pass) OMP model catalog projection (fixtures only) > keeps every provider's row when a model id is advertised more than once [0.07ms]
+(pass) OMP model catalog projection (fixtures only) > refuses a model id two providers advertise, unless one of them stands out [0.08ms]
+(pass) OMP model catalog projection (fixtures only) > publishes a reasoning group only for the levels OMP advertises for that model [0.04ms]
+(pass) OMP model catalog projection (fixtures only) > maps the composer's picked language model onto an OMP model, or nothing [0.03ms]
+(pass) OMP model catalog projection (fixtures only) > reads a failed turn's provider message out of its raw frames [0.04ms]
+(pass) OMP model catalog projection (fixtures only) > builds the get_login_providers command through the host envelope only
+(pass) OMP login providers fetch shape (fixtures only, M1) > normalizes get_login_providers ack/result shapes without inventing rows [0.05ms]
+(pass) OMP login providers fetch shape (fixtures only, M1) > leaves unauthenticated flags absent instead of inventing false
+(pass) OMP login providers fetch shape (fixtures only, M1) > annotates needs-auth only for explicit false, never for missing flags [0.02ms]
+(pass) OMP model pick resolution (fixtures only, m4) > prefers the advertised catalog row for the provider
+(pass) OMP model pick resolution (fixtures only, m4) > falls back to the picker description when the catalog row is stale
+(pass) OMP model pick resolution (fixtures only, m4) > returns undefined for an unknown provider so the caller fails honestly
+
+apps/macos/test/worktree-receipt.test.ts:
+(pass) worktree receipt lifecycle > starts idle and begins as creating [0.02ms]
+(pass) worktree receipt lifecycle > cancel before submit does not claim a directory [0.02ms]
+(pass) worktree receipt lifecycle > cancel while creating keeps path/sessionId and does not delete [0.01ms]
+(pass) worktree receipt lifecycle > does not wipe a ready or failed receipt on cancel [0.02ms]
+(pass) worktree receipt lifecycle > records success and failure receipts with copy [0.02ms]
+
+apps/macos/test/about-identity.test.ts:
+(pass) aboutIdentity > keeps missing OMP unavailable and does not invent a marketed version [0.08ms]
+(pass) aboutIdentity > passes provided versions through without claiming install [0.03ms]
+
+apps/macos/test/native-diff.test.ts:
+(pass) native diff document identity > round-trips a workspace-relative path and ref [0.04ms]
+(pass) native diff document identity > survives spaces and unicode in the path [0.01ms]
+(pass) native diff document identity > rejects ids that are not review documents
+(pass) native diff plan > opens a text diff and names both sides [0.02ms]
+(pass) native diff plan > refuses a binary diff instead of showing a misleading one
+(pass) native diff plan > flags a missing original for a new or untracked file
+(pass) binary sniffing > detects a NUL byte and accepts plain text
+(pass) review ref hardening > passes through a normal ref and refuses anything that could act as a flag [0.03ms]
+(pass) review target decision > requires an open workspace before opening a diff [0.02ms]
+(pass) review target decision > refuses a path that escapes the task workspace [0.02ms]
+(pass) review target decision > opens a normal tracked change with a titled diff
+(pass) review target decision > normalizes backslash separators from Windows-style inputs
+(pass) review target decision > propagates the binary refusal instead of opening a text diff
+(pass) review target decision > titles a brand new file as a new-file comparison
+(pass) Cedia edit review diff > round-trips the edited document id through the virtual scheme [0.02ms]
+(pass) Cedia edit review diff > rejects a foreign or malformed id [0.01ms]
+(pass) Cedia edit review diff > names both sides of the Cedia edit in the title
+
+apps/macos/test/history-page.test.ts:
+(pass) S04 older-history honesty > does not advertise older pages when the host cursor is forward-only [0.02ms]
+(pass) S04 older-history honesty > uses History changed when an older request is possible or the scroll anchor is gone [0.01ms]
+
+apps/macos/test/redacted-diagnostics.test.ts:
+(pass) redactedDiagnostics > previews connection identity without secrets [0.04ms]
+
+apps/macos/test/route-error.test.ts:
+(pass) D01 route error pages > exports the D01 route kinds and error reasons
+(pass) D01 route error pages > uses a gone title, Projects, and no substitute for a missing or deleted task [0.09ms]
+(pass) D01 route error pages > keeps revoked devices on Back and does not auto-pair [0.02ms]
+(pass) D01 route error pages > is honest about an unknown route and offers Back [0.01ms]
+(pass) D01 route error pages > never picks a nearby task as a substitute for any kind or reason [0.06ms]
+(pass) D01 validateRoute > accepts a task whose session belongs to the requested project [0.07ms]
+(pass) D01 validateRoute > rejects a missing task even when another session exists in the same project [0.02ms]
+(pass) D01 validateRoute > rejects a session that does not belong to the requested project [0.01ms]
+(pass) D01 validateRoute > rejects a missing project without falling back to another project [0.01ms]
+(pass) D01 validateRoute > rejects a missing resource and does not open a sibling resource [0.01ms]
+(pass) D01 validateRoute > rejects a resource that belongs to a different session
+(pass) D01 validateRoute > surfaces catalog tombstones as deleted or revoked without substituting [0.03ms]
+(pass) D01 validateRoute > accepts ide and settings routes that do not require a missing id [0.02ms]
+(pass) D01 validateRoute > rejects a missing IDE workspace without opening another project [0.01ms]
+(pass) D01 validateRoute > builds availability without treating archived as deleted [0.06ms]
+(pass) D01 validateRoute > treats blank ids as absent and does not invent a session [0.01ms]
+(pass) D01 validateRoute > keeps every failed validation on Back or Projects [0.03ms]
+
+apps/macos/test/host-preferences-end-to-end.test.ts:
+(pass) carries a window's setting change to the real host over the real main-process handler [18.34ms]
+
+apps/macos/test/agents-chrome-inventory.test.ts:
+(pass) chrome inventory > reads the reference capture into roles and labels [0.27ms]
+(pass) chrome inventory > keeps a container out of the inventory and collapses repeats [0.02ms]
+(pass) chrome inventory > trims only the capture's own attribute text [0.01ms]
+(pass) chrome inventory > reports the reference's own controls as the parity direction [0.10ms]
+(pass) chrome inventory > consumes a repeated label one for one instead of matching it twice [0.01ms]
+(pass) chrome inventory > keeps a recorded deviation out of the failure list, with its reason [0.03ms]
+(pass) chrome inventory > matches the two capture shapes: a merged row label and a longer Cedia label [0.02ms]
+(pass) chrome inventory > does not match a control just because its name appears inside another [0.01ms]
+(pass) chrome inventory > reads the shipped reference capture and finds the controls the plan names [0.70ms]
+
+apps/macos/test/desktop-patch-set.test.ts:
+(pass) desktop patch set > applies every patch, in manifest order, to the pinned base [733.47ms]
+
+apps/macos/test/agent-edit-marks.test.ts:
+(pass) applied ranges > ends a single-line replacement where the inserted text ends [0.07ms]
+(pass) applied ranges > counts the lines a multi-line insertion adds [0.02ms]
+(pass) applied ranges > keeps a pure deletion as a zero-width mark at the deleted position
+(pass) applied ranges > returns ranges in document order regardless of input order [0.02ms]
+(pass) merging and counting > merges touching ranges so one decoration is not stacked twice [0.06ms]
+(pass) merging and counting > swallows a range contained in another [0.02ms]
+(pass) merging and counting > keeps disjoint ranges apart
+(pass) merging and counting > counts distinct lines, not characters [0.04ms]
+(pass) the label > names the path, the regions, and the lines [0.03ms]
+(pass) the revert rule > restores the exact pre-edit text while the buffer still holds Cedia's version [0.01ms]
+(pass) the revert rule > refuses once anything else has touched the buffer, and points at Undo
+(pass) the painted range and hover > paints a replacement exactly as it landed [0.02ms]
+(pass) the painted range and hover > widens a pure deletion to the whole line so it is visible [0.02ms]
+(pass) the painted range and hover > clamps a deletion reported past the last line instead of throwing
+(pass) the painted range and hover > names the file and both actions in the hover
+(pass) agent edit review decision > allows a review diff while the buffer still holds Cedia's version
+(pass) agent edit review decision > refuses once the buffer moved on so the diff cannot misattribute the user's change
+(pass) agent edit lens specs > places both decisions on the first region Cedia changed [0.01ms]
+(pass) mark region derived from the produced text > reproduces the produced text from the pre-edit text and the edits [0.06ms]
+(pass) mark region derived from the produced text > applies several edits back to front so earlier ones do not shift later ranges [0.02ms]
+(pass) mark region derived from the produced text > narrows a whole-file edit to the lines that actually changed [0.04ms]
+(pass) mark region derived from the produced text > keeps an inserted line inside the span
+(pass) mark region derived from the produced text > has no span when the texts are equal
+(pass) mark region derived from the produced text > falls back to the edit geometry when the produced text is unchanged [0.01ms]
+
+apps/macos/test/agent-window-keybindings.test.ts:
+(pass) agent-window keybindings file > pins the command allowlist against the vendored contract source [0.14ms]
+(pass) agent-window keybindings file > resolves a mixed file: valid rows pass, bad rows become issues [0.11ms]
+(pass) agent-window keybindings file > accepts script commands and every documented when identifier [0.07ms]
+(pass) agent-window keybindings file > parses the key grammar the bundle capture writes [0.05ms]
+(pass) agent-window keybindings file > reads a workbench-touched file: comments and trailing commas survive [0.12ms]
+(pass) agent-window keybindings file > upsert replaces the edited row and appends new ones [0.20ms]
+(pass) agent-window keybindings file > defaults to the workbench user file per platform [0.02ms]
+(pass) agent-window keybindings file > round-trips through a real temp file [0.37ms]
+(pass) agent-window keybindings file > runs the item-57 conflict gate: bundle dispatch context is inside the vocabulary [0.12ms]
+
+apps/macos/test/keybinding-resolution.test.ts:
+(pass) Cmd+K resolves to Cedia inline edit > fires the single-chord Cedia binding when a selection exists [0.50ms]
+(pass) Cmd+K resolves to Cedia inline edit > still waits for the chord when there is no selection [0.03ms]
+(pass) line-number gutter menu is a live surface > is rendered by the pinned workbench and normalizes the selection [0.14ms]
+
+apps/macos/test/work-panel.test.ts:
+(pass) work panel tabs > exposes Changes, Terminal, Browser, Preview, Artifacts, Files plus native browser/preview/artifacts actions [0.08ms]
+(pass) createWorkPanelState > starts closed on the right with D01 preferred width and no resources [0.01ms]
+(pass) reduceWorkPanel > opens a tab without killing identity when the panel is later hidden [0.06ms]
+(pass) reduceWorkPanel > sets position and remembers preferred size separately from clamps [0.01ms]
+(pass) reduceWorkPanel > keeps per-task resource identity across switch_task without showing the other task [0.04ms]
+(pass) reduceWorkPanel > marks expired resources expired and never silently respawns them [0.04ms]
+(pass) reduceWorkPanel > restarts an expired resource only through restart_resource [0.06ms]
+(pass) reduceWorkPanel > replaces the same taskKey+tab on restart instead of appending a second resource [0.03ms]
+(pass) expired resource copy > includes the no-autorestart sentence and Restart label [0.02ms]
+(pass) D01 geometry > clamps the sidebar between 160 and 360 [0.02ms]
+(pass) D01 geometry > clamps the right panel between 280 and 640 while leaving min main 360 and a 2px sash [0.03ms]
+(pass) D01 geometry > uses 40% height start, 160–60% bounds, leftover ≥240, and full route below 480 [0.03ms]
+(pass) D01 geometry > hides the sidebar below 900 and uses a full resource route when the panel is open [0.05ms]
+(pass) D01 geometry > flags need more space below 720 and not at 720 [0.01ms]
+(pass) workTabBadge > marks expired and error as error, stale as stale, and ready as empty [0.02ms]
+
+apps/macos/test/agent-window-files.test.ts:
+(pass) Cedia Agent files service > lists the workspace tree and reads normalized text with a byte version [2.10ms]
+(pass) Cedia Agent files service > refuses direct workspace writes: OMP turns and the guarded editor bridge own them (item 63d) [0.85ms]
+(pass) Cedia Agent files service > saves empty files and keeps watching after atomic replacement [104.70ms]
+(pass) Cedia Agent files service > searches text while skipping oversized workspace artifacts [1.59ms]
+(pass) Cedia Agent files service > rejects relative escapes and symlinks that resolve outside the workspace [1.06ms]
+(pass) Cedia Agent files service > projects the file methods through the renderer bridge and unsubscribes watchers [2.47ms]
+
+apps/macos/test/ide-native-command-ids.test.ts:
+(pass) executed command ids > only executes Cedia ids that the manifest declares [0.04ms]
+(pass) executed command ids > only reveals view containers the manifest declares [0.02ms]
+(pass) executed command ids > never focuses a container id, because containers register no focus command [0.01ms]
+(pass) webview message coverage > retired the task shell: no posted-message surface remains [0.01ms]
+
+apps/macos/test/plan-projection.test.ts:
+(pass) projectPlan > stays empty until OMP advertises work [0.04ms]
+(pass) projectPlan > projects queued commands and running tools without treating idle as complete [0.03ms]
+(pass) planFromOmpState > stays hidden until OMP advertises goals or steps [0.09ms]
+(pass) planFromOmpState > projects advertised goals without inventing a plan owner [0.02ms]
+(pass) buildSubagentTree > nests children under an advertised parent and does not invent a root [0.07ms]
+(pass) plan action honesty > keeps retry and cancel unavailable until OMP advertises them
+
+apps/macos/test/api.test.ts:
+(pass) Cedia host HTTP client > refuses external or credential-bearing descriptors before attaching owner auth [0.07ms]
+(pass) Cedia host HTTP client > attaches bearer auth and uses the versioned API paths [0.11ms]
+(pass) Cedia host HTTP client > encodes session IDs, sends JSON commands, and surfaces structured errors [0.15ms]
+(pass) Cedia host HTTP client > reads a private descriptor and refuses an invalid one [0.43ms]
+
+apps/macos/test/menus-contract.test.ts:
+(pass) menu and keybinding context keys > references at least one key, so the extraction cannot silently pass
+(pass) menu and keybinding context keys > every key-position identifier exists as a context key in the pinned engine [174.02ms]
+(pass) menu and keybinding context keys > keeps the owned keys in step with what the extension actually sets [0.57ms]
+
+apps/macos/test/agent-window-temporary-thread.test.ts:
+(pass) a temporary draft put away by the window > is archived, not deleted, and is still there after a restart [32.45ms]
+(pass) a temporary draft put away by the window > is gone only when the user deletes it, and that intent still deletes [40.50ms]
+
+apps/macos/test/agent-window-git.test.ts:
+(pass) Cedia git pane host requests > maps the host status rows into the pane's shape, dropping the host's binary flag [0.15ms]
+(pass) Cedia git pane host requests > forwards branches, commits and the local origin the pane asks for [0.16ms]
+(pass) Cedia git pane host requests > forwards diffs, stats and file reads with the pane's own scope default [0.21ms]
+(pass) Cedia git pane host requests > forwards branch creation and checkout, and answers void for both [0.08ms]
+(pass) Cedia git pane host requests > refuses input the host must never be asked to authorize [0.16ms]
+(pass) Cedia git pane host requests > reports a host that cannot be reached instead of answering [0.04ms]
+(pass) Cedia git pane stacked actions > polls the host action and forwards its events in the pane's vocabulary [2.43ms]
+(pass) Cedia git pane stacked actions > emits action_failed once and rejects when the host reports the action failed [0.07ms]
+(pass) Cedia git pane stacked actions > emits action_failed and rejects when the host cannot start the action at all [0.06ms]
+(pass) Cedia git pane stacked actions > refuses a pull-request action and never asks the host to run it [0.05ms]
+(pass) Cedia git pane stacked actions > refuses a destroyed sender before touching the host [0.04ms]
+(pass) Cedia git pane stacked actions > stops polling a host that never finishes [20.60ms]
+(pass) Cedia git pane stacked actions > abandons an in-flight action when the service is disposed [0.15ms]
+(pass) Cedia git pane worktrees > runs a detached creation as an action and keeps the caller's progressId [1.29ms]
+(pass) Cedia git pane worktrees > rejects a worktree action the host fails, without inventing a completion [0.07ms]
+(pass) Cedia git pane refusals > refuses what the bundle has no caller for, and the GitHub operations Cedia cannot answer [0.10ms]
+(pass) Cedia native git bridge > maps renderer git calls to the guarded panel and both event channels [0.17ms]
+(pass) Cedia native git bridge > refuses the PR methods with Cedia's stated reason [0.06ms]
+
+apps/macos/test/branch-picker.test.ts:
+(pass) branchHitsFromHostBranches > marks current, local, and remote refs without inventing main [0.03ms]
+(pass) branchHitsFromHostBranches > keeps the picker empty for a folder the host reports as no repository
+(pass) filterBranchHits > stays empty-query honest and does not invent a hit [0.04ms]
+(pass) filterBranchHits > returns no-match without selecting a stale row [0.02ms]
+
+apps/macos/test/session-row-meta.test.ts:
+(pass) sessionRowMeta > defaults environment, source, and missing PR to This Mac / omp / Unknown [0.06ms]
+(pass) sessionRowMeta > uses advertised environment, source, and PR without inventing remotes or numbers [0.02ms]
+(pass) sessionRowMeta > treats blank, unknown, and Unknown PR as Unknown and never emits No PR [0.03ms]
+(pass) sessionRowMeta > adds advertised cwd as a secondary line and does not invent a branch [0.02ms]
+(pass) sessionRowMeta > treats whitespace-only environment and source as unset defaults [0.01ms]
+(pass) projectSessionFilterFields > fills environment and source defaults and maps missing PR to null for isUnknownPr [0.02ms]
+(pass) projectSessionFilterFields > keeps a real advertised PR and still defaults unset environment/source [0.01ms]
+(pass) projectSessionFilterFields > maps unknown PR labels to null so the sidebar unknown filter can match [0.01ms]
+
+apps/macos/test/ide-native-workbench.test.ts:
+(pass) ide-native workbench surface > registers the editor, selection, review, and mode commands as real handlers [61.48ms]
+(pass) ide-native workbench surface > routes an editor citation through the registered IDE agent bridge [62.47ms]
+(pass) ide-native workbench surface > maps public Agent UI assets through the allowed IDE webview resource root [61.65ms]
+(pass) ide-native workbench surface > registers a real handler for every command the manifest declares [61.81ms]
+(pass) ide-native workbench surface > opens a plain IDE window on full chrome by default, keeping agents in their own window [81.90ms]
+(pass) ide-native workbench surface > keeps the user's own theme in the Agents window instead of painting its own [61.57ms]
+(pass) ide-native workbench surface > leaves chrome colours alone when the user set their own [61.85ms]
+(pass) ide-native workbench surface > leaves the theme alone when the theme kind changes [111.00ms]
+(pass) ide-native workbench surface > follows the OS light/dark setting the way the reference does [61.76ms]
+(pass) ide-native workbench surface > leaves the OS theme-following choice alone when the user set it [61.97ms]
+(pass) ide-native workbench surface > clears the palette Cedia itself wrote, at the scope it wrote it [60.93ms]
+(pass) ide-native workbench surface > clears Cedia's own palette from a folderless window's global scope [61.76ms]
+(pass) ide-native workbench surface > cites the real editor selection into the task draft [62.63ms]
+(pass) ide-native workbench surface > brings the agent dock forward with the real view focus command [62.10ms]
+(pass) ide-native workbench surface > cites a whole file when the Explorer passes a resource [62.41ms]
+(pass) ide-native workbench surface > keeps an inline edit instruction when the host is unreachable [63.50ms]
+(pass) ide-native workbench surface > opens the review in the native diff editor with the Git original [63.68ms]
+(pass) ide-native workbench surface > renders a real status bar item that opens the task [143.00ms]
+(pass) ide-native workbench surface > opens a real terminal for the terminal action [62.29ms]
+(pass) ide-native workbench surface > opens an omp terminal for provider sign-in without touching task state [61.91ms]
+(pass) ide-native workbench surface > reveals the Explorer and keeps IDE chrome for the Files action [83.53ms]
+(pass) ide-native workbench surface > refuses a binary file instead of opening a text diff of bytes [66.99ms]
+(pass) ide-native workbench surface > opens an untracked text file as all-added from an empty original [62.69ms]
+(pass) ide-native workbench surface > reads the Changes list from the host's porcelain text [62.65ms]
+(pass) ide-native workbench surface > opens the Changes view from the Diff action [61.68ms]
+(pass) ide-native workbench surface > refuses a review target outside the task workspace [61.68ms]
+(pass) ide-native workbench surface > refuses a selection from an untitled document [62.17ms]
+(pass) ide-native workbench surface > keeps the task draft across an Agents and back to IDE switch [104.69ms]
+(pass) ide-native workbench surface > invokes every palette command without a reachable host [65.19ms]
+(pass) ide-native workbench surface > opens the native Agents window for showAgents and restores chrome for showIde [103.13ms]
+(pass) ide-native workbench surface > only enables proposed APIs that the pinned product.json allows [1.35ms]
+(pass) ide-native workbench surface > offers the same Delete in the dock's session menu [0.20ms]
+(pass) ide-native workbench surface > does not start the base Agent Host in the Agents window [0.62ms]
+(pass) ide-native workbench surface > keeps the Cedia title when the Agents window has no folder to write into [61.65ms]
+(pass) ide-native workbench surface > hands the Agents window the theme and the extension that paints it [62.46ms]
+(pass) ide-native workbench surface > cites the real terminal selection into the task draft [63.11ms]
+(pass) ide-native workbench surface > refuses a terminal citation without a focused terminal or a selection [61.41ms]
+(pass) ide-native workbench surface > offers no code action while there is no real task surface [60.97ms]
+(pass) ide-native workbench surface > stages an Explain turn for the real selection before dispatch [63.54ms]
+(pass) ide-native workbench surface > stages a Fix turn and refuses one without a selection [63.35ms]
+(pass) ide-native workbench surface > marks an edit Cedia applied, then keeps it through the real command [63.43ms]
+(pass) ide-native workbench surface > takes a Cedia edit back while the buffer still holds Cedia's version [62.77ms]
+(pass) ide-native workbench surface > refuses to take a Cedia edit back once the buffer moved on [62.27ms]
+(pass) ide-native workbench surface > refuses keep and take-back when this file has no Cedia edit waiting [61.12ms]
+(pass) ide-native workbench surface > opens a native diff of exactly what Cedia changed [62.49ms]
+(pass) ide-native workbench surface > refuses to review a Cedia edit once the buffer moved on [62.54ms]
+(pass) ide-native workbench surface > refuses to review when this file has no Cedia edit waiting [62.32ms]
+(pass) ide-native workbench surface > offers the two decisions on the change itself as in-editor lenses [64.45ms]
+(pass) ide-native workbench surface > retires no patch by leaving a stale file behind [0.21ms]
+
+apps/host/test/omp-cleanse.test.ts:
+(pass) OMP cleanse projection > strictly parses the bounded run state without repair bodies [1.34ms]
+(pass) OMP cleanse projection > runs, lands, and aborts through the negotiated cedia_control bridge [1.05ms]
+(pass) OMP cleanse projection > reports missing runtime and bridge without probing either one [0.12ms]
+(pass) controller-visible authenticated OMP cleanse routes > answers the state to a paired controller and keeps run/abort owner-only [2.91ms]
+(pass) real CediaHost cleanse routes > dispatches at once, lands the held report, and aborts to idle [559.70ms]
+
+apps/host/test/omp-queue.test.ts:
+(pass) OMP queue projection > strictly parses queue rows and drop results [0.56ms]
+(pass) OMP queue projection > reads and drops through the negotiated cedia_control bridge [0.22ms]
+(pass) OMP queue projection > reports missing runtime and bridge without starting or probing one [0.06ms]
+(pass) authenticated OMP queue routes > answers GET and POST, rejects malformed envelopes, and replays a command id [0.86ms]
+(pass) authenticated OMP queue routes > checks owner before wrong-method refusal [0.74ms]
+(pass) real CediaHost queue route > answers unavailable before start and the runtime's queue after start [61.71ms]
+
+apps/host/test/editors.test.ts:
+(pass) routes each native editor request to the matching window exactly once [0.94ms]
+(pass) cancels an undelivered native request without leaving a replayable entry [0.56ms]
+(pass) cancels a delivered native request and invalidates its response token [0.68ms]
+(pass) marks a delivered response invalid once its monotonic deadline passes [0.60ms]
+(pass) times out a delivered native request and does not replay it [6.25ms]
+(pass) reclaims expired window registrations while preserving active windows [2.27ms]
+
+apps/host/test/store.test.ts:
+(pass) DurableStore > creates a private state directory and durable WAL/full-sync databases [3.90ms]
+(pass) DurableStore > uses realpath uniqueness for Git and non-Git project roots and supports pin/archive CRUD [3.40ms]
+(pass) DurableStore > keeps projects and sessions isolated, with UUID sessions and default durable files [4.01ms]
+(pass) DurableStore > deletes a session row with its commands and events, and refuses an unknown id [5.24ms]
+(pass) DurableStore > claims atomically, canonicalizes payload ordering, and rejects identity conflicts or unsafe JSON [3.10ms]
+(pass) DurableStore > persists claim before dispatch, keeps ACK separate from completion, and freezes terminal state [3.77ms]
+(pass) DurableStore > recovers unfinished commands and running sessions after reopen, without retrying them [4.62ms]
+(pass) DurableStore > persists turn intents, keeps them idempotent by command, and never invents an outcome on recovery [5.54ms]
+(pass) DurableStore > appends ordered per-session events and provides bounded cursor pagination [4.07ms]
+(pass) DurableStore > drops the oldest events and reports truncation when a session's journal exceeds the count cap [41.27ms]
+(pass) DurableStore > keeps the newest frames and stops at the byte cap [270.94ms]
+(pass) DurableStore > reports no truncation for a session that stays inside retention [4.13ms]
+(pass) DurableStore > keeps a raw frame's own prototype-named keys intact in the journal [3.68ms]
+(pass) DurableStore > refuses a newer schema version before serving state [3.52ms]
+(pass) DurableStore > migrates a schema-1 journal by adding the pinned session field without losing rows [5.99ms]
+(pass) DurableStore > migrates a schema-2 journal by adding draft tables and preserves draft CAS [6.96ms]
+(pass) DurableStore > migrates the workspace cleanup projection idempotently and seeds legacy task identity [6.13ms]
+(pass) DurableStore > enforces one host owner across processes and releases after a crash [205.19ms]
+
+apps/host/test/omp-agents.test.ts:
+(pass) OMP agents projection > strictly parses rows with optional activity and session file [0.20ms]
+(pass) OMP agents projection > reads agents.get through cedia_control and pages a named child transcript [0.46ms]
+(pass) OMP agents projection > bounds messages and text while preserving the runtime next byte [0.09ms]
+(pass) OMP agents projection > refuses a silent empty transcript for a child with no output yet, but keeps paging [0.09ms]
+(pass) OMP agents projection > does not issue a transcript command for an unknown or transcript-less agent [0.07ms]
+(pass) OMP agents projection > drives agents.kill/revive through cedia_control with strict payloads [0.30ms]
+(pass) OMP agents projection > reports a missing runtime instead of an empty roster or transcript [0.03ms]
+(pass) OMP agents projection > reports an absent capability bridge without issuing cedia_control [0.03ms]
+(pass) authenticated OMP agents routes > answers roster and transcript to the owner and validates query fields first [0.91ms]
+(pass) authenticated OMP agents routes > routes kill/revive posts to the owner with strict bodies [0.95ms]
+(pass) real CediaHost agents kill/revive routes > kills, replays, revives and refuses unknown agents through the durable envelope [64.83ms]
+(pass) OMP agent config projection > strictly parses the config list and config answers [0.09ms]
+
+apps/host/test/model-catalog.test.ts:
+(pass) OMP model catalog > discovers models without a saved session and normalizes provider-qualified rows [285.89ms]
+(pass) OMP model catalog > single-flights concurrent reads and caches only successful catalogs [166.24ms]
+(pass) OMP model catalog > falls back to OMP's compact models JSON only when its RPC catalog is oversized [233.31ms]
+(pass) OMP model catalog > does not hide ordinary OMP model-catalog failures behind the CLI fallback [178.84ms]
+
+apps/host/test/omp-progress.test.ts:
+(pass) OMP goal projection > strictly validates goal status and required accounting fields [0.27ms]
+(pass) OMP goal projection > seeds from cedia_goal and updates from every goal_updated frame [0.23ms]
+(pass) OMP goal projection > reports an unadvertised runtime as unavailable without starting one [0.04ms]
+(pass) OMP plan projection > seeds from cedia_plan and folds state, review, and review-closed frames [0.34ms]
+(pass) OMP plan projection > does not let malformed frames poison a valid plan cache [0.09ms]
+(pass) OMP plan projection > retains a valid review that arrives before the first state frame [0.03ms]
+(pass) OMP plan projection > answers an unadvertised runtime as unavailable without requesting it [0.03ms]
+(pass) OMP subagent projection > strictly projects bounded progress and rejects unknown status or fields [0.23ms]
+(pass) OMP subagent projection > parses lifecycle and progress frames without carrying raw progress text [0.13ms]
+(pass) OMP subagent projection > seeds the live set, folds lifecycle/progress frames, and preserves unavailability [0.31ms]
+(pass) OMP subagent projection > ignores malformed streamed frames [0.03ms]
+(pass) authenticated OMP goal routes > answers the cache and dispatches every goal operation idempotently [0.99ms]
+(pass) authenticated OMP goal routes > refuses stale incarnations and reports an unavailable runtime honestly [0.92ms]
+(pass) authenticated OMP plan routes > answers unavailable reads without starting anything and dispatches plan operations idempotently [1.56ms]
+(pass) authenticated OMP plan routes > rejects unknown fields and invalid operations before reaching the host [0.61ms]
+
+apps/host/test/omp-policy.test.ts:
+(pass) OMP credit policy parser > accepts the runtime's answer and keeps every field it needs [0.08ms]
+(pass) OMP credit policy parser > refuses a shape that could show a guard the runtime never claimed [0.13ms]
+(pass) OMP credit policy parser > answers the policy through the registered operation [0.10ms]
+(pass) OMP credit policy parser > reports an absent bridge as an absence instead of assuming a guard [0.05ms]
+(pass) OMP policy route > answers the live policy for the owner only [5.26ms]
+(pass) OMP policy route > refuses the route when no policy owner is wired, and is not reachable by another method [3.52ms]
+
+apps/host/test/auth.test.ts:
+(pass) DeviceAuth > creates a private owner credential and never exposes token hashes [0.46ms]
+(pass) DeviceAuth > issues a controller token, persists it, and revokes it without affecting the owner [1.05ms]
+(pass) DeviceAuth > rejects malformed names, capacity overflow, and owner revocation [0.42ms]
+
+apps/host/test/host-uri.test.ts:
+(pass) Cedia artifact URI parsing > accepts exactly one shape [0.06ms]
+(pass) Cedia artifact URI parsing > refuses anything it would have to guess at [0.05ms]
+(pass) Cedia artifact reader > serves the captured bytes even after the workspace file changes [1.73ms]
+(pass) Cedia artifact reader > keeps one task out of another task's receipts [1.83ms]
+(pass) Cedia artifact reader > refuses a URL it does not serve, and bytes that are not text [1.43ms]
+(pass) Cedia artifact reader > answers the runtime's own host_uri_request frame through the dispatcher [2.35ms]
+
+apps/host/test/omp-capabilities.test.ts:
+(pass) OMP capability metadata > reports an absent bridge instead of fabricating an empty success [0.10ms]
+(pass) OMP capability metadata > reads and validates a capability table from the negotiated client [0.18ms]
+(pass) OMP capability metadata > rejects each malformed descriptor validation class [0.12ms]
+(pass) OMP capability metadata > requires a reason for a descriptor that is not available [0.03ms]
+(pass) OMP capability metadata > preserves an integration-missing descriptor and its reason [0.04ms]
+(pass) OMP capability metadata > refuses a caller's stale expected revision [0.05ms]
+(pass) OMP capability metadata > keeps the pre-existing aggregate rows unchanged when no runtime answers [0.03ms]
+(pass) OMP capability metadata > answers explicitly unavailable when the host has no live runtime [3.66ms]
+(pass) OMP capability metadata > maps runtime descriptors into the existing aggregate [0.07ms]
+(pass) OMP capability metadata > surfaces runtime metadata through the authenticated owner capability route [5.09ms]
+
+apps/host/test/http.test.ts:
+(pass) loopback HTTP authenticates all reads, rejects browser origins and revokes controller access [21.39ms]
+(pass) owner-only draft routes provide revisioned create, conflict, submit, and clear [12.08ms]
+(pass) owner quit is acknowledged before mutations are fenced and leaves a stopped lifecycle [9.18ms]
+(pass) fencing admission keeps the host alive, and Cancel reopens it [11.04ms]
+(pass) a fenced host still stops when the owner confirms the quit [9.88ms]
+Preparing worktree (new branch 'cedia/task-b1b5f3ad-1795-4324-bdc2-8974472035d5')
+(pass) a new worktree task carries only the uncommitted files the caller selected [279.94ms]
+(pass) DELETE removes a task, its transcript directory, and 404s the id afterwards [26.38ms]
+(pass) refuses every browser Origin, before credentials and without writing anything [9.50ms]
+(pass) answers only to the loopback names of its own listener [9.27ms]
+(pass) caps a request body at 16 MiB while it streams, before parsing it [34.23ms]
+Preparing worktree (new branch 'cedia/task-54d7a648-1a7f-4e0f-b696-f36aa0d1cc59')
+Preparing worktree (new branch 'cedia/task-c16cb2ec-2b65-4dea-918f-44cfc09621d9')
+(pass) a second task in one Git folder needs its own worktree, and every task records the commit it started from [607.62ms]
+Preparing worktree (new branch 'cedia/task-7074139d-8aed-44ae-8fbb-145b828d1756')
+(pass) archiving refuses a running task and otherwise keeps the worktree with an immutable restoration ref [317.33ms]
+(pass) a live session cannot be relocated through the task route: placement stays host-owned [29.53ms]
+Preparing worktree (new branch 'cedia/task-20c735e3-ce98-464d-818d-337671b784ce')
+Preparing worktree (checking out 'cedia/task-20c735e3-ce98-464d-818d-337671b784ce')
+Preparing worktree (new branch 'cedia/restore/20c735e3-ce98-464d-818d-337671b784ce')
+(pass) restoring puts the workspace back at the archived revision without stealing a moved branch [778.67ms]
+
+apps/host/test/remote-web-assets.test.ts:
+(pass) a packaged build with an export yields the client the gateway serves [1.50ms]
+(pass) a build without the export reports no client instead of an empty root [0.86ms]
+(pass) the development override must be an absolute path to a real client [1.25ms]
+(pass) tailnet hostnames are read as names, and a URL is refused [0.20ms]
+(pass) configured hosts reach the gateway options beside the resolved client [1.14ms]
+
+apps/host/test/host-uri-schemes.test.ts:
+(pass) host URI scheme startup deferral > starts the session past a startup-gate refusal and installs the schemes on the next command [72.00ms]
+(pass) host URI scheme startup deferral > reports a persistent non-gate scheme refusal once without failing commands [64.86ms]
+
+apps/host/test/native-disk.test.ts:
+(pass) rejects mismatched expected bytes without changing the file [0.91ms]
+(pass) rejects a retargeted lexical symlink before changing either target [0.56ms]
+(pass) rejects directories and symlink canonical paths [0.61ms]
+(pass) denies headless disk applies once a workspace was registered, including expiry [0.92ms]
+(pass) routes an unregistered workspace through the native editor disk branch [0.72ms]
+(pass) writes through one descriptor while preserving inode and mode [0.52ms]
+(pass) rejects oversized expected text and content before opening the file [1.61ms]
+(pass) blocks nested editor roots after registration and expiry while allowing unrelated roots [1.76ms]
+(pass) accepts a workspace alias only while its canonical target remains authorized [1.24ms]
+
+apps/host/test/omp-context.test.ts:
+(pass) OMP context projection > strictly parses the runtime shape, including an omitted usage breakdown [0.37ms]
+(pass) OMP context projection > reads only a live negotiated runtime and reports absence otherwise [0.09ms]
+(pass) OMP context projection > reads and applies the three no-payload context controls [0.22ms]
+(pass) OMP context projection > shakes context through the negotiated control and keeps the runtime result [0.11ms]
+(pass) authenticated OMP context routes > answers reads without inventing an omitted usage and replays command ids [1.15ms]
+(pass) authenticated OMP context routes > checks owner before method refusal [0.86ms]
+(pass) real CediaHost context route > reports unavailable before start and preserves a runtime answer without usage [78.44ms]
+
+apps/host/test/provider-auth.test.ts:
+(pass) provider-auth rows from OMP > keeps the fields a settings row needs and drops anything else [0.12ms]
+(pass) provider-auth rows from OMP > drops rows that are not actionable or not recognizable [0.03ms]
+(pass) provider-auth rows from OMP > refuses a payload that is not a provider list [0.04ms]
+(pass) provider-auth failures > passes through the two failures a user can act on [0.02ms]
+(pass) provider-auth failures > replaces anything else, because it may carry a path or a credential [0.01ms]
+
+apps/host/test/omp-btw.test.ts:
+(pass) OMP side-question projection > strictly parses the bounded answer without the held objects [0.20ms]
+(pass) OMP side-question projection > asks and promotes through the negotiated cedia_control bridge [0.40ms]
+(pass) OMP side-question projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP side-question routes > answers the state to a paired controller and keeps ask/branch owner-only [0.99ms]
+(pass) real CediaHost side-question routes > asks, promotes into an adopted session file, and refuses a second branch [61.07ms]
+
+apps/host/test/service.test.ts:
+(pass) CediaHost > writes the task launch context with the final session identity [16.26ms]
+(pass) CediaHost > updates the task launch context when the incarnation rotates [59.35ms]
+(pass) CediaHost > keeps the task launch context current across archive and restore [17.56ms]
+(pass) CediaHost > lists known owner states for the local owner without exposing endpoint credentials or paths [57.19ms]
+(pass) CediaHost > refuses an owner conflict before probing or rotating the session [16.00ms]
+(pass) CediaHost > lists an inspect-only TUI but refuses to adopt it or start another executor [19.67ms]
+(pass) CediaHost > adopts a live owner without probing or spawning, then detaches without stopping it [25.00ms]
+(pass) CediaHost > keeps both task runtimes independently owned while window-local navigation changes the selected task [121.19ms]
+(pass) CediaHost > forks a sidechat through OMP into its own session directory and keeps the source intact [132.62ms]
+(pass) CediaHost > rejects a fork whose OMP state escapes the child directory and cleans only the child [126.01ms]
+(pass) CediaHost > materializes an empty source through OMP before forking without adding a prompt [117.43ms]
+(pass) CediaHost > shares one managed source runtime when empty-source sidechats fork concurrently [132.10ms]
+(pass) CediaHost > waits for a concurrent idempotent fork instead of returning the pre-fork session path [115.06ms]
+(pass) CediaHost > starts one OMP session, keeps ACK separate from prompt completion, and deduplicates commands [69.10ms]
+(pass) CediaHost > fails closed for stale selected slash commands before claiming or dispatching a prompt [75.59ms]
+(pass) CediaHost > projects a submitted turn from acceptance to OMP's own ending, and never past its evidence [71.42ms]
+(pass) CediaHost > pauses a turn that never reached OMP instead of claiming or replaying it [61.19ms]
+(pass) CediaHost > names a submission on the wire and takes the runtime's own queue order when the bridge is available [74.64ms]
+(pass) CediaHost > settles named follow-up batches without treating tool rounds or transport ACKs as completion [76.10ms]
+(pass) CediaHost > settles a turn intent when its queued OMP submission is dropped [71.21ms]
+(pass) CediaHost > holds a model change for the next turn and only calls it in effect when OMP commits it [76.32ms]
+(pass) CediaHost > applies a model change at once, and says so, on a runtime with no pending-change boundary [76.51ms]
+(pass) CediaHost > keeps a turn running only while OMP says so, and refuses a second turn behind it [74.33ms]
+(pass) CediaHost > does not persist running while OMP is still starting and lands on idle [373.64ms]
+(pass) CediaHost > refuses commands transiently while a start is in flight and accepts them after [433.36ms]
+(pass) CediaHost > still returns an existing command row while a start is in flight [397.31ms]
+(pass) CediaHost > keeps the event loop serving reads while the version probe is in flight [571.11ms]
+(pass) CediaHost > claims commands before dispatch and marks a live OMP loss as unknown without replay [421.45ms]
+(pass) CediaHost > reconciles an unknown turn only after removing its dead matching owner record [89.76ms]
+(pass) CediaHost > treats a local-only prompt ACK as completion and does not wait for an agent event [69.07ms]
+(pass) CediaHost > classifies every pinned RPC command as ACK-complete, turn-ack, or not_dispatched [109.52ms]
+(pass) CediaHost > projects the runtime's set_todos ACK and leaves the list unchanged for unrelated commands [65.83ms]
+(pass) CediaHost > completes a handoff ACK without requiring a later agent_end frame [60.55ms]
+(pass) CediaHost > serializes concurrent stop/start calls and never starts over an unexpected closed process [416.41ms]
+(pass) CediaHost > deletes a session: runtime stopped, record gone, the host's own files removed [102.36ms]
+(pass) real OMP session ownership > adopts a surviving CEDIA owner after primary transport EOF without spawning another process [1986.54ms]
+(pass) real OMP session ownership > denies a second OMP process on the same session lock before host tools are initialized [1550.20ms]
+(pass) real OMP session ownership > starts standalone OMP with the packaged editor and permission bridges [4130.12ms]
+(pass) OMP runtime lock extension > keeps the session owner lock in the OMP process and releases it after a crash [180.59ms]
+(pass) binds native permission options and exact arguments before returning a structured OMP decision [83.59ms]
+(pass) lets exactly one of two competing clients win a single confirm request [74.86ms]
+(pass) OMP runtime version gate > starts a session on a later patch of the supported line [63.39ms]
+(pass) OMP runtime version gate > runs on a newer minor line instead of refusing its number [64.36ms]
+(pass) OMP runtime version gate > refuses a runtime older than the baseline, naming what it expects [22.29ms]
+(pass) OMP runtime version gate > refuses output that is not an OMP version at all [20.80ms]
+
+apps/host/test/omp-management.test.ts:
+(pass) OMP tool catalog projection > strictly parses catalog rows without flattening activation state [0.37ms]
+(pass) OMP tool catalog projection > reads through the negotiated cedia_control bridge [0.28ms]
+(pass) OMP tool catalog projection > writes the enabled set through tools.active.set and parses the catalog that follows [0.20ms]
+(pass) OMP tool catalog projection > refreshes skills through tools.refresh-skills and parses the catalog that follows [0.10ms]
+(pass) OMP tool catalog projection > reports missing runtime and bridge without probing either one [0.05ms]
+(pass) OMP Code Mode partition projection > strictly parses names and flags without prelude sources [0.18ms]
+(pass) OMP Code Mode partition projection > reads through the negotiated cedia_control bridge [0.14ms]
+(pass) OMP Code Mode partition projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP tool Code Mode route > answers the partition to a paired controller and refuses query/body/method fields [1.01ms]
+(pass) OMP extension catalog projection > strictly parses records, roots, and states without the raw discovery bag [0.30ms]
+(pass) OMP extension catalog projection > reads through the negotiated cedia_control bridge [0.16ms]
+(pass) OMP extension catalog projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP extension catalog route > answers the catalog to a paired controller and refuses query/body/method fields [0.91ms]
+(pass) controller-visible authenticated OMP tool catalog route > answers the catalog to a paired controller and refuses query/body fields [0.94ms]
+(pass) real CediaHost Code Mode route > reads the live partition once the session starts [55.27ms]
+(pass) real CediaHost extension catalog route > reads the live catalog once the session starts [59.92ms]
+(pass) real CediaHost tool routes > reads the live catalog, writes the enabled set once, and replays the durable receipt [61.84ms]
+
+apps/host/test/artifacts.test.ts:
+(pass) artifact bytes remain immutable across workspace edits and bounded resume reconstructs the hash [1.73ms]
+
+apps/host/test/owner-launch-context.test.ts:
+(pass) owner launch context > writes the exact launch schema atomically with mode 0600 [0.69ms]
+(pass) owner launch context > refuses a stale incarnation, cwd, or session file [0.51ms]
+(pass) owner launch context > rejects malformed or credit-unguarded sidecars [0.40ms]
+
+apps/host/test/remote-gateway.test.ts:
+(pass) the gateway serves the packaged client and proxies the host API for a paired controller [17.73ms]
+(pass) an enrollment code works once, expires, and a revoked device stops working [11.78ms]
+(pass) a native client redeems the same code for a token the browser can never be given [13.14ms]
+(pass) the owner issues the code and the gateway redeems the same one [11.98ms]
+(pass) the gateway refuses a Host or Origin it was not configured for [10.71ms]
+(pass) the Paseo relay does not come up at startup even when its record says enabled [10.13ms]
+
+apps/host/test/omp-credits.test.ts:
+(pass) OMP credits projection > strictly parses accounts, keeps absent identifiers absent, and rejects malformed answers [0.38ms]
+(pass) OMP credits projection > keeps a runtime listing failure in an available snapshot [0.08ms]
+(pass) OMP credits projection > does not call a missing runtime [0.09ms]
+(pass) OMP credits projection > reads and redeems through the negotiated controls with wire confirmation [0.27ms]
+(pass) authenticated OMP credits routes > rejects malformed redeem bodies before calling the host [0.73ms]
+(pass) authenticated OMP credits routes > is owner-only and uses typed query and method refusals [0.65ms]
+(pass) real CediaHost credits route > reads on demand, carries account errors and replays one redeem receipt [62.41ms]
+
+apps/host/test/router.test.ts:
+(pass) authenticated Cedia host router > routes voice transcription through the OMP-owned endpoint [4.45ms]
+(pass) authenticated Cedia host router > creates sidechats through the fork route and exposes the source marker in session reads [129.13ms]
+(pass) authenticated Cedia host router > reports an unstarted task's live model catalog as unavailable without starting OMP [16.71ms]
+(pass) authenticated Cedia host router > lets a controller read the running owner's live model catalog [56.86ms]
+(pass) authenticated Cedia host router > does not turn a live owner catalog failure into the global catalog [57.83ms]
+(pass) authenticated Cedia host router > serves workspace suggestions from the configured judge, and no opinion without one [6.76ms]
+(pass) authenticated Cedia host router > tells an events reader when retention dropped the journal's oldest frames [32.87ms]
+(pass) authenticated Cedia host router > requires a device token and exposes only the negotiated health contract [3.58ms]
+(pass) authenticated Cedia host router > keeps device management owner-only and protects owner credentials from revocation [4.62ms]
+fatal: not a git repository (or any of the parent directories): .git
+(pass) authenticated Cedia host router > validates project/session routes and serves bounded workspace files without traversal [48.84ms]
+(pass) authenticated Cedia host router > serves the headless terminal checkpoint a reattaching client renders [3.79ms]
+(pass) authenticated Cedia host router > answers one authorized git status and refuses paths and methods the host does not own [140.56ms]
+(pass) authenticated Cedia host router > streams a git action from the start route to the poll route [181.45ms]
+
+apps/host/test/response-chunks.test.ts:
+(pass) ResponseChunks > reconstructs a large unicode response and verifies its UTF-8 hash [0.65ms]
+(pass) ResponseChunks > isolates references by device even when the content hash is shared [0.50ms]
+(pass) ResponseChunks > rejects malformed and out-of-range chunk requests [0.27ms]
+(pass) ResponseChunks > expires inactive references after ten minutes and restores the clock [0.25ms]
+
+apps/host/test/omp-todos.test.ts:
+(pass) OMP todo projection > seeds its cache from get_state [0.15ms]
+(pass) OMP todo projection > folds phases from a todo tool result without changing OMP order [0.04ms]
+(pass) OMP todo projection > keeps the last known phases when a frame is malformed or partial [0.05ms]
+(pass) OMP todo projection > re-reads get_state at a turn boundary when no todo tool frame arrived [0.06ms]
+(pass) OMP todo projection > reports an unavailable runtime without issuing a command [0.03ms]
+(pass) authenticated OMP progress route > answers the runtime phase list byte-for-byte and does not issue a command [0.52ms]
+(pass) authenticated OMP progress route > returns unavailable without starting a runtime and is owner-only [0.55ms]
+(pass) authenticated OMP progress route > refuses unknown query and body fields [0.36ms]
+
+apps/host/test/omp-advisor.test.ts:
+(pass) OMP advisor projection > strictly parses snapshot fields and reduces each advisor model [0.10ms]
+(pass) OMP advisor projection > rejects a snapshot with an unrecognised field [0.03ms]
+(pass) OMP advisor projection > parses a null transcript and a truncated transcript [0.03ms]
+(pass) OMP advisor projection > uses cedia_control for get, set and history [0.15ms]
+(pass) OMP advisor projection > answers bridge absence without issuing control calls [0.06ms]
+(pass) OMP advisor projection > treats a ready client without a negotiated marker as bridge absence [0.03ms]
+(pass) OMP advisor projection > turns a malformed runtime snapshot into an unavailable projection [0.04ms]
+(pass) OMP advisor projection > answers a stopped runtime without issuing control calls [0.07ms]
+(pass) authenticated OMP advisor routes > answers snapshot and transcript to the owner only [0.76ms]
+(pass) authenticated OMP advisor routes > validates set envelopes before calling the host and forwards the exact payload [0.52ms]
+
+apps/host/test/workspace-mode.test.ts:
+(pass) workspace suggestion mapping > turns a yes/no probability into a mode with its distance from the midpoint [0.04ms]
+(pass) workspace suggestion mapping > refuses a probability that is not a probability [0.02ms]
+(pass) workspace suggestion mapping > reads only the answer shape it asked for [0.04ms]
+(pass) workspace suggestion deadline > gives up instead of holding a caller open [41.10ms]
+(pass) workspace suggestion deadline > treats a judge failure as no opinion rather than an error [0.09ms]
+(pass) workspace suggestion deadline > does not ask at all when there is no prompt to judge [0.03ms]
+(pass) workspace judge opt-in > stays off unless the operator turned it on and supplied a key [0.06ms]
+(pass) host wiring > returns the configured judge's suggestion [0.07ms]
+(pass) host wiring > has no opinion when no judge is configured [0.02ms]
+
+apps/host/test/omp-pause.test.ts:
+(pass) OMP run pause projection > strictly parses pause states and command receipts [0.24ms]
+(pass) OMP run pause projection > reads and drives the gate through the negotiated cedia_control bridge [0.38ms]
+(pass) OMP run pause projection > reports missing runtime and bridge without starting or probing one [0.05ms]
+(pass) authenticated OMP pause routes > answers GET and POST, rejects malformed envelopes, and replays a command id [0.85ms]
+(pass) authenticated OMP pause routes > checks owner before wrong-method refusal [0.69ms]
+(pass) real CediaHost pause route > answers unavailable before start and drives the fixture gate after start [62.42ms]
+
+apps/host/test/cli-launcher.test.ts:
+(pass) Cedia's qualified launcher decisions > runs a verb with no session named, because there is nothing to conflict with [0.12ms]
+(pass) Cedia's qualified launcher decisions > brokers what it can and refuses what it cannot while an owner is live [5.77ms]
+(pass) Cedia's qualified launcher decisions > refuses a flag that would start or attach a second executor [14.44ms]
+(pass) Cedia's qualified launcher decisions > refuses a stale or ambiguous record instead of resolving it [2.50ms]
+(pass) Cedia's qualified launcher decisions > takes its ownership flags from the audit's own list [1.19ms]
+(pass) Cedia's qualified launcher decisions > parses its own flags out of the OMP arguments [0.06ms]
+(pass) Cedia's qualified launcher decisions > accepts only a private host-authored task context for qualified TUI launches [0.57ms]
+(pass) Cedia's qualified launcher decisions > injects the host lock, guard and forced transcript for an explicit TUI launch [0.55ms]
+(pass) Cedia's qualified launcher decisions > resolves the pinned runtime the repo prepared [0.07ms]
+(pass) Cedia's qualified launcher decisions > exits non-zero with the reason when it refuses [2.67ms]
+(pass) the launcher against a real owner > brokers status through the running owner and refuses a second executor [844.30ms]
+
+apps/host/test/omp-settings.test.ts:
+(pass) OMP settings readback > answers absence, not an empty list, when the runtime has no capability bridge [0.23ms]
+(pass) OMP settings readback > validates the inventory it is given instead of trusting it [0.30ms]
+(pass) OMP settings readback > keeps a published enum choice list, and refuses a malformed one [0.13ms]
+(pass) OMP settings readback > carries a published timing and refuses one Cedia does not know [0.08ms]
+(pass) OMP settings readback > re-validates the redaction invariant rather than forwarding whatever arrived [0.09ms]
+(pass) OMP settings readback > reports an oversized value by size rather than sending it truncated [0.03ms]
+(pass) OMP settings readback > turns a key the runtime refuses into a typed unknown-path error [0.06ms]
+(pass) OMP settings route > answers the inventory and one value for the owner only, redacting a credential [4.66ms]
+(pass) OMP settings route > reports an absent runtime with its reason, and refuses an unknown key [3.49ms]
+(pass) OMP settings route > classifies every key Cedia would show, so a control can be generated from it [0.05ms]
+(pass) OMP settings route > writes one editable setting and refuses a path Cedia does not write [5.93ms]
+(pass) OMP settings route > maps a stale settings revision and a rejected value to their own refusals [3.36ms]
+(pass) OMP settings route > says the owner is not wired rather than pretending an inventory exists [2.90ms]
+
+apps/host/test/settings.test.ts:
+(pass) host Cedia settings > writes allowlisted category patches with compare-and-swap revisions and durable readback [0.69ms]
+(pass) host Cedia settings > rejects unknown, wrong-category, malformed and out-of-range settings [0.54ms]
+
+apps/host/test/omp-omfg.test.ts:
+(pass) OMP rule-forging projection > strictly parses the bounded draft without held objects [0.25ms]
+(pass) OMP rule-forging projection > drafts, saves, and aborts through the negotiated cedia_control bridge [0.44ms]
+(pass) OMP rule-forging projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP rule-forging routes > answers the state to a paired controller and keeps draft/save/abort owner-only [1.28ms]
+(pass) real CediaHost rule-forging routes > drafts, saves, consumes, and refuses a second save [59.74ms]
+
+apps/host/test/workspaces.test.ts:
+(pass) workspace boundaries > accepts missing descendants inside a workspace and rejects traversal or escaping symlinks [0.83ms]
+Preparing worktree (new branch 'cedia/task-abc123')
+(pass) workspace boundaries > copies tracked dirty state, nested untracked files, and safe symlinks into an isolated worktree [248.16ms]
+Preparing worktree (new branch 'cedia/task-sel1')
+(pass) workspace boundaries > carries only the selected uncommitted files and leaves the source folder alone [212.45ms]
+Preparing worktree (new branch 'cedia/task-sel2')
+(pass) workspace boundaries > reports a conflicting selection per path instead of dropping it silently [203.82ms]
+Preparing worktree (new branch 'cedia/task-sel3')
+(pass) workspace boundaries > carries no uncommitted state when the caller selects none [148.86ms]
+(pass) workspace boundaries > refuses a malformed selection before it creates anything [125.53ms]
+Preparing worktree (new branch 'cedia/task-ports')
+(pass) workspace boundaries > copies only allowlisted gitignored files and assigns colliding-free ports [187.28ms]
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+(pass) workspace boundaries > returns unavailable for non-Git folders and writes a private snapshot manifest [21.60ms]
+(pass) workspace boundaries > identifies the folder a task starts in without fetching anything [122.18ms]
+(pass) workspace boundaries > admits one file-mutating task per folder and sends a concurrent Git task to a worktree [112.63ms]
+(pass) workspace boundaries > reattaches a preserved task branch only when it still points at the archived revision and is free [0.16ms]
+Preparing worktree (new branch 'cedia/restore/t1')
+(pass) workspace boundaries > restores the exact archived revision into a worktree instead of the source's current state [185.56ms]
+
+apps/host/test/omp-owner-attach.test.ts:
+(pass) Cedia owner endpoint route > answers the owner only, and says absent rather than inventing an owner [26.98ms]
+(pass) Cedia owner endpoint decisions > keeps the Cedia task identity separate from OMP's internal summary session id [3.62ms]
+(pass) Cedia owner endpoint decisions > treats a missing record as absent and a malformed record as a conflict [0.85ms]
+(pass) Cedia owner endpoint decisions > refuses a socket outside the session directory without touching it [0.70ms]
+(pass) Cedia owner endpoint decisions > calls a record stale when its process or socket is gone, and leaves the record alone [2.94ms]
+(pass) Cedia owner endpoint decisions > refuses a v2 owner record as unsupported [0.30ms]
+(pass) Cedia owner endpoint decisions > refuses a live PID when the recorded operating-system start identity belongs to another process [1.91ms]
+(pass) Cedia owner endpoint decisions > calls it a conflict when the socket answers as a different process [2.14ms]
+(pass) Cedia owner endpoint decisions > fails closed when an endpoint response uses another protocol version [2.16ms]
+(pass) Cedia owner endpoint decisions > refuses a record that names another session or incarnation [2.11ms]
+(pass) Cedia owner endpoint decisions > keeps an authenticated inspect-only owner visible but refuses a controller lease [5.80ms]
+(pass) Cedia owner endpoint decisions > claims a full controller lease and routes a command without starting a second owner [4.21ms]
+(pass) Cedia owner endpoint decisions > classifies a live primary controller as a conflict without starting or stopping it [2.37ms]
+(pass) Cedia owner bridge detach > closes a pending inspector socket before owner shutdown without waiting for its read [29.06ms]
+(pass) the pinned runtime publishes a real owner endpoint > writes a private record, answers the host's probe, and takes it away on close [848.22ms]
+(pass) the pinned runtime publishes a real owner endpoint > reports a killed owner as stale, keeps its record, and starts nothing [763.57ms]
+
+apps/host/test/terminal-state.test.ts:
+(pass) TerminalStateRegistry > keeps one screen per terminal from open, output and close frames [6.08ms]
+(pass) TerminalStateRegistry > ignores duplicate sequences and marks a real gap as incomplete [5.70ms]
+(pass) TerminalStateRegistry > reopens a terminal for a reattaching client without losing the screen [5.70ms]
+(pass) TerminalStateRegistry > follows a resize once OMP acknowledged it [5.73ms]
+(pass) TerminalStateRegistry > keeps running without an engine and reports no checkpoints [11.11ms]
+(pass) TerminalStateRegistry > merges adjacent cells that share a style into one coloured run [5.78ms]
+(pass) TerminalStateRegistry > starts a new run at a style change and at a column gap [5.69ms]
+(pass) TerminalStateRegistry > reports no runs when the engine has no cells [5.42ms]
+(pass) TerminalStateRegistry > ignores cells outside the grid and cells with empty text [5.93ms]
+(pass) libghostty-vt (the host's terminal engine) > loads a prebuild for this platform and renders a real screen [18.71ms]
+
+apps/host/test/remote.test.ts:
+(pass) host remote relay > pairs one controller with a usable offer and stops the relay on disable [8.19ms]
+(pass) host remote relay > keeps the relay identity private, and off, across a reopen [5.36ms]
+
+apps/host/test/omp-advisor-config.test.ts:
+(pass) OMP advisor config projection > strictly parses config reads and command receipts [0.24ms]
+(pass) OMP advisor config projection > reads and writes through the negotiated cedia_control bridge [0.40ms]
+(pass) OMP advisor config projection > reports missing runtime and bridge without starting or probing one [0.06ms]
+(pass) authenticated OMP advisor config routes > answers GET and POST, rejects malformed envelopes, and replays a command id [0.77ms]
+(pass) authenticated OMP advisor config routes > checks owner before wrong-method refusal [0.55ms]
+(pass) real CediaHost advisor config route > reads absence, writes through the fixture, refuses bad text, and removes on empty [63.04ms]
+
+apps/host/test/omp-bash.test.ts:
+(pass) OMP session bash projection > strictly parses shell results and command receipts [0.23ms]
+(pass) authenticated OMP shell routes > answers exec and abort, and replays a command id without re-running [0.59ms]
+(pass) authenticated OMP shell routes > refuses malformed envelopes before any runtime call [0.46ms]
+(pass) authenticated OMP shell routes > checks owner before wrong-method refusal [0.56ms]
+(pass) real CediaHost shell route > runs a command through the fixture shell and aborts nothing running [56.53ms]
+
+apps/host/test/omp-usage.test.ts:
+(pass) OMP usage projection > strictly parses complete and partial reports without filling absent amounts [0.43ms]
+(pass) OMP usage projection > keeps a runtime unavailable message inside an available snapshot [0.02ms]
+(pass) OMP usage projection > does not call a missing runtime and reports its absence [0.09ms]
+(pass) authenticated OMP usage route > reads through a real host only when asked and preserves absent amount fields [53.70ms]
+(pass) authenticated OMP usage route > refuses unauthenticated, wrong-method and unknown-query requests [0.50ms]
+
+apps/host/test/host-lifetime.test.ts:
+(pass) host lifetime > stops an orphaned host that nobody has reached for the idle window [0.02ms]
+(pass) host lifetime > keeps running while the app that started it is alive
+(pass) host lifetime > keeps running while a session is in flight
+(pass) host lifetime > keeps running while a phone or relay client is paired
+(pass) host lifetime > waits out the idle window instead of stopping the moment the app goes
+(pass) host lifetime > leaves a host a person started by hand alone
+(pass) host lifetime > tells a live process from a dead one [0.03ms]
+
+apps/host/test/omp-python.test.ts:
+(pass) OMP Python execution projection > strictly parses kernel results and command receipts [0.20ms]
+(pass) authenticated OMP Python routes > answers exec and abort, and replays a command id without re-running [0.58ms]
+(pass) authenticated OMP Python routes > refuses malformed envelopes before any runtime call [0.48ms]
+(pass) authenticated OMP Python routes > checks owner before wrong-method refusal [0.57ms]
+(pass) real CediaHost Python route > runs code through the fixture kernel and aborts nothing running [59.51ms]
+
+apps/host/test/git.test.ts:
+(pass) host git service > reports working tree state, branches and history without a GitHub client [197.91ms]
+(pass) host git service > answers a folder that is not a repository as a normal state [158.11ms]
+(pass) host git service > reads diffs, stats and file revisions, including a rename and a binary hunk [213.54ms]
+(pass) host git service > stages and unstages files, moving them across the index and working tree columns [229.40ms]
+(pass) host git service > stashes, checks out and drops, and reports when there is no stash [361.01ms]
+(pass) host git service > removes only the index lock and refuses anything else wearing its name [166.86ms]
+(pass) host git service > initialises a fresh folder once and leaves an existing repository alone [313.04ms]
+warning: You appear to have cloned an empty repository.
+(pass) host git service > pulls fast-forward only and reports an already current branch [506.81ms]
+(pass) host git service > blames a committed line and flags a working tree line as uncommitted [166.94ms]
+(pass) host git service > names the origin repository for ssh and https remotes, and nothing without one [216.90ms]
+Preparing worktree (new branch 'cedia-wt-copy')
+(pass) host git service > creates detached worktrees, hands uncommitted work across and removes them again [770.58ms]
+(pass) host git service > refuses work that does not belong to an authorized root [124.45ms]
+(pass) host git service > streams a stacked action's phases and its terminal result [213.49ms]
+(pass) host git service > reports a failing action as an event and as the poll's error [192.09ms]
+Preparing worktree (new branch 'cedia-wt-stream')
+(pass) host git service > streams the worktree action's real phases and its result [249.39ms]
+
+apps/host/test/omp-memory.test.ts:
+(pass) OMP memory projection > strictly parses the runtime shape and keeps absent blocks absent [0.28ms]
+(pass) OMP memory projection > reads only a live negotiated runtime and reports absence otherwise [0.10ms]
+(pass) OMP memory projection > reads and applies through the no-payload memory bridge [0.19ms]
+(pass) authenticated OMP memory routes > answers reads without inventing absent blocks and replays command ids [0.84ms]
+(pass) authenticated OMP memory routes > checks owner before wrong-method refusal [0.78ms]
+(pass) real CediaHost memory route > reports unavailable before start and the runtime's shape after start [80.44ms]
+
+apps/host/test/cleanup.test.ts:
+Preparing worktree (new branch 'cedia/task-ce220571-7087-4f5c-93b9-1a1f00cbd92d')
+(pass) cleanup protocol > persists workspace cleanup metadata and reports the disabled capability without removing a worktree [342.56ms]
+Preparing worktree (new branch 'cedia/task-06bbe2ce-d5e6-4293-823f-b1936eb3801c')
+Preparing worktree (checking out 'cedia/task-06bbe2ce-d5e6-4293-823f-b1936eb3801c')
+(pass) cleanup protocol > creates a generation ref and removes only the clean worktree when explicitly enabled [553.55ms]
+Preparing worktree (new branch 'cedia/task-e8c44c7d-dc1c-4124-904e-a4f2d55c73cd')
+Preparing worktree (new branch 'cedia/task-1a91203b-54dd-45b1-a06d-8b4024811bf9')
+Preparing worktree (new branch 'cedia/task-d986a4b0-d335-4f2a-9d7f-17a02a3aef43')
+(pass) cleanup protocol > retains tracked, untracked and ignored worktree data [963.18ms]
+Preparing worktree (new branch 'cedia/task-500c658b-a938-4b5b-a0b0-3ac6aa09f11b')
+Preparing worktree (new branch 'cedia/task-7cc12000-1d95-4e35-8b75-3bb1b5d1e1b0')
+(pass) cleanup protocol > vetoes an active terminal and retains when IDE state is unavailable [671.06ms]
+Preparing worktree (new branch 'cedia/task-ccc172b9-63a0-4ea8-9495-4b3b8f38d517')
+(pass) cleanup protocol > requires a proven integration ancestry [379.80ms]
+Preparing worktree (new branch 'cedia/task-a7ddd5ce-33e6-48fe-a830-5a05c46c807f')
+(pass) cleanup protocol > refuses a changed primary branch [370.53ms]
+Preparing worktree (new branch 'cedia/task-63bde0d7-4af7-44bc-800b-79a14c208b71')
+(pass) cleanup protocol > refuses a changed task branch [357.91ms]
+Preparing worktree (new branch 'cedia/task-c282078b-7b7c-4124-8739-c07a67b18580')
+(pass) cleanup protocol > retains when immutable ref creation fails [323.33ms]
+Preparing worktree (new branch 'cedia/task-dbe572f6-91ec-4e13-8974-d6c0dabe8d30')
+(pass) cleanup protocol > retains when receipt persistence fails [343.98ms]
+Preparing worktree (new branch 'cedia/task-381995f2-99a0-4d1b-8b23-eb9ca2af0bbb')
+(pass) cleanup protocol > retains when non-force removal fails [411.52ms]
+Preparing worktree (new branch 'cedia/task-556f22b5-28cc-455c-a83c-4918eb6c21c4')
+(pass) cleanup protocol > keeps prepared evidence when completion persistence fails after removal [439.00ms]
+Preparing worktree (new branch 'cedia/task-824a3a5c-b4a7-4df5-9119-0e55e46c7ccf')
+(pass) cleanup protocol > aborts when a target mutation is detected during the immediate recheck [473.23ms]
+
+apps/host/test/cli-client.test.ts:
+(pass) cedia-host argument parsing > lists sessions with an optional project filter [0.27ms]
+(pass) cedia-host argument parsing > rejects a bad workspace mode [0.06ms]
+(pass) cedia-host argument parsing > rejects contradictory session-set flags and empty sets [0.04ms]
+(pass) cedia-host argument parsing > requires a message for turn verbs [0.07ms]
+(pass) cedia-host argument parsing > reads the message from a file reader [0.05ms]
+(pass) cedia-host argument parsing > rejects unknown rpc commands but accepts every canonical one [0.06ms]
+(pass) cedia-host argument parsing > parses approval answers by shape [0.04ms]
+(pass) cedia-host argument parsing > shows help for empty or help verbs
+(pass) cedia-host request execution > addresses a turn with the live incarnation [0.42ms]
+(pass) cedia-host request execution > follows chunked response references to the full body [0.12ms]
+(pass) cedia-host request execution > waits for a turn to settle when asked [0.13ms]
+(pass) cedia-host request execution > reports usage and offline hosts with distinct exits [0.16ms]
+
+apps/host/test/omp-model-state.test.ts:
+(pass) OMP model and account projection > strictly parses the runtime contracts and preserves nulls [0.45ms]
+(pass) OMP model and account projection > does not call a stopped or absent runtime [0.09ms]
+(pass) authenticated OMP model and account routes > keeps the picker controller-visible and owner-gates accounts and tier writes [1.29ms]
+(pass) authenticated OMP model role routes > keeps the mapping controller-visible and owner-gates the apply [1.31ms]
+(pass) real CediaHost model and account routes > reads live state and replays pin/tier commands once [105.24ms]
+(pass) real CediaHost model and account routes > returns a refused pin with the refreshed account list [57.42ms]
+(pass) real CediaHost model and account routes > keeps an unsupported provider distinct from an empty account list [54.53ms]
+(pass) real CediaHost model and account routes > refuses malformed runtime answers without coercing them [53.60ms]
+(pass) real CediaHost model and account routes > surfaces a runtime service-tier refusal [54.76ms]
+
+apps/host/test/omp-loop.test.ts:
+(pass) OMP loop projection > strictly parses the loop state [0.17ms]
+(pass) OMP loop projection > reads and disables through the negotiated cedia_control bridge [0.32ms]
+(pass) OMP loop projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP loop route > answers the read to a paired controller and keeps the disable owner-only [0.68ms]
+(pass) controller-visible authenticated OMP loop route > refuses a loop command body with unknown fields [0.39ms]
+(pass) real CediaHost loop route > reads live once the session starts and disables through the durable command [54.92ms]
+
+apps/host/test/omp-tree.test.ts:
+(pass) OMP tree projection > strictly parses tree and navigation results without flattening nulls [0.35ms]
+(pass) OMP tree projection > reads and navigates through the negotiated cedia_control bridge [0.33ms]
+(pass) OMP tree projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP tree routes > answers both routes to a paired controller and preserves askReopen as a non-move [0.72ms]
+(pass) controller-visible authenticated OMP tree routes > refuses unknown fields, missing entry ids, non-boolean summarize, and stale incarnations [0.44ms]
+(pass) real CediaHost tree routes > answers the live tree, navigates once, and replays the durable receipt [55.85ms]
+(pass) real CediaHost tree routes > answers unavailable without a runtime and does not create a runtime call [16.50ms]
+(pass) real CediaHost tree routes > surfaces askReopen as a non-move and refuses a command-id payload conflict [54.25ms]
+(pass) real CediaHost tree routes > surfaces the runtime's unknown-entry refusal as a typed 409 and replays it [54.73ms]
+(pass) real CediaHost tree routes > rejects malformed runtime answers without coercing them [107.22ms]
+
+apps/host/test/lifecycle.test.ts:
+(pass) host lifecycle lease > renews a compatible identity and rejects stale or mismatched adoption [0.57ms]
+(pass) host lifecycle lease > rejects admissions after explicit quit starts [0.72ms]
+(pass) host lifecycle lease > reopens admission on a cancel and never reopens a stopped host [0.90ms]
+(pass) host lifecycle lease > persists a stopped phase after completion and rejects adoption after stopping [0.72ms]
+
+apps/host/test/native-editor.test.ts:
+(pass) uses unsaved snapshots and applies one guarded UTF-16 transaction without changing disk [0.90ms]
+(pass) rejects stale snapshot edits before dispatching any apply [0.45ms]
+(pass) allows untouched headless files but never falls back after an editor owner disconnects [0.50ms]
+(pass) keeps ownership after an interrupted first read instead of silently selecting stale disk [0.40ms]
+(pass) routes create, delete and move without writing disk from the host [0.75ms]
+(pass) snapshots untitled paths without realpath [0.34ms]
+(pass) rejects moving an untitled document before any editor request [0.33ms]
+(pass) rejects a snapshot whose content does not match its hash [0.32ms]
+(pass) shares editor ownership across internal symlink aliases and rejects retargeting [0.76ms]
+(pass) never converts an editor open failure into a headless disk fallback [0.40ms]
+(pass) retains a canonical workspace registration after the window expires [0.27ms]
+
+apps/host/test/omp-prewalk.test.ts:
+(pass) OMP prewalk projection > strictly parses the armed flag [0.13ms]
+(pass) OMP prewalk projection > reads through the negotiated cedia_control bridge [0.22ms]
+(pass) OMP prewalk projection > reports missing runtime and bridge without probing either one [0.04ms]
+(pass) controller-visible authenticated OMP prewalk route > answers the route to a paired controller [0.70ms]
+(pass) real CediaHost prewalk route > answers unavailable without a runtime and live once the session starts [55.09ms]
+
+apps/host/test/drafts.test.ts:
+(pass) creates revisioned drafts, round-trips attachments, and rejects invalid patches [3.74ms]
+(pass) claims one submission per draft revision and detects payload conflicts [4.65ms]
+(pass) a delivered revision releases its submission claim for the next draft [3.45ms]
+(pass) clear uses compare-and-delete semantics [2.78ms]
+(pass) imports each draft id once and preserves the first copy [3.32ms]
+(pass) round-trips the shared cross-window payload and keeps it when a patch omits it [2.73ms]
+(pass) bounds the shared payload and reports an unserializable one [3.60ms]
+(pass) import carries the legacy payload too [2.73ms]
+
+apps/host/test/omp-history.test.ts:
+(pass) OMP history projection > strictly parses state, transcript, and context operation results [0.34ms]
+(pass) OMP history projection > reads state and transcript and dispatches both context operations through cedia_control [0.36ms]
+(pass) OMP history projection > does not probe a stopped or non-advertising runtime [0.05ms]
+(pass) authenticated OMP history routes > answers reads and replays both durable command ids [0.66ms]
+(pass) authenticated OMP history routes > rejects malformed envelopes, unsupported methods and controller credentials [0.77ms]
+(pass) real CediaHost history routes > reads the fixture state/transcript and dispatches each recovery operation once [56.65ms]
+(pass) real CediaHost history routes > reports a malformed runtime answer as unavailable instead of coercing it [54.57ms]
+
+apps/host/test/runtime-integrity.test.ts:
+(pass) runtime attestation rejects extra source changes without changing the real index [260.08ms]
+(pass) selects Cargo's reported native artifact instead of a stale default target directory [0.17ms]
+
+packages/omp-adapter/test/new-correlation.test.ts:
+(pass) binds the generated request id before enqueue and does not dispatch when the binder throws [280.54ms]
+
+packages/omp-adapter/test/owner-read-client.test.ts:
+(pass) Cedia owner read client > correlates concurrent allowlisted reads and detach leaves owner socket alive [16.73ms]
+(pass) Cedia owner read client > rejects an identity mismatch before returning an attached client [2.83ms]
+
+packages/omp-adapter/test/cedia-capabilities.test.ts:
+(pass) Cedia capability bridge on the prepared runtime > advertises the capability bridge in its ready frame [829.13ms]
+(pass) Cedia capability bridge on the prepared runtime > answers a table where every available row is really runnable and every gap has a reason [1437.82ms]
+(pass) Cedia capability bridge on the prepared runtime > runs a registered read and answers the runtime's own projection [1023.42ms]
+(pass) Cedia capability bridge on the prepared runtime > lists the settings the runtime defines, matching the audited inventory exactly [1039.37ms]
+(pass) Cedia capability bridge on the prepared runtime > reads one settings value, redacts a credential, and refuses an unknown key [906.44ms]
+(pass) Cedia capability bridge on the prepared runtime > redacts a credential path and never returns its value [1036.44ms]
+(pass) Cedia capability bridge on the prepared runtime > reads back a value the native CLI wrote, across a restart [2917.24ms]
+(pass) Cedia capability bridge on the prepared runtime > writes one settings value, reads it back, and refuses a moved revision [1771.31ms]
+(pass) Cedia capability bridge on the prepared runtime > refuses an unknown operation by name, without running anything [836.36ms]
+(pass) Cedia capability bridge on the prepared runtime > refuses a payload that could name code, and a stale revision [772.94ms]
+
+packages/omp-adapter/test/host-races.test.ts:
+(pass) bounds the whole invocation when many queued updates have a stuck writer [41.65ms]
+(pass) cancels a terminal result still queued behind an update [11.45ms]
+(pass) disposal settles a call even when authorization never returns [0.16ms]
+(pass) does not run a handler after authorization blocks the event loop past expiry [15.23ms]
+(pass) does not send a malformed duplicate error while the valid request is authorized [0.25ms]
+(pass) authorizes the exact frozen JSON snapshot including prototype-named keys [0.20ms]
+(pass) drops an overdue terminal send when an update resolves before its timer callback [25.22ms]
+
+packages/omp-adapter/test/owner-control-client.test.ts:
+(pass) OmpOwnerControlClient > claims one owner lease, correlates out-of-order ACKs, forwards events, and sends tracked side-channel replies [24.41ms]
+(pass) OmpOwnerControlClient > refuses mutations locally when the owner grants a read-only claim [0.89ms]
+(pass) OmpOwnerControlClient > reports claim denial and identity mismatch without starting a second owner [1.06ms]
+(pass) OmpOwnerControlClient > correlates an owner-side command refusal without waiting for a timeout [0.47ms]
+(pass) OmpOwnerControlClient > removes cancelled side-channel requests and fails closed on side-channel backlog [66.19ms]
+(pass) OmpOwnerControlClient > marks a dispatched command outcome unknown when the owner disconnects and bounds outgoing frames [48.40ms]
+(pass) OmpOwnerControlClient > rejects a controller frame from a different lease [22.30ms]
+
+packages/omp-adapter/test/adapter.test.ts:
+(pass) OMP protocol framing > reassembles split UTF-8 JSONL without changing fields [0.32ms]
+(pass) OMP protocol framing > rejects an oversized physical frame before JSON parsing [0.37ms]
+(pass) OMP protocol framing > decodes coalesced records, tolerates blank lines, and finishes without a trailing newline [0.48ms]
+(pass) OMP protocol framing > validates protocol-v2 chunk sequence and reassembled size [3.66ms]
+(pass) OmpRpcClient > exports the exact pinned 47-command contract [0.87ms]
+(pass) OmpRpcClient > requires rpc-ui ready, negotiates v2, and preserves unknown frames [27.72ms]
+(pass) OmpRpcClient > gates cedia_plan on its ready marker and forwards its state frames [43.85ms]
+(pass) OmpRpcClient > refuses cedia_plan before dispatch when the ready marker is absent [23.26ms]
+(pass) OmpRpcClient > rejects startup when negotiation ACK is coalesced with an invalid chunk [21.13ms]
+(pass) OmpRpcClient > does not merge ambient environment when the caller supplies env [21.00ms]
+(pass) OmpRpcClient > accepts a v2 chunk that follows the negotiation ACK in the same write [74.55ms]
+(pass) OmpRpcClient > correlates out-of-order ACKs and keeps prompt completion as events [63.22ms]
+(pass) OmpRpcClient > emits a late same-id error after the first ACK without changing the result [75.09ms]
+(pass) OmpRpcClient > rejects command errors and marks dispatched timeout outcomes unknown without retry [79.54ms]
+(pass) OmpRpcClient > does not dispatch an expired command after a queued backpressure write resumes [276.11ms]
+(pass) OmpRpcClient > requires explicit side-channel responses and does not auto-approve [53.01ms]
+(pass) OmpRpcClient > bounds stderr and closes cleanly or by escalation [47.94ms]
+(pass) OmpRpcClient > reaps a child that ignores EOF and SIGTERM after SIGKILL [24.09ms]
+(pass) OmpRpcClient > rejects pending requests when OMP exits abruptly [27.32ms]
+(pass) OmpRpcClient > delivers a final ACK and event flushed immediately before child exit [22.88ms]
+(pass) OmpRpcClient > delivers an event flushed while intentionally closing stdin [22.84ms]
+
+packages/omp-adapter/test/host.test.ts:
+(pass) OmpHostDispatcher > requires explicit authorization and freezes the exact nested request before effects [0.28ms]
+(pass) OmpHostDispatcher > denies before invoking a handler and propagates authorization errors [0.29ms]
+(pass) OmpHostDispatcher > delivers cancellation to a handler and suppresses stale completion and updates [41.25ms]
+(pass) OmpHostDispatcher > rejects duplicate request IDs, including IDs that already completed [0.27ms]
+(pass) OmpHostDispatcher > gates URI writes, serves reads, and rejects malformed writes [0.27ms]
+(pass) OmpHostDispatcher > sends updates and handler errors, while observing send failures without rejection [0.27ms]
+(pass) OmpHostDispatcher > bounds deduplication without evicting completed IDs [0.21ms]
+(pass) OmpHostDispatcher > disposes pending handlers, prevents future effects, and handles URI cancellation [0.16ms]
+(pass) OmpHostDispatcher > times out an authorization or handler that ignores its signal [16.14ms]
+
+packages/omp-adapter/test/cedia-model-roles.test.ts:
+(pass) Cedia model-role bridge on the prepared runtime > advertises the role surface in its ready frame [737.77ms]
+(pass) Cedia model-role bridge on the prepared runtime > lists configured roles with the layer each one came from [720.97ms]
+(pass) Cedia model-role bridge on the prepared runtime > persists an assignment before it answers, so a client may exit on the ack [1926.52ms]
+(pass) Cedia model-role bridge on the prepared runtime > keeps the role commands inside the Cedia patch surface, never the stock command list [0.05ms]
+
+packages/omp-adapter/test/cedia-goal.test.ts:
+(pass) Cedia goal bridge on the prepared runtime > advertises the bridge, refuses nothing by accident, and answers an empty state honestly [743.36ms]
+(pass) Cedia goal bridge on the prepared runtime > sets, pauses, resumes, budgets, completes and drops one goal through the runtime [811.59ms]
+(pass) Cedia goal bridge on the prepared runtime > refuses a payload that cannot name an operation, and an operation the table does not register [752.64ms]
+
+packages/omp-adapter/test/ui-regressions.test.ts:
+(pass) returns an immutable pending-request snapshot without exposing mutable broker state [0.42ms]
+
+packages/omp-adapter/test/version.test.ts:
+(pass) OMP runtime version policy > accepts the baseline and every later patch of its line [0.03ms]
+(pass) OMP runtime version policy > accepts a newer minor line, which is what an updated machine reports [0.01ms]
+(pass) OMP runtime version policy > accepts a newer major line
+(pass) OMP runtime version policy > tolerates surrounding whitespace from the binary's own output
+(pass) OMP runtime version policy > rejects anything older than the baseline
+(pass) OMP runtime version policy > rejects anything that is not an OMP version string
+
+packages/omp-adapter/test/rpc-inventory.test.ts:
+(pass) OMP RPC inventory lock > keeps the adapter command tuple identical to the pinned source inventory [0.18ms]
+
+packages/omp-adapter/test/ui.test.ts:
+(pass) ExtensionUiBroker > routes typed interactive requests and sends an explicit denial [0.21ms]
+(pass) ExtensionUiBroker > cancels explicitly and handles a server cancel target [0.21ms]
+(pass) ExtensionUiBroker > turns a local timeout into one timed-out cancellation [26.10ms]
+(pass) ExtensionUiBroker > invalidates old tokens on dispose and across a new broker incarnation [0.08ms]
+(pass) ExtensionUiBroker > rejects invalid answers, records unknown/invalid frames, and keeps the request pending [0.18ms]
+(pass) ExtensionUiBroker > emits every supported presentation method without attempting side effects [0.12ms]
+(pass) ExtensionUiBroker > claims before async send completes, so duplicate answers cannot replay [0.09ms]
+(pass) ExtensionUiBroker > reports a send failure without retrying the consumed response [0.11ms]
+(pass) ExtensionUiBroker > bounds diagnostic memory and refuses unseen ids after the id ledger is full [0.14ms]
+(pass) ExtensionUiBroker > rejects timeout values that would overflow a Node timer [0.07ms]
+(pass) ExtensionUiBroker > rejects an elapsed deadline even before the timer callback can run [20.90ms]
+
+packages/relay/test/relay.test.ts:
+(pass) Cedia relay protocol > decrypts a fixed Paseo tweetnacl vector [3.39ms]
+(pass) Cedia relay protocol > requires Cedia protocol v1 while pairing only uses Paseo wire v2 [1.30ms]
+(pass) Cedia relay protocol > roundtrips authenticated JSON requests and rechecks revoked tokens [10.43ms]
+(pass) Cedia relay protocol > uses Paseo v2's relay-assigned client route when no connectionId is supplied [6.01ms]
+(pass) Cedia relay protocol > settles connect when closed before the socket opens [3.85ms]
+(pass) Cedia relay protocol > closes the pending socket and immediately reconnects with a fresh attempt [8.18ms]
+(pass) Cedia relay protocol > settles connect when closed during the E2EE handshake [3.66ms]
+(pass) Cedia relay protocol > bounds silent data connections and expires incomplete handshakes [27.12ms]
+(pass) Cedia relay protocol > retains the global handler budget across disconnected channels [11.91ms]
+(pass) Cedia relay protocol > rejects altered ciphertext and cannot open it with another connection key [6.29ms]
+(pass) Cedia relay protocol > bounds payloads, pending requests, and timeout outcomes [25.87ms]
+(pass) Cedia relay protocol > returns 413 for an oversized generic handler response [5.99ms]
+(pass) Cedia relay protocol > keeps timed-out uncooperative handlers inside the admission bound [28.47ms]
+(pass) Cedia relay protocol > retries the control socket after an initial connection failure [32.21ms]
+(pass) Cedia relay protocol > does not replay a timed-out mutation after disconnect and rejects malformed frames [7.94ms]
+
+ 1453 pass
+ 0 fail
+ 8649 expect() calls
+Ran 1453 tests across 173 files. [64.96s]

@@ -1,0 +1,5 @@
+$ bun scripts/check-omp-coverage.ts --live
+OMP coverage: 1101 audited records; 1101 Cedia mappings.
+Live runtime: checked omp/18.4.3; 516 settings, 61 audited RPC commands and 73 capability descriptors read.
+Integrity PASS: 0 fatal issue(s); 0 audited records without an available Cedia disposition.
+Gap summary by O-family and kind:

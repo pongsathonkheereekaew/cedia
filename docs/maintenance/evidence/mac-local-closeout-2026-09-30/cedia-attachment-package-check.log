@@ -1,0 +1,16 @@
+$ bun scripts/check-packaged-shell.ts
+App      /Users/pond/cedia/VSCode-darwin-arm64/Cedia.app
+Product  /Users/pond/cedia/VSCode-darwin-arm64/Cedia.app/Contents/Resources/app/product.json
+Packaged 2026-09-30T08:25:21.069Z, upstream ea1912fd6a05b80a56b2ad9b955075211deea521, 19 patches
+OK   patch set sha256 matches the repository (e1901f7eb472796a2ed9e35b8c456cf14e20b4de4dfe24ec63aa5b3150a28daa)
+OK   base revision matches the repository (ea1912fd6a05b80a56b2ad9b955075211deea521)
+OK   patch count matches the repository (19)
+OK   sessions shell sha256 matches the stamp (c01c72125158f5129c28871dee72d508eb6cfed71028dd413fef2e157cf130fd)
+OK   workbench shell sha256 matches the stamp (1a6e64ac5a6db606400d0fa155a51f9d0698098510ab4d491c775e320d6d0c42)
+OK   native main sha256 matches the stamp (4f9cbbd67f6c21996edaae08263bb6b0ab99db8ccca6f195fdb572c22c2914d1)
+OK   cedia extension sha256 matches the stamp (7c4d879605b77b50de67f0fb694a10179fa2e751d2138ee0186023b922e13204)
+OK   Agent Window assets match the stamp and local build (38d803224b7ed998d6979d129a3ed071ef3ff42aa04fa6e4b928606e9c994189)
+OK   sessions shell is at least as new as the newest patch (patches/desktop/0063-cedia-dirty-editor-count.patch)
+OK   workbench shell is at least as new as the newest patch (patches/desktop/0063-cedia-dirty-editor-count.patch)
+OK   native main is at least as new as the newest patch (patches/desktop/0063-cedia-dirty-editor-count.patch)
+OK   packaged Cedia.app matches the current patch set

@@ -636,6 +636,31 @@ describe("CediaHost", () => {
     await fixtureHost.host.stopSession(fixtureHost.sessionId);
   });
 
+  it("settles named follow-up batches without treating tool rounds or transport ACKs as completion", async () => {
+    const f = makeHost("queue-boundaries");
+    const { incarnation } = await f.host.startSession(f.sessionId);
+    await f.host.command(f.sessionId, "owner", { commandId: "A", incarnation, command: "prompt", payload: { message: "first" } });
+    await waitFor(() => f.store.getTurnIntentByCommand(f.sessionId, "A")?.state === "running");
+    for (const id of ["B", "C"]) {
+      await f.host.command(f.sessionId, "owner", { commandId: id, incarnation, command: "follow_up", payload: { message: id } });
+      expect(f.store.getCommand(f.sessionId, id)?.status).toBe("completed");
+      expect(f.store.getTurnIntentByCommand(f.sessionId, id)?.state).toBe("queued");
+    }
+    await f.host.command(f.sessionId, "owner", { commandId: "tool-round", incarnation, command: "bash", payload: { command: "fixture:tool-round" } });
+    expect(f.store.getTurnIntentByCommand(f.sessionId, "A")?.state).toBe("running");
+    await f.host.command(f.sessionId, "owner", { commandId: "promote", incarnation, command: "bash", payload: { command: "fixture:follow-up-batch" } });
+    expect(["A", "B", "C"].map(id => f.store.getTurnIntentByCommand(f.sessionId, id)?.state)).toEqual(["completed", "running", "running"]);
+    expect(f.store.getTurnIntentByCommand(f.sessionId, "B")).toMatchObject({ model: "fixture/fixture-model-2", thinkingLevel: "medium" });
+    // queuePosition is the last reported positive queue position, not running state.
+    expect(f.store.getTurnIntentByCommand(f.sessionId, "B")?.queuePosition).toBe(1);
+    // The outer prompt still owns admission while its queued batch runs.
+    const rejected = await f.host.command(f.sessionId, "owner", { commandId: "D", incarnation, command: "prompt", payload: { message: "must not overlap" } });
+    expect(rejected.status).toBe("not_dispatched");
+    await f.host.command(f.sessionId, "owner", { commandId: "finish", incarnation, command: "bash", payload: { command: "fixture:finish-batch" } });
+    expect(["A", "B", "C"].map(id => f.store.getTurnIntentByCommand(f.sessionId, id)?.state)).toEqual(["completed", "completed", "completed"]);
+    expect(f.store.getSession(f.sessionId)?.status).toBe("idle");
+  });
+
   it("settles a turn intent when its queued OMP submission is dropped", async () => {
     const fixtureHost = makeHost("hold-turn");
     const started = await fixtureHost.host.startSession(fixtureHost.sessionId);

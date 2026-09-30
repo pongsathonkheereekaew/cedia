@@ -1,0 +1,27 @@
+OK   --attachments requires --execute
+OK   OMP runtime is present at /var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-attachment-native-jT2NeM/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+141 |   const errors: string[] = [];
+142 |   try {
+143 |     if (nativeApp) {
+144 |       const mainPath = join(assets, "main.cjs");
+145 |       const main = await readFile(mainPath, "utf8");
+146 |       if (main !== await readFile(join(input.root, "dist/agent-window/main.cjs"), "utf8")) throw new Error("Staged main process differs from current build");
+                                                                                                           ^
+error: Staged main process differs from current build
+      at dropQueueThroughBrowser (/Users/pond/cedia/scripts/lib/queue-browser-proof.ts:146:102)
+
+Bun v1.4.2 (macOS arm64)

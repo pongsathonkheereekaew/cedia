@@ -1,0 +1,67 @@
+OK   OMP runtime is present at /var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-native-final-uvGwzw/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+OK   OMP accepts explicit one-at-a-time follow-up mode
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   composer submission is running in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+OK   request 1 arrived exactly once
+OK   request 1 executes the expected prompt
+OK   later prompts are not batched into this request
+OK   later prompts are not batched into this request
+OK   intent 1 is running
+OK   durable intents distinguish completed, current and waiting work
+OK   OMP queue retains only the later prompts in order
+OK   intent 1 completed
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   request 2 arrived exactly once
+OK   request 2 executes the expected prompt
+OK   later prompts are not batched into this request
+OK   intent 2 is running
+OK   durable intents distinguish completed, current and waiting work
+OK   OMP queue retains only the later prompts in order
+OK   intent 2 completed
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   request 3 arrived exactly once
+OK   request 3 executes the expected prompt
+OK   intent 3 is running
+OK   durable intents distinguish completed, current and waiting work
+OK   OMP queue retains only the later prompts in order
+OK   intent 3 completed
+OK   exactly three loopback model requests after completion
+126 |         }
+127 |         const transcript = (await messageRows.allInnerTexts()).join("\n");
+128 |         let previousPosition = -1;
+129 |         for (const text of [input.composer!.firstText, input.execution.replies[0]!, input.queuedText, input.execution.replies[1]!, input.execution.thirdText, input.execution.replies[2]!]) {
+130 |           const position = transcript.indexOf(text);
+131 |           if (position <= previousPosition) throw new Error(`Transcript is out of execution order: ${text}`);
+                                                            ^
+error: Transcript is out of execution order: Local task B completed.
+      at dropQueueThroughBrowser (/Users/pond/cedia/scripts/lib/queue-browser-proof.ts:131:55)
+
+Bun v1.4.2 (macOS arm64)

@@ -4,6 +4,7 @@
 
 import {
   MessageId,
+  isSafeReadModelImagePreview,
   type OrchestrationReadModel,
   type OrchestrationSessionStatus,
   type OrchestrationShellSnapshot,
@@ -55,6 +56,7 @@ export const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_ACTIVITIES = 2_000;
 const LOCAL_USER_MESSAGE_RETENTION_MS = 10_000;
 const PENDING_INTERACTION_REQUEST_KINDS = new Set(["approval.requested", "user-input.requested"]);
+const validatedInlinePreviewByAttachment = new WeakMap<object, string>();
 
 function basenameOfPath(value: string): string | null {
   const segments = value.split(/[/\\]/).filter((segment) => segment.length > 0);
@@ -441,6 +443,8 @@ function normalizeChatAttachments(
 
   const previousById = new Map(previous?.map((attachment) => [attachment.id, attachment] as const));
   const nextAttachments = incoming.map((attachment) => {
+    const existing = previousById.get(attachment.id);
+    let validatedInlinePreview: string | undefined;
     const nextAttachment: ChatAttachment =
       attachment.type === "assistant-selection"
         ? {
@@ -463,9 +467,46 @@ function normalizeChatAttachments(
               name: attachment.name,
               mimeType: attachment.mimeType,
               sizeBytes: attachment.sizeBytes,
-              previewUrl: toAttachmentPreviewUrl(attachmentPreviewRoutePath(attachment.id)),
+              previewUrl: (() => {
+                const sameMetadata =
+                  existing?.type === "image" &&
+                  existing.name === attachment.name &&
+                  existing.mimeType === attachment.mimeType &&
+                  existing.sizeBytes === attachment.sizeBytes;
+                const existingInlinePreview = sameMetadata
+                  ? validatedInlinePreviewByAttachment.get(existing)
+                  : undefined;
+                // A repeated validated inline URL is already safe, so reuse it without scanning
+                // a large base64 string again. It also survives a stale snapshot that omits the
+                // preview; an explicitly unsafe URL still falls back to the server route.
+                if (
+                  attachment.previewUrl !== undefined &&
+                  attachment.previewUrl === existingInlinePreview
+                ) {
+                  validatedInlinePreview = existingInlinePreview;
+                  return existingInlinePreview;
+                }
+                if (isSafeReadModelImagePreview(attachment.previewUrl)) {
+                  validatedInlinePreview = attachment.previewUrl;
+                  return attachment.previewUrl;
+                }
+                if (attachment.previewUrl === undefined && existingInlinePreview !== undefined) {
+                  validatedInlinePreview = existingInlinePreview;
+                  return existingInlinePreview;
+                }
+                if (attachment.previewUrl === undefined && sameMetadata && existing?.type === "image") {
+                  const legacyInlinePreview = existing.previewUrl;
+                  if (isSafeReadModelImagePreview(legacyInlinePreview)) {
+                    validatedInlinePreview = legacyInlinePreview;
+                    return legacyInlinePreview;
+                  }
+                }
+                return toAttachmentPreviewUrl(attachmentPreviewRoutePath(attachment.id));
+              })(),
             };
-    const existing = previousById.get(attachment.id);
+    if (nextAttachment.type === "image" && validatedInlinePreview !== undefined) {
+      validatedInlinePreviewByAttachment.set(nextAttachment, validatedInlinePreview);
+    }
     if (
       existing &&
       ((existing.type === "assistant-selection" &&
@@ -484,6 +525,9 @@ function normalizeChatAttachments(
           existing.mimeType === nextAttachment.mimeType &&
           existing.sizeBytes === nextAttachment.sizeBytes))
     ) {
+      if (existing.type === "image" && nextAttachment.type === "image" && validatedInlinePreview !== undefined) {
+        validatedInlinePreviewByAttachment.set(existing, validatedInlinePreview);
+      }
       return existing;
     }
     return nextAttachment;
@@ -519,6 +563,7 @@ export function normalizeChatMessage(
     previous.dispatchOrigin === incoming.dispatchOrigin &&
     previous.startsNewTurn === incoming.startsNewTurn &&
     previous.turnId === incoming.turnId &&
+    previous.transcriptOrder === incoming.transcriptOrder &&
     previous.createdAt === incoming.createdAt &&
     previous.streaming === incoming.streaming &&
     previous.source === incoming.source &&
@@ -543,6 +588,9 @@ export function normalizeChatMessage(
     ...(incoming.dispatchOrigin ? { dispatchOrigin: incoming.dispatchOrigin } : {}),
     ...(incoming.startsNewTurn !== undefined ? { startsNewTurn: incoming.startsNewTurn } : {}),
     turnId: incoming.turnId,
+    ...(incoming.transcriptOrder !== undefined
+      ? { transcriptOrder: incoming.transcriptOrder }
+      : {}),
     createdAt: incoming.createdAt,
     streaming: incoming.streaming,
     source: incoming.source,
@@ -589,6 +637,15 @@ function readModelAttachmentsFromChatMessage(
               type: "image" as const,
               mimeType: attachment.mimeType,
               sizeBytes: attachment.sizeBytes,
+              ...(validatedInlinePreviewByAttachment.get(attachment) !== undefined
+                ? { previewUrl: validatedInlinePreviewByAttachment.get(attachment) }
+                : isSafeReadModelImagePreview(attachment.previewUrl)
+                  ? (() => {
+                      const previewUrl = attachment.previewUrl;
+                      validatedInlinePreviewByAttachment.set(attachment, previewUrl);
+                      return { previewUrl };
+                    })()
+                  : {}),
             },
     ) ?? []
   );
@@ -606,6 +663,9 @@ function readModelMessageFromChatMessage(
     ...(message.dispatchOrigin ? { dispatchOrigin: message.dispatchOrigin } : {}),
     ...(message.startsNewTurn !== undefined ? { startsNewTurn: message.startsNewTurn } : {}),
     turnId: message.turnId ?? null,
+    ...(message.transcriptOrder !== undefined
+      ? { transcriptOrder: message.transcriptOrder }
+      : {}),
     streaming: message.streaming,
     source: message.source ?? "native",
     createdAt: message.createdAt,
@@ -721,8 +781,18 @@ function mergeReadModelMessagesWithLiveHotPath(
           snapshotLength: incomingMessage.text.length,
         });
       }
+      if (
+        incomingMessage.transcriptOrder === undefined &&
+        previousMessage.transcriptOrder !== undefined
+      ) {
+        changed = true;
+      }
       mergedById.set(incomingMessage.id, {
         ...incomingMessage,
+        ...(incomingMessage.transcriptOrder === undefined &&
+        previousMessage.transcriptOrder !== undefined
+          ? { transcriptOrder: previousMessage.transcriptOrder }
+          : {}),
         ...(!incomingMessage.mentions || incomingMessage.mentions.length === 0
           ? previousMessage.mentions && previousMessage.mentions.length > 0
             ? { mentions: previousMessage.mentions }
@@ -749,6 +819,12 @@ function mergeReadModelMessagesWithLiveHotPath(
         incomingMessage.asyncUserInput,
       ),
       turnId: previousMessage.turnId ?? incomingMessage.turnId ?? null,
+      ...(previousMessage.transcriptOrder !== undefined || incomingMessage.transcriptOrder !== undefined
+        ? {
+            transcriptOrder:
+              incomingMessage.transcriptOrder ?? previousMessage.transcriptOrder,
+          }
+        : {}),
       source: previousMessage.source ?? incomingMessage.source ?? "native",
       streaming: previousMessage.streaming,
       updatedAt: previousMessage.completedAt ?? incomingMessage.updatedAt,
@@ -777,12 +853,28 @@ function mergeReadModelMessagesWithLiveHotPath(
     return incomingMessages;
   }
 
-  // `toSorted` is stable, so equal `createdAt` values keep insertion order
-  // (incoming order first, then retained local rows). Tie-breaking on the random
-  // message id instead would reshuffle same-millisecond rows on every merge.
-  return [...mergedById.values()].toSorted((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
+  // `toSorted` is stable, so equal keys keep insertion order (incoming order first,
+  // then retained local rows). OMP's transcript order is causal when queued-turn
+  // timestamps overlap; snapshots from other providers have no such field and keep
+  // the existing chronological fallback. A mixed snapshot is deliberately left in
+  // merge order: comparing an authoritative rank to a local optimistic timestamp
+  // does not define a transitive order.
+  const mergedMessages = [...mergedById.values()];
+  const allMessagesHaveTranscriptOrder = mergedMessages.every(
+    (message) => message.transcriptOrder !== undefined,
   );
+  if (allMessagesHaveTranscriptOrder) {
+    return mergedMessages.toSorted((left, right) => {
+      if (left.transcriptOrder !== right.transcriptOrder) {
+        return left.transcriptOrder! - right.transcriptOrder!;
+      }
+      return left.createdAt.localeCompare(right.createdAt);
+    });
+  }
+  if (mergedMessages.every((message) => message.transcriptOrder === undefined)) {
+    return mergedMessages.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+  return mergedMessages;
 }
 
 function hasLiveAssistantIntro(previousThread: Thread | undefined): boolean {

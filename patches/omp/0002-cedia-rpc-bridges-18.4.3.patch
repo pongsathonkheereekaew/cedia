@@ -1396,6 +1396,21 @@ index b1c5940515..21e2e3de87 100644
  	timestamp: number; // Unix timestamp in milliseconds
  }
  
+diff --git a/packages/coding-agent/CHANGELOG.md b/packages/coding-agent/CHANGELOG.md
+index fb661931de..a59370fa92 100644
+--- a/packages/coding-agent/CHANGELOG.md
++++ b/packages/coding-agent/CHANGELOG.md
+@@ -2,6 +2,10 @@
+ 
+ ## [Unreleased]
+ 
++### Changed
++
++- Cedia's session bridge now emits an explicit named turn-boundary event when a prepared follow-up batch replaces the running submission, preserving grouped identities for `followUpMode: "all"` and leaving failed or cancelled preparations queued.
++
+ ## [18.4.3] - 2026-09-28
+ 
+ ### Added
 diff --git a/packages/coding-agent/scripts/compile-binary.ts b/packages/coding-agent/scripts/compile-binary.ts
 index 0eeda6d756..4265b1d3a3 100644
 --- a/packages/coding-agent/scripts/compile-binary.ts
@@ -8206,6 +8221,20 @@ index 45d55d0b24..33f227124f 100644
  		await refreshAgentDiscovery(cwd, record.session.effectiveExtensionRoots);
  		await record.session.refreshSkillsAndCommands();
  		await this.#emitAvailableCommandsUpdate(record);
+diff --git a/packages/coding-agent/src/modes/controllers/event-controller.ts b/packages/coding-agent/src/modes/controllers/event-controller.ts
+index 596d448399..c68813712a 100644
+--- a/packages/coding-agent/src/modes/controllers/event-controller.ts
++++ b/packages/coding-agent/src/modes/controllers/event-controller.ts
+@@ -353,6 +353,9 @@ export class EventController {
+ 				this.ctx.ui.requestRender(true);
+ 			},
+ 			goal_updated: async () => {},
++			// Cedia consumes the named queue boundary on its own bridge; the TUI has no
++			// turn-intent ledger to update for this transport-only event.
++			cedia_turn_boundary: async () => {},
+ 		} satisfies AgentSessionEventHandlers;
+ 	}
+ 
 diff --git a/packages/coding-agent/src/modes/controllers/extension-ui-controller.ts b/packages/coding-agent/src/modes/controllers/extension-ui-controller.ts
 index 617232f6c8..62c26e517d 100644
 --- a/packages/coding-agent/src/modes/controllers/extension-ui-controller.ts
@@ -15298,10 +15327,10 @@ index 0000000000..86f9d65be4
 +}
 diff --git a/packages/coding-agent/src/modes/rpc/cedia-queue-bridge.ts b/packages/coding-agent/src/modes/rpc/cedia-queue-bridge.ts
 new file mode 100644
-index 0000000000..18940ab328
+index 0000000000..6d53e3d215
 --- /dev/null
 +++ b/packages/coding-agent/src/modes/rpc/cedia-queue-bridge.ts
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,76 @@
 +/**
 + * Cedia's queue projection for OMP RPC mode (plan §8.2 O01).
 + *
@@ -15344,16 +15373,16 @@ index 0000000000..18940ab328
 +}
 +
 +function restoredIntentIds(restored: readonly RestoredQueuedMessage[]): string[] {
-+	return restored.flatMap(message => typeof message.cediaIntentId === "string" ? [message.cediaIntentId] : []);
++	return restored.flatMap(message => (typeof message.cediaIntentId === "string" ? [message.cediaIntentId] : []));
 +}
 +
-+function bounded(texts: readonly string[]): RpcCediaQueuedMessage[] {
-+	return texts.slice(0, CEDIA_QUEUE_MAX_ITEMS).map(text => queuedMessage(text, 0));
++function bounded(messages: readonly RestoredQueuedMessage[]): RpcCediaQueuedMessage[] {
++	return messages.slice(0, CEDIA_QUEUE_MAX_ITEMS).map(restoredMessage);
 +}
 +
 +/** The queue OMP is holding for this session, as one snapshot. */
 +export function readCediaQueue(session: AgentSession): RpcCediaQueueData {
-+	const held = session.getQueuedMessages();
++	const held = session.getQueuedMessageDetails();
 +	return { steering: bounded(held.steering), followUp: bounded(held.followUp) };
 +}
 +
@@ -15368,9 +15397,7 @@ index 0000000000..18940ab328
 +	if (mode === "all") {
 +		const cleared = session.clearQueue();
 +		const restored = [...cleared.steering, ...cleared.followUp];
-+		const dropped = restored
-+			.slice(0, CEDIA_QUEUE_MAX_ITEMS)
-+			.map(restoredMessage);
++		const dropped = restored.slice(0, CEDIA_QUEUE_MAX_ITEMS).map(restoredMessage);
 +		return { ...readCediaQueue(session), dropped, droppedIntentIds: restoredIntentIds(restored) };
 +	}
 +	const popped = session.popLastQueuedMessage();
@@ -15705,6 +15732,18 @@ index 6b7e7d2c14..78f2be3af4 100644
  	async requestRead(scheme: string, url: InternalUrl, context?: ResolveContext): Promise<InternalResource> {
  		const result = await this.#dispatch("read", url.href, undefined, context?.signal);
  		if (result.isError) {
+diff --git a/packages/coding-agent/src/modes/rpc/rpc-client.ts b/packages/coding-agent/src/modes/rpc/rpc-client.ts
+index 47c54e18d8..c1428fdcd7 100644
+--- a/packages/coding-agent/src/modes/rpc/rpc-client.ts
++++ b/packages/coding-agent/src/modes/rpc/rpc-client.ts
+@@ -162,6 +162,7 @@ const sessionEventTypes = new Set<AgentSessionEvent["type"]>([
+ 	"thinking_level_changed",
+ 	"model_changed",
+ 	"goal_updated",
++	"cedia_turn_boundary",
+ ]);
+ 
+ function isRpcResponse(value: unknown): value is RpcResponse {
 diff --git a/packages/coding-agent/src/modes/rpc/rpc-mode.ts b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
 index 3764f9e3df..1304f03575 100644
 --- a/packages/coding-agent/src/modes/rpc/rpc-mode.ts
@@ -20154,6 +20193,28 @@ index d5f0649093..43180b0b8b 100644
  		if (agentKind === "main") {
  			// Live skills/commands discovery settings: rediscover skills and file slash
  			// commands, rebuild the prompt, and notify command pickers (TUI/RPC/ACP).
+diff --git a/packages/coding-agent/src/session/agent-session-events.ts b/packages/coding-agent/src/session/agent-session-events.ts
+index 866797c7bd..aad16f0be4 100644
+--- a/packages/coding-agent/src/session/agent-session-events.ts
++++ b/packages/coding-agent/src/session/agent-session-events.ts
+@@ -69,6 +69,17 @@ export type AgentSessionEvent =
+ 	| { type: "todo_auto_clear" }
+ 	| { type: "irc_message"; message: CustomMessage }
+ 	| { type: "notice"; level: "info" | "warning" | "error"; message: string; source?: string }
++	| {
++			type: "cedia_turn_boundary";
++			/** Named submissions whose completed run ended at this queue boundary. */
++			completedIntentIds: string[];
++			/** Named submissions that OMP starts running as one follow-up batch. */
++			runningIntentIds: string[];
++			/** Model OMP has actually selected for this batch, when known. */
++			cediaModel?: string;
++			/** Effective thinking level OMP has actually selected for this batch, when known. */
++			cediaThinkingLevel?: string;
++	  }
+ 	| {
+ 			type: "thinking_level_changed";
+ 			thinkingLevel: ThinkingLevel | undefined;
 diff --git a/packages/coding-agent/src/session/agent-session-types.ts b/packages/coding-agent/src/session/agent-session-types.ts
 index f9859ec30f..2f2d990b6f 100644
 --- a/packages/coding-agent/src/session/agent-session-types.ts
@@ -20241,7 +20302,7 @@ index f9859ec30f..2f2d990b6f 100644
  /** Options for the same ephemeral side turn used by /btw. */
  export interface EphemeralTurnOptions {
 diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
-index a29e5d4b1e..0449954f4d 100644
+index a29e5d4b1e..03784c8d1c 100644
 --- a/packages/coding-agent/src/session/agent-session.ts
 +++ b/packages/coding-agent/src/session/agent-session.ts
 @@ -162,7 +162,7 @@ import { createExtensionModelQuery } from "../extensibility/extensions/model-api
@@ -20276,7 +20337,15 @@ index a29e5d4b1e..0449954f4d 100644
  import { recordCredentialPin, seedCredentialPins } from "./credential-pin";
  import { EvalRunner, type EvalRunnerHost } from "./eval-runner";
  import {
-@@ -691,7 +700,7 @@ export class AgentSession implements SettingsScope {
+@@ -381,7 +390,6 @@ import {
+ 	isDisplayableQueuedMessage,
+ 	isHiddenUserCompanion,
+ 	isUserQueuedMessage,
+-	queueChipText,
+ 	toRestoredQueuedMessage,
+ } from "./queued-messages";
+ import type { ServingModel } from "./retry-fallback-chains";
+@@ -691,7 +699,7 @@ export class AgentSession implements SettingsScope {
  	}
  
  	/** Parent-imported extension factories, forwarded to session forks (`/tan`) to rebind runtime providers. */
@@ -20285,7 +20354,7 @@ index a29e5d4b1e..0449954f4d 100644
  
  	/**
  	 * Session-independent imported extension factories safe to rebind in child
-@@ -703,12 +712,18 @@ export class AgentSession implements SettingsScope {
+@@ -703,12 +711,17 @@ export class AgentSession implements SettingsScope {
  	}
  
  	/** Source paths of the parent's loaded extensions; forwarded to `/tan` forks as the prepared-extension fallback. */
@@ -20301,11 +20370,10 @@ index a29e5d4b1e..0449954f4d 100644
 +		this.#extensionPaths = paths;
 +		this.#preparedExtensions = prepared;
 +	}
-+
  
  	#powerAssertion: PowerAssertion | undefined;
  
-@@ -853,6 +868,11 @@ export class AgentSession implements SettingsScope {
+@@ -853,6 +866,11 @@ export class AgentSession implements SettingsScope {
  	#modelDiscoveryAbortController = new AbortController();
  	/** Process-wide by default (double-spend safety across sessions); injectable for tests. */
  	#resetCoordinator: CodexAutoRedeemCoordinator;
@@ -20317,7 +20385,7 @@ index a29e5d4b1e..0449954f4d 100644
  	/** Each turn stream may adopt a peer's confirmed reset once, not retry on it indefinitely. */
  	#adoptedResetMarkers = new Map<string, number>();
  	// Extension system
-@@ -918,6 +938,22 @@ export class AgentSession implements SettingsScope {
+@@ -918,6 +936,24 @@ export class AgentSession implements SettingsScope {
  	 *  it cannot leak into later unrelated aborts. */
  	#planInternalAbortPending = false;
  	#pendingAbortErrorId?: number;
@@ -20328,6 +20396,8 @@ index a29e5d4b1e..0449954f4d 100644
 +	#cediaUnstarted: { steering: string[]; other: string[] } = { steering: [], other: [] };
 +	/** The named submission whose turn is running now. */
 +	#cediaRunningIntentId: string | undefined;
++	/** The named submissions in the currently running OMP batch (follow-up `all` may contain many). */
++	#cediaRunningIntentIds: string[] = [];
 +	/**
 +	 * Cedia's pending model/effort revision (plan §2.4). It is validated when accepted and
 +	 * committed at the next dequeue/start boundary, so a change in transit never restates the
@@ -20362,27 +20432,121 @@ index a29e5d4b1e..0449954f4d 100644
  		this.#detachUsageBeforeQueueDequeue = this.agent.addBeforeQueuedMessageDequeueHook(async signal => {
  			if (
  				!cfgRetryUsageAwareFallback.get(this.settings) ||
-@@ -2933,6 +2977,19 @@ export class AgentSession implements SettingsScope {
+@@ -2813,6 +2857,25 @@ export class AgentSession implements SettingsScope {
+ 
+ 	/** Emit an event to all listeners */
+ 	#emit(event: AgentSessionEvent): void {
++		if (event.type === "agent_end" && event.isTerminal !== false) {
++			// `agent_end` may have been held in #pendingAgentEndEmit while the owning prompt
++			// unwound. Settle Cedia's batch only at this final wire emission, never when the
++			// raw session event is first routed through maintenance (which may be non-terminal).
++			const settledIntentIds =
++				this.#cediaRunningIntentIds.length > 0
++					? [...this.#cediaRunningIntentIds]
++					: this.#cediaRunningIntentId === undefined
++						? []
++						: [this.#cediaRunningIntentId];
++			if (settledIntentIds.length > 0) {
++				this.#setCediaRunningIntentIds([]);
++				this.#reconcileCediaUnstarted();
++				(event as Record<string, unknown>).cediaIntentId ??= settledIntentIds[0];
++				// Publish the completed batch before the terminal frame so hosts can close
++				// every member of an `all` follow-up group, not just the scalar first id.
++				this.#emit(this.#cediaTurnBoundaryEvent(settledIntentIds, []));
++			}
++		}
+ 		// Copy array before iteration to avoid mutation during iteration.
+ 		const listeners = [...this.#eventListeners];
+ 		for (const l of listeners) {
+@@ -2932,7 +2995,87 @@ export class AgentSession implements SettingsScope {
+ 		return queued;
  	}
  
++	/** Extract named user submissions from the exact batch OMP claimed. */
++	#cediaIntentIdsFromMessages(messages: readonly AgentMessage[]): string[] {
++		const ids: string[] = [];
++		for (const message of messages) {
++			if (message.role !== "user" || typeof (message as { cediaIntentId?: unknown }).cediaIntentId !== "string")
++				continue;
++			const intentId = (message as { cediaIntentId: string }).cediaIntentId;
++			if (!ids.includes(intentId)) ids.push(intentId);
++		}
++		return ids;
++	}
++
++	/** Keep the unstarted ledger aligned with OMP's queues after a drop or failed preparation. */
++	#reconcileCediaUnstarted(): void {
++		const queued = new Set([
++			...this.#cediaIntentIdsFromMessages(this.agent.peekSteeringQueue()),
++			...this.#cediaIntentIdsFromMessages(this.agent.peekFollowUpQueue()),
++		]);
++		this.#cediaUnstarted.steering = this.#cediaUnstarted.steering.filter(id => queued.has(id));
++		this.#cediaUnstarted.other = this.#cediaUnstarted.other.filter(id => queued.has(id));
++	}
++
++	#removeCediaUnstarted(ids: readonly string[]): void {
++		if (ids.length === 0) return;
++		const removed = new Set(ids);
++		this.#cediaUnstarted.steering = this.#cediaUnstarted.steering.filter(id => !removed.has(id));
++		this.#cediaUnstarted.other = this.#cediaUnstarted.other.filter(id => !removed.has(id));
++	}
++
++	#setCediaRunningIntentIds(ids: readonly string[]): void {
++		this.#cediaRunningIntentIds = [...ids];
++		this.#cediaRunningIntentId = this.#cediaRunningIntentIds[0];
++	}
++
++	#cediaTurnBoundaryEvent(
++		completedIntentIds: readonly string[],
++		runningIntentIds: readonly string[],
++	): AgentSessionEvent {
++		const model = this.model;
++		return {
++			type: "cedia_turn_boundary",
++			completedIntentIds: [...completedIntentIds],
++			runningIntentIds: [...runningIntentIds],
++			...(model === undefined ? {} : { cediaModel: `${model.provider}/${model.id}` }),
++			...(this.thinkingLevel === undefined ? {} : { cediaThinkingLevel: String(this.thinkingLevel) }),
++		};
++	}
++
++	/** Promote a successfully prepared follow-up batch and report the exact identity transition to Cedia. */
++	#commitCediaFollowUpBoundary(runningIntentIds: readonly string[]): void {
++		if (runningIntentIds.length === 0) return;
++		const previousIntentIds =
++			this.#cediaRunningIntentIds.length > 0
++				? [...this.#cediaRunningIntentIds]
++				: this.#cediaRunningIntentId === undefined
++					? []
++					: [this.#cediaRunningIntentId];
++		const unchanged =
++			previousIntentIds.length === runningIntentIds.length &&
++			previousIntentIds.every((intentId, index) => intentId === runningIntentIds[index]);
++		this.#removeCediaUnstarted(runningIntentIds);
++		if (unchanged) return;
++		this.#setCediaRunningIntentIds(runningIntentIds);
++		this.#emit(this.#cediaTurnBoundaryEvent(previousIntentIds, runningIntentIds));
++	}
++
  	async #emitSessionEvent(event: AgentSessionEvent, options: { detachExtensions?: boolean } = {}): Promise<void> {
 +		// Cedia's turn bridge: adopt the submission that starts now and release the run's
 +		// identity when it settles, synchronously, so a subscriber sees the identity of the
 +		// very boundary it is handling.
 +		if (event.type === "agent_start") {
-+			this.#cediaRunningIntentId ??= this.#cediaUnstarted.steering.shift() ?? this.#cediaUnstarted.other.shift();
-+		} else if (event.type === "agent_end") {
-+			// The settling boundary still names the run's submission, then the ledger is released.
-+			const settledIntentId = this.#cediaRunningIntentId;
-+			this.#cediaRunningIntentId = undefined;
-+			this.#cediaUnstarted.steering.length = 0;
-+			this.#cediaUnstarted.other.length = 0;
-+			if (settledIntentId !== undefined) (event as Record<string, unknown>).cediaIntentId ??= settledIntentId;
++			if (this.#cediaRunningIntentIds.length === 0 && this.#cediaRunningIntentId === undefined) {
++				// Steering is an interruption of an already-owned run, not a new Cedia turn.
++				// Only a direct/follow-up submission may acquire the scalar running identity.
++				const startedIntentId = this.#cediaUnstarted.other.shift();
++				if (startedIntentId !== undefined) this.#setCediaRunningIntentIds([startedIntentId]);
++			}
++			if (this.#cediaRunningIntentId !== undefined) {
++				(event as Record<string, unknown>).cediaIntentId ??= this.#cediaRunningIntentId;
++			}
 +		}
  		if (event.type === "tool_execution_update") {
  			// Returned background calls have no later tool result to persist their
  			// terminal frame. Keep the latest update for future focus rebuilds;
-@@ -5779,6 +5836,36 @@ export class AgentSession implements SettingsScope {
+@@ -5779,6 +5922,36 @@ export class AgentSession implements SettingsScope {
  			if (!this.agent.state.isStreaming && this.#inFlightEventHandlers.size === 0) return;
  		}
  	}
@@ -20419,7 +20583,7 @@ index a29e5d4b1e..0449954f4d 100644
  	/**
  	 * Prevent advisor notes from starting hidden primary turns while a headless
  	 * caller prints and drains the final primary response.
-@@ -6820,6 +6907,19 @@ export class AgentSession implements SettingsScope {
+@@ -6820,6 +6993,19 @@ export class AgentSession implements SettingsScope {
  	}
  
  	async #prompt(text: string, options?: PromptOptions): Promise<boolean> {
@@ -20439,7 +20603,7 @@ index a29e5d4b1e..0449954f4d 100644
  		// Stamp the operator's submission instant before ANY async preprocessing —
  		// command execution, image normalization, vision-model description — so the
  		// prompt→yield delta includes the whole wait, whatever path the prompt takes.
-@@ -6836,6 +6936,7 @@ export class AgentSession implements SettingsScope {
+@@ -6836,6 +7022,7 @@ export class AgentSession implements SettingsScope {
  		// arriving after the cleanup while an earlier parked prompt is still settling
  		// takes part in the same decision. No-op otherwise.
  		const release = await this.#maintenance.waitForManualCompactionCleanup();
@@ -20447,7 +20611,7 @@ index a29e5d4b1e..0449954f4d 100644
  		const outcome: PromptDispatchOutcome = { sessionClaimed: false };
  		if (!release) return this.#dispatchPrompt(text, options, submittedAt, outcome);
  		try {
-@@ -6857,6 +6958,17 @@ export class AgentSession implements SettingsScope {
+@@ -6857,6 +7044,17 @@ export class AgentSession implements SettingsScope {
  		const typedText = text;
  		// Handle extension commands first (execute immediately, even during streaming)
  		if (expandPromptTemplates && text.startsWith("/")) {
@@ -20465,7 +20629,7 @@ index a29e5d4b1e..0449954f4d 100644
  			if (options?.runCommands !== false) {
  				const handled = await this.#tryExecuteExtensionCommand(text);
  				if (handled) {
-@@ -6922,6 +7034,7 @@ export class AgentSession implements SettingsScope {
+@@ -6922,6 +7120,7 @@ export class AgentSession implements SettingsScope {
  			await this.#queueUserMessage(expandedText, options?.images, streamingBehavior, {
  				timestamp: submittedAt,
  				attribution: promptAttribution,
@@ -20473,7 +20637,7 @@ index a29e5d4b1e..0449954f4d 100644
  			});
  			outcome.sessionClaimed = true;
  			return true;
-@@ -6963,6 +7076,7 @@ export class AgentSession implements SettingsScope {
+@@ -6963,6 +7162,7 @@ export class AgentSession implements SettingsScope {
  		// branch instead of racing #promptWithMessage into AgentBusyError. No
  		// await sits between this check and #beginInFlight, so the winner's
  		// in-flight increment is visible to every later re-check.
@@ -20481,7 +20645,7 @@ index a29e5d4b1e..0449954f4d 100644
  		if (this.isStreaming) {
  			const streamingBehavior = options?.streamingBehavior;
  			if (!streamingBehavior) {
-@@ -6979,6 +7093,7 @@ export class AgentSession implements SettingsScope {
+@@ -6979,6 +7179,7 @@ export class AgentSession implements SettingsScope {
  					images: normalizedImages,
  					descriptionNotice: imageDescriptionNotice,
  				},
@@ -20489,7 +20653,7 @@ index a29e5d4b1e..0449954f4d 100644
  			});
  			outcome.sessionClaimed = true;
  			return true;
-@@ -6999,7 +7114,13 @@ export class AgentSession implements SettingsScope {
+@@ -6999,7 +7200,13 @@ export class AgentSession implements SettingsScope {
  					synthetic: true,
  					userInitiated: options?.userInitiated === true ? true : undefined,
  				}
@@ -20504,7 +20668,47 @@ index a29e5d4b1e..0449954f4d 100644
  
  		const preludeMessages: AgentMessage[] = [];
  		if (eagerTodoPrelude) {
-@@ -7748,9 +7869,11 @@ export class AgentSession implements SettingsScope {
+@@ -7215,10 +7422,10 @@ export class AgentSession implements SettingsScope {
+ 	}
+ 
+ 	/** Queue ownership belongs to Agent; only actual user deliveries refresh submission policy. */
+-	#prepareQueuedUserMessages = (
++	#prepareQueuedUserMessages = async (
+ 		messages: readonly AgentMessage[],
+ 		signal: AbortSignal,
+-	): Promise<QueuedMessagePreparation> | undefined => {
++	): Promise<QueuedMessagePreparation | undefined> => {
+ 		const userMessages = messages.filter(
+ 			message => isUserQueuedMessage(message) && !("attribution" in message && message.attribution === "agent"),
+ 		);
+@@ -7239,7 +7446,7 @@ export class AgentSession implements SettingsScope {
+ 			}
+ 			text.push(parts.join(""));
+ 		}
+-		return this.#prepareAgentStart(
++		const preparation = await this.#prepareAgentStart(
+ 			first,
+ 			text.join("\n\n"),
+ 			images.length > 0 ? images : undefined,
+@@ -7247,6 +7454,17 @@ export class AgentSession implements SettingsScope {
+ 			signal,
+ 			"queued",
+ 		);
++		const followUpIntentIds = userMessages.some(message => message.role === "user" && message.steering !== true)
++			? this.#cediaIntentIdsFromMessages(userMessages)
++			: [];
++		return {
++			commit: () => {
++				const additional = preparation.commit();
++				if (additional === undefined) return undefined;
++				this.#commitCediaFollowUpBoundary(followUpIntentIds);
++				return additional;
++			},
++		};
+ 	};
+ 
+ 	/**
+@@ -7748,9 +7966,11 @@ export class AgentSession implements SettingsScope {
  		// Stamp before image preprocessing so a queued image steer measures from
  		// the operator's submission, not after the vision-model description.
  		const submittedAt = Date.now();
@@ -20516,7 +20720,7 @@ index a29e5d4b1e..0449954f4d 100644
  		});
  	}
  
-@@ -7772,9 +7895,11 @@ export class AgentSession implements SettingsScope {
+@@ -7772,9 +7992,11 @@ export class AgentSession implements SettingsScope {
  		// from the operator's submission, not after the vision-model description.
  		const submittedAt = Date.now();
  		if (!options?.synthetic) {
@@ -20528,7 +20732,7 @@ index a29e5d4b1e..0449954f4d 100644
  			});
  			return;
  		}
-@@ -7840,6 +7965,7 @@ export class AgentSession implements SettingsScope {
+@@ -7840,6 +8062,7 @@ export class AgentSession implements SettingsScope {
  			timestamp?: number;
  			attribution?: MessageAttribution;
  			preprocessed?: { images: ImageContent[] | undefined; descriptionNotice: CustomMessage | undefined };
@@ -20536,7 +20740,7 @@ index a29e5d4b1e..0449954f4d 100644
  		},
  	): Promise<void> {
  		const attribution = options?.attribution ?? "user";
-@@ -7888,6 +8014,7 @@ export class AgentSession implements SettingsScope {
+@@ -7888,6 +8111,7 @@ export class AgentSession implements SettingsScope {
  			return;
  		}
  		this.#allowQueuedMessageDrainRetry();
@@ -20544,7 +20748,7 @@ index a29e5d4b1e..0449954f4d 100644
  		if (mode === "followUp") {
  			for (const notice of attachmentSourceNotices) this.agent.followUp(notice);
  			if (imageDescriptionNotice) this.agent.followUp(imageDescriptionNotice);
-@@ -7895,6 +8022,7 @@ export class AgentSession implements SettingsScope {
+@@ -7895,6 +8119,7 @@ export class AgentSession implements SettingsScope {
  				role: "user",
  				content,
  				attribution,
@@ -20552,7 +20756,7 @@ index a29e5d4b1e..0449954f4d 100644
  				timestamp: timestamp ?? Date.now(),
  			});
  		} else {
-@@ -7905,6 +8033,7 @@ export class AgentSession implements SettingsScope {
+@@ -7905,6 +8130,7 @@ export class AgentSession implements SettingsScope {
  				content,
  				steering: true,
  				attribution,
@@ -20560,7 +20764,39 @@ index a29e5d4b1e..0449954f4d 100644
  				timestamp: timestamp ?? Date.now(),
  			});
  		}
-@@ -8528,6 +8657,169 @@ export class AgentSession implements SettingsScope {
+@@ -8476,14 +8702,27 @@ export class AgentSession implements SettingsScope {
+ 		return this.queuedMessageCount > 0 || this.agent.peekUndeliveredQueuedMessages().some(isDisplayableQueuedMessage);
+ 	}
+ 
++	/** Detailed user rows held by the runtime. This is a read-only projection: live steering and
++	 *  both agent queues are read in their display order, while hidden/internal messages stay out. */
++	getQueuedMessageDetails(): {
++		steering: readonly RestoredQueuedMessage[];
++		followUp: readonly RestoredQueuedMessage[];
++	} {
++		return {
++			steering: [...this.agent.peekLiveSteeredMessages(), ...this.agent.peekSteeringQueue()]
++				.filter(isUserQueuedMessage)
++				.map(toRestoredQueuedMessage),
++			followUp: this.agent.peekFollowUpQueue().filter(isUserQueuedMessage).map(toRestoredQueuedMessage),
++		};
++	}
++
+ 	/** Chip texts for the queue display. Steering live steering took for the streaming response
+ 	 *  stays listed until the transcript records it, when the model actually switches to it. */
+ 	getQueuedMessages(): { steering: readonly string[]; followUp: readonly string[] } {
++		const detailed = this.getQueuedMessageDetails();
+ 		return {
+-			steering: [...this.agent.peekLiveSteeredMessages(), ...this.agent.peekSteeringQueue()]
+-				.filter(isUserQueuedMessage)
+-				.map(queueChipText),
+-			followUp: this.agent.peekFollowUpQueue().filter(isUserQueuedMessage).map(queueChipText),
++			steering: detailed.steering.map(message => message.text),
++			followUp: detailed.followUp.map(message => message.text),
+ 		};
+ 	}
+ 
+@@ -8528,6 +8767,168 @@ export class AgentSession implements SettingsScope {
  		return undefined;
  	}
  
@@ -20726,11 +20962,10 @@ index a29e5d4b1e..0449954f4d 100644
 +		};
 +	}
 +
-+
  	get skillsSettings(): SkillsSettings | undefined {
  		return this.#tools.skillsSettings;
  	}
-@@ -11553,6 +11845,17 @@ export class AgentSession implements SettingsScope {
+@@ -11553,6 +11954,17 @@ export class AgentSession implements SettingsScope {
  		]);
  		return [...codex, ...claude];
  	}
@@ -20748,7 +20983,7 @@ index a29e5d4b1e..0449954f4d 100644
  	/**
  	 * Ask before a provider's first automatic spend. Consent is persisted in
  	 * that provider's independent settings group; headless hosts only receive a
-@@ -11565,6 +11868,10 @@ export class AgentSession implements SettingsScope {
+@@ -11565,6 +11977,10 @@ export class AgentSession implements SettingsScope {
  	): Promise<boolean> {
  		const first = actions[0];
  		if (!first) return false;
@@ -20759,7 +20994,7 @@ index a29e5d4b1e..0449954f4d 100644
  		const providerLabel = provider === "anthropic" ? "Claude" : "Codex";
  		const settingsKey = provider === "anthropic" ? "claudeResets.autoRedeem" : "codexResets.autoRedeem";
  		const source = provider === "anthropic" ? "claude-auto-reset" : "codex-auto-reset";
-@@ -11642,7 +11949,11 @@ export class AgentSession implements SettingsScope {
+@@ -11642,7 +12058,11 @@ export class AgentSession implements SettingsScope {
  			provider: model?.provider ?? "",
  			modelId: model?.id ?? "",
  			settings: {
@@ -20772,7 +21007,7 @@ index a29e5d4b1e..0449954f4d 100644
  				minBlockedMinutes: Math.max(0, cfg.minBlockedMinutes),
  				keepCredits: Math.max(0, Math.trunc(cfg.keepCredits)),
  				salvageHorizonMs: Math.max(0, cfg.salvageHorizonHours) * 3_600_000,
-@@ -11675,7 +11986,10 @@ export class AgentSession implements SettingsScope {
+@@ -11675,7 +12095,10 @@ export class AgentSession implements SettingsScope {
  			provider: model?.provider ?? "",
  			modelId: model?.provider === "anthropic" ? model.id : "",
  			settings: {
@@ -20784,7 +21019,7 @@ index a29e5d4b1e..0449954f4d 100644
  				minBlockedMinutes: Math.max(0, cfg.minBlockedMinutes),
  				keepCredits: Math.max(0, Math.trunc(cfg.keepCredits)),
  				salvageHorizonMs: Math.max(0, cfg.salvageHorizonHours) * 3_600_000,
-@@ -11905,7 +12219,11 @@ export class AgentSession implements SettingsScope {
+@@ -11905,7 +12328,11 @@ export class AgentSession implements SettingsScope {
  		const provider = this.model?.provider;
  		if (provider !== "anthropic" && provider !== "openai-codex") return { restored: false };
  		const cfg = (provider === "anthropic" ? cfgClaudeResets : cfgCodexResets).get(this.settings);
@@ -20797,7 +21032,7 @@ index a29e5d4b1e..0449954f4d 100644
  		const coordinator = this.#resetCoordinator;
  		const authStorage = this.#modelRegistry.authStorage;
  		const identity = authStorage.oauth.identity(provider, this.sessionId);
-@@ -11948,7 +12266,7 @@ export class AgentSession implements SettingsScope {
+@@ -11948,7 +12375,7 @@ export class AgentSession implements SettingsScope {
  				return { restored: false, retryAfterMs };
  			}
  			if (
@@ -20806,7 +21041,7 @@ index a29e5d4b1e..0449954f4d 100644
  				!(await this.#confirmAutoRedeem(provider, plan.actions, coordinator))
  			) {
  				return { restored: false };
-@@ -11973,12 +12291,14 @@ export class AgentSession implements SettingsScope {
+@@ -11973,12 +12400,14 @@ export class AgentSession implements SettingsScope {
  		const coordinator = this.#resetCoordinator;
  		const codexCfg = cfgCodexResets.get(this.settings);
  		const claudeCfg = cfgClaudeResets.get(this.settings);
@@ -20823,7 +21058,7 @@ index a29e5d4b1e..0449954f4d 100644
  			claudeCfg.salvageHorizonHours > 0 &&
  			reports.some(report => report.provider === "anthropic");
  		if (!codexEnabled && !claudeEnabled) return;
-@@ -11996,7 +12316,7 @@ export class AgentSession implements SettingsScope {
+@@ -11996,7 +12425,7 @@ export class AgentSession implements SettingsScope {
  					const plan = this.#planCodexResets("sweep", effectiveReports, identity, coordinator);
  					if (
  						plan.actions.length > 0 &&
@@ -20832,7 +21067,7 @@ index a29e5d4b1e..0449954f4d 100644
  							(await this.#confirmAutoRedeem("openai-codex", plan.actions, coordinator)))
  					) {
  						await this.#executeResetActions("openai-codex", plan.actions, coordinator);
-@@ -12011,7 +12331,7 @@ export class AgentSession implements SettingsScope {
+@@ -12011,7 +12440,7 @@ export class AgentSession implements SettingsScope {
  					const plan = this.#planClaudeResets("sweep", reports, statuses, coordinator);
  					if (
  						plan.actions.length > 0 &&
@@ -22928,6 +23163,266 @@ index 4d790d1d96..d497120aa0 100644
  		expect(taskTool.description).toContain("VERSION_TWO");
  		expect(taskTool.description).not.toContain("VERSION_ONE");
  		harness.abortController.abort();
+diff --git a/packages/coding-agent/test/agent-session-cedia-turn-boundary.test.ts b/packages/coding-agent/test/agent-session-cedia-turn-boundary.test.ts
+new file mode 100644
+index 0000000000..1275198970
+--- /dev/null
++++ b/packages/coding-agent/test/agent-session-cedia-turn-boundary.test.ts
+@@ -0,0 +1,254 @@
++import { afterEach, describe, expect, it } from "bun:test";
++import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
++import { Type } from "@oh-my-pi/omptype/typebox";
++import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
++import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
++import { AgentSession, type AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
++import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
++import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
++import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
++import { TempDir } from "@oh-my-pi/pi-utils";
++
++describe("Cedia turn-boundary identity", () => {
++	type MockModelOptions = NonNullable<Parameters<typeof createMockModel>[0]>;
++	let session: AgentSession | undefined;
++	let modelRegistry: ModelRegistry | undefined;
++	let tempDir: TempDir | undefined;
++
++	afterEach(async () => {
++		await session?.dispose();
++		session = undefined;
++		modelRegistry?.authStorage.close();
++		modelRegistry = undefined;
++		tempDir?.removeSync();
++		tempDir = undefined;
++	});
++
++	async function setup(options: {
++		followUpMode?: "all" | "one-at-a-time";
++		responses?: MockModelOptions["responses"];
++		handler?: MockModelOptions["handler"];
++		tools?: AgentTool[];
++	}) {
++		tempDir = TempDir.createSync("@pi-cedia-boundary-");
++		const authStorage = await AuthStorage.create(`${tempDir.path()}/auth.db`);
++		authStorage.keys.setRuntime("mock", "test-key");
++		modelRegistry = new ModelRegistry(authStorage, `${tempDir.path()}/models.yml`);
++		const mock = createMockModel({
++			provider: "mock",
++			id: "cedia-boundary-model",
++			responses: options.responses,
++			handler: options.handler,
++		});
++		const agent = new Agent({
++			initialState: {
++				model: mock.model,
++				systemPrompt: ["test"],
++				tools: options.tools ?? [],
++				messages: [],
++			},
++			getApiKey: () => "test-key",
++			convertToLlm,
++			streamFn: (model, context, streamOptions) => mock.stream(model, context, streamOptions),
++		});
++		session = new AgentSession({
++			agent,
++			sessionManager: SessionManager.inMemory(),
++			modelRegistry,
++			settings: Settings.isolated({ "compaction.enabled": false, "todo.enabled": false }),
++			toolRegistry: new Map(options.tools?.map(tool => [tool.name, tool])),
++			builtInToolNames: options.tools?.map(tool => tool.name),
++		});
++		if (options.followUpMode) session.setFollowUpMode(options.followUpMode, false);
++		return { agent, mock };
++	}
++
++	function boundaryEvents(events: AgentSessionEvent[]) {
++		return events.filter(
++			(event): event is Extract<AgentSessionEvent, { type: "cedia_turn_boundary" }> =>
++				event.type === "cedia_turn_boundary",
++		);
++	}
++
++	function boundaryShapes(events: AgentSessionEvent[]) {
++		return boundaryEvents(events).map(({ type, completedIntentIds, runningIntentIds }) => ({
++			type,
++			completedIntentIds,
++			runningIntentIds,
++		}));
++	}
++
++	it("promotes an all-mode follow-up batch only after the successful preparation commit", async () => {
++		const firstCall = Promise.withResolvers<void>();
++		const releaseFirstCall = Promise.withResolvers<void>();
++		let calls = 0;
++		await setup({
++			followUpMode: "all",
++			handler: async () => {
++				calls++;
++				if (calls === 1) {
++					firstCall.resolve();
++					await releaseFirstCall.promise;
++				}
++				return { content: ["done"] };
++			},
++		});
++		const events: AgentSessionEvent[] = [];
++		session!.subscribe(event => events.push(event));
++
++		const first = session!.prompt("A", { cediaIntentId: "A" });
++		await firstCall.promise;
++		await session!.followUp("B", undefined, { cediaIntentId: "B" });
++		await session!.followUp("C", undefined, { cediaIntentId: "C" });
++		releaseFirstCall.resolve();
++		await first;
++		await session!.waitForIdle();
++
++		expect(boundaryShapes(events)).toEqual([
++			{ type: "cedia_turn_boundary", completedIntentIds: ["A"], runningIntentIds: ["B", "C"] },
++			{ type: "cedia_turn_boundary", completedIntentIds: ["B", "C"], runningIntentIds: [] },
++		]);
++		expect(boundaryEvents(events)[0]?.cediaModel).toBe("mock/cedia-boundary-model");
++		expect(session!.getCediaTurnQueue().current?.intentId).toBeUndefined();
++	});
++
++	it("does not settle or replace the current identity at a model turn boundary", async () => {
++		const firstCall = Promise.withResolvers<void>();
++		const releaseFirstCall = Promise.withResolvers<void>();
++		let calls = 0;
++		await setup({
++			handler: async () => {
++				calls++;
++				if (calls === 1) {
++					firstCall.resolve();
++					await releaseFirstCall.promise;
++				}
++				return { content: ["done"] };
++			},
++		});
++		const events: AgentSessionEvent[] = [];
++		session!.subscribe(event => events.push(event));
++
++		const first = session!.prompt("A", { cediaIntentId: "A" });
++		await firstCall.promise;
++		await session!.followUp("B", undefined, { cediaIntentId: "B" });
++		await session!.followUp("C", undefined, { cediaIntentId: "C" });
++		expect(session!.getCediaTurnQueue().current?.intentId).toBe("A");
++		expect(boundaryShapes(events)).toEqual([]);
++		releaseFirstCall.resolve();
++		await first;
++		await session!.waitForIdle();
++		expect(boundaryShapes(events)).toEqual([
++			{ type: "cedia_turn_boundary", completedIntentIds: ["A"], runningIntentIds: ["B"] },
++			{ type: "cedia_turn_boundary", completedIntentIds: ["B"], runningIntentIds: ["C"] },
++			{ type: "cedia_turn_boundary", completedIntentIds: ["C"], runningIntentIds: [] },
++		]);
++	});
++
++	it("keeps a named steering submission outside the running Cedia identity", async () => {
++		const firstCall = Promise.withResolvers<void>();
++		const releaseFirstCall = Promise.withResolvers<void>();
++		let calls = 0;
++		await setup({
++			handler: async () => {
++				calls++;
++				if (calls === 1) {
++					firstCall.resolve();
++					await releaseFirstCall.promise;
++				}
++				return { content: ["done"] };
++			},
++		});
++		const events: AgentSessionEvent[] = [];
++		session!.subscribe(event => events.push(event));
++
++		const first = session!.prompt("A", { cediaIntentId: "A" });
++		await firstCall.promise;
++		await session!.steer("interrupt", undefined, { cediaIntentId: "S" });
++		expect(session!.getCediaTurnQueue().current?.intentId).toBe("A");
++		expect(boundaryShapes(events)).toEqual([]);
++		releaseFirstCall.resolve();
++		await first;
++		await session!.waitForIdle();
++
++		expect(boundaryShapes(events)).toEqual([
++			{ type: "cedia_turn_boundary", completedIntentIds: ["A"], runningIntentIds: [] },
++		]);
++		expect(session!.getCediaTurnQueue().current?.intentId).toBeUndefined();
++	});
++
++	it("does not promote a queued identity when preparation is cancelled", async () => {
++		const firstCall = Promise.withResolvers<void>();
++		const releaseFirstCall = Promise.withResolvers<void>();
++		let calls = 0;
++		const { agent } = await setup({
++			handler: async () => {
++				calls++;
++				if (calls === 1) {
++					firstCall.resolve();
++					await releaseFirstCall.promise;
++				}
++				return { content: ["done"] };
++			},
++		});
++		const originalPrepare = agent.prepareQueuedMessages;
++		if (!originalPrepare) throw new Error("Expected AgentSession to install queued preparation");
++		const events: AgentSessionEvent[] = [];
++		session!.subscribe(event => events.push(event));
++
++		const first = session!.prompt("A", { cediaIntentId: "A" });
++		await firstCall.promise;
++		await session!.followUp("B", undefined, { cediaIntentId: "B" });
++		agent.prepareQueuedMessages = async (messages, signal) => {
++			const preparation = await originalPrepare(messages, signal);
++			// Abort after the real wrapper has prepared the batch, before Agent can invoke commit.
++			// Do not await: abort() waits for the loop that is currently awaiting this preparation.
++			void session!.abort();
++			return preparation;
++		};
++		releaseFirstCall.resolve();
++		await first;
++		await session!.waitForIdle();
++
++		expect(boundaryShapes(events)).toEqual([
++			{ type: "cedia_turn_boundary", completedIntentIds: ["A"], runningIntentIds: [] },
++		]);
++		expect(session!.getCediaTurnQueue().current?.intentId).toBeUndefined();
++		expect(session!.getQueuedMessages().followUp).toEqual(["B"]);
++	});
++
++	it("does not emit a boundary for a tool round before the queued batch commits", async () => {
++		const toolStarted = Promise.withResolvers<void>();
++		const releaseTool = Promise.withResolvers<void>();
++		const tool: AgentTool = {
++			name: "hold",
++			label: "hold",
++			description: "hold",
++			parameters: Type.Object({}),
++			execute: async () => {
++				toolStarted.resolve();
++				await releaseTool.promise;
++				return { content: [{ type: "text", text: "released" }], details: {} };
++			},
++		};
++		await setup({
++			tools: [tool],
++			responses: [{ content: [{ type: "toolCall", name: "hold", arguments: {} }] }, { content: ["done"] }],
++		});
++		const events: AgentSessionEvent[] = [];
++		session!.subscribe(event => events.push(event));
++
++		const first = session!.prompt("A", { cediaIntentId: "A" });
++		await toolStarted.promise;
++		await session!.followUp("B", undefined, { cediaIntentId: "B" });
++		expect(boundaryShapes(events)).toEqual([]);
++		releaseTool.resolve();
++		await first;
++		await session!.waitForIdle();
++		expect(boundaryShapes(events)).toEqual([
++			{ type: "cedia_turn_boundary", completedIntentIds: ["A"], runningIntentIds: ["B"] },
++			{ type: "cedia_turn_boundary", completedIntentIds: ["B"], runningIntentIds: [] },
++		]);
++	});
++});
 diff --git a/packages/coding-agent/test/agent-session-configured-extensions.test.ts b/packages/coding-agent/test/agent-session-configured-extensions.test.ts
 index 0a2001e7cf..793ea432a0 100644
 --- a/packages/coding-agent/test/agent-session-configured-extensions.test.ts
@@ -22959,6 +23454,129 @@ index 9ae9c0b6c9..4955cd891b 100644
  	/**
  	 * Runs `start` (which must call `session.prompt()` and attach its handlers)
  	 * and lets a tree navigation drop that prompt while usage preflight awaits
+diff --git a/packages/coding-agent/test/agent-session-queue-projection.test.ts b/packages/coding-agent/test/agent-session-queue-projection.test.ts
+new file mode 100644
+index 0000000000..ead2cb2d88
+--- /dev/null
++++ b/packages/coding-agent/test/agent-session-queue-projection.test.ts
+@@ -0,0 +1,117 @@
++import { afterEach, describe, expect, it, vi } from "bun:test";
++import { Agent, type AgentMessage } from "@oh-my-pi/pi-agent-core";
++import type { ImageContent } from "@oh-my-pi/pi-ai";
++import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
++import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
++import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
++import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
++import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
++import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
++import type { CustomMessage } from "@oh-my-pi/pi-tui/chat/messages";
++
++describe("AgentSession queued message projection", () => {
++	let session: AgentSession | undefined;
++	let authStorage: AuthStorage | undefined;
++
++	afterEach(async () => {
++		await session?.dispose();
++		session = undefined;
++		authStorage?.close();
++		authStorage = undefined;
++	});
++
++	async function createSession(): Promise<AgentSession> {
++		authStorage = await AuthStorage.create(":memory:");
++		authStorage.keys.setRuntime("anthropic", "test-key");
++		const modelRegistry = new ModelRegistry(authStorage);
++		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
++		if (!model) throw new Error("Expected built-in anthropic model");
++		const agent = new Agent({ initialState: { model, systemPrompt: ["Test"], tools: [] } });
++		session = new AgentSession({
++			agent,
++			sessionManager: SessionManager.inMemory(),
++			settings: Settings.isolated({ "compaction.enabled": false }),
++			modelRegistry,
++		});
++		return session;
++	}
++
++	function queuedUser(text: string, images: ImageContent[] = [], steering = false): AgentMessage {
++		return {
++			role: "user",
++			content: [{ type: "text", text }, ...images],
++			...(steering ? { steering: true } : {}),
++			attribution: "user",
++			timestamp: Date.now(),
++		};
++	}
++
++	function customMessage(overrides: Partial<CustomMessage>): AgentMessage {
++		return {
++			role: "custom",
++			customType: "test-message",
++			content: "not a user row",
++			display: true,
++			timestamp: Date.now(),
++			...overrides,
++		};
++	}
++
++	it("projects image counts while retaining the text-only API and queue order", async () => {
++		const target = await createSession();
++		const image: ImageContent = { type: "image", data: "AAA", mimeType: "image/png" };
++		target.agent.steer(queuedUser("steer one", [image], true));
++		target.agent.followUp(queuedUser("follow one"));
++		target.agent.followUp(queuedUser("follow two", [image, image]));
++
++		expect(target.getQueuedMessageDetails()).toEqual({
++			steering: [{ text: "steer one", images: [image] }],
++			followUp: [
++				{ text: "follow one", images: undefined },
++				{ text: "follow two", images: [image, image] },
++			],
++		});
++		expect(target.getQueuedMessages()).toEqual({
++			steering: ["steer one"],
++			followUp: ["follow one", "follow two"],
++		});
++	});
++
++	it("keeps only visible user rows, including user custom messages, in the projection", async () => {
++		const target = await createSession();
++		target.agent.steer(customMessage({ content: "agent card", attribution: "agent" }));
++		target.agent.steer(
++			customMessage({
++				customType: "image-attachment-description",
++				content: "hidden image description",
++				display: false,
++				attribution: "user",
++			}),
++		);
++		target.agent.steer(customMessage({ content: "visible user note", attribution: "user" }));
++		target.agent.followUp(customMessage({ content: "visible follow-up", attribution: "user" }));
++
++		expect(target.getQueuedMessageDetails()).toEqual({
++			steering: [{ text: "visible user note", images: undefined }],
++			followUp: [{ text: "visible follow-up", images: undefined }],
++		});
++	});
++
++	it("lists live steering before queued steering without consuming either row", async () => {
++		const target = await createSession();
++		const image: ImageContent = { type: "image", data: "LIVE", mimeType: "image/webp" };
++		const live = queuedUser("live steer", [image], true);
++		target.agent.steer(queuedUser("queued steer", [], true));
++		const liveSteering = vi.spyOn(target.agent, "peekLiveSteeredMessages").mockReturnValue([live]);
++
++		expect(target.getQueuedMessageDetails()).toEqual({
++			steering: [
++				{ text: "live steer", images: [image] },
++				{ text: "queued steer", images: undefined },
++			],
++			followUp: [],
++		});
++		expect(target.agent.peekSteeringQueue()).toHaveLength(1);
++		liveSteering.mockRestore();
++	});
++});
 diff --git a/packages/coding-agent/test/cedia-advisor-config-bridge.test.ts b/packages/coding-agent/test/cedia-advisor-config-bridge.test.ts
 new file mode 100644
 index 0000000000..071bda9082
@@ -28970,10 +29588,10 @@ index 0000000000..edcaadea7f
 +});
 diff --git a/packages/coding-agent/test/cedia-queue-bridge.test.ts b/packages/coding-agent/test/cedia-queue-bridge.test.ts
 new file mode 100644
-index 0000000000..d2dd2af9e1
+index 0000000000..fac19b3542
 --- /dev/null
 +++ b/packages/coding-agent/test/cedia-queue-bridge.test.ts
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,154 @@
 +/**
 + * Cedia's queue projection (plan §8.2 O01).
 + *
@@ -28995,6 +29613,9 @@ index 0000000000..d2dd2af9e1
 +interface QueueFixture {
 +	steering: string[];
 +	followUp: string[];
++	/** Optional image-bearing projection returned by the session's authoritative queue read. */
++	detailedSteering?: RestoredQueuedMessage[];
++	detailedFollowUp?: RestoredQueuedMessage[];
 +	/** Items the next remove hands back, mirroring the session's own restore shape. */
 +	restored?: RestoredQueuedMessage[];
 +	calls: string[];
@@ -29002,6 +29623,13 @@ index 0000000000..d2dd2af9e1
 +
 +function session(fixture: QueueFixture): AgentSession {
 +	return {
++		getQueuedMessageDetails: () => {
++			fixture.calls.push("getQueuedMessageDetails");
++			return {
++				steering: fixture.detailedSteering ?? fixture.steering.map(text => ({ text })),
++				followUp: fixture.detailedFollowUp ?? fixture.followUp.map(text => ({ text })),
++			};
++		},
 +		getQueuedMessages: () => {
 +			fixture.calls.push("getQueuedMessages");
 +			return { steering: fixture.steering, followUp: fixture.followUp };
@@ -29035,7 +29663,27 @@ index 0000000000..d2dd2af9e1
 +				{ text: "follow two", truncated: false, images: 0 },
 +			],
 +		});
-+		expect(fixture.calls).toEqual(["getQueuedMessages"]);
++		expect(fixture.calls).toEqual(["getQueuedMessageDetails"]);
++	});
++
++	it("projects authoritative image counts without changing queue order", () => {
++		const image = { type: "image" as const, data: "AAA", mimeType: "image/png" };
++		const fixture: QueueFixture = {
++			steering: ["steer one"],
++			followUp: ["follow one", "follow two"],
++			detailedSteering: [{ text: "steer one", images: [image] }],
++			detailedFollowUp: [{ text: "follow one" }, { text: "follow two", images: [image, image] }],
++			calls: [],
++		};
++
++		expect(readCediaQueue(session(fixture))).toEqual({
++			steering: [{ text: "steer one", truncated: false, images: 1 }],
++			followUp: [
++				{ text: "follow one", truncated: false, images: 0 },
++				{ text: "follow two", truncated: false, images: 2 },
++			],
++		});
++		expect(fixture.calls).toEqual(["getQueuedMessageDetails"]);
 +	});
 +
 +	it("bounds a long submission and names the cut instead of hiding it", () => {
@@ -29059,14 +29707,20 @@ index 0000000000..d2dd2af9e1
 +		const fixture: QueueFixture = {
 +			steering: ["steer one", "steer two"],
 +			followUp: ["follow one"],
-+			restored: [{ text: "steer two", cediaIntentId: "turn-steer-two", images: [{ type: "image", data: "AAA", mimeType: "image/png" }] }],
++			restored: [
++				{
++					text: "steer two",
++					cediaIntentId: "turn-steer-two",
++					images: [{ type: "image", data: "AAA", mimeType: "image/png" }],
++				},
++			],
 +			calls: [],
 +		};
 +		const answer = dropCediaQueueItems(session(fixture), "last");
 +		expect(answer.dropped).toEqual([{ text: "steer two", truncated: false, images: 1 }]);
 +		expect(answer.droppedIntentIds).toEqual(["turn-steer-two"]);
 +		expect(answer.steering).toEqual([{ text: "steer one", truncated: false, images: 0 }]);
-+		expect(fixture.calls).toEqual(["popLastQueuedMessage", "getQueuedMessages"]);
++		expect(fixture.calls).toEqual(["popLastQueuedMessage", "getQueuedMessageDetails"]);
 +	});
 +
 +	it("reports an empty drop rather than a silent success", () => {
@@ -29089,7 +29743,7 @@ index 0000000000..d2dd2af9e1
 +		expect(answer.droppedIntentIds).toEqual(["turn-steer-one", "turn-follow-one"]);
 +		expect(answer.steering).toEqual([]);
 +		expect(answer.followUp).toEqual([]);
-+		expect(fixture.calls).toEqual(["clearQueue", "getQueuedMessages"]);
++		expect(fixture.calls).toEqual(["clearQueue", "getQueuedMessageDetails"]);
 +	});
 +});
 diff --git a/packages/coding-agent/test/cedia-tools-catalog-bridge.test.ts b/packages/coding-agent/test/cedia-tools-catalog-bridge.test.ts

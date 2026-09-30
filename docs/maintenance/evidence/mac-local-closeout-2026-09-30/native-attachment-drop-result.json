@@ -1,0 +1,74 @@
+{
+  "body": {
+    "state": "available",
+    "revision": 14,
+    "steering": [],
+    "followUp": [],
+    "dropped": [
+      {
+        "text": "drop this queued local submission",
+        "truncated": false,
+        "images": 0
+      }
+    ]
+  },
+  "commandId": "bbdc3056-6b81-45b8-a7b7-351453cec41a",
+  "output": "/Users/pond/cedia/dist/queue-browser-proof/2026-09-30T08-29-20.873Z",
+  "assets": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-attachment-native-jT2NeM/Cedia.app/Contents/Resources/app/out/vs/cedia/agent",
+  "nativeApp": "/private/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-attachment-native-jT2NeM/Cedia.app",
+  "assetSha256": "7d99f1c3496b084d0e457105af2cb1e7b66bd0a0592a51e56198a38730fcae88",
+  "errors": [],
+  "submissions": [
+    {
+      "type": "thread.turn.start",
+      "commandId": "27003840-7f1d-4b33-99e8-7b2c1425f1f7",
+      "threadId": "9b5d5317-a893-40f3-b811-5dff0b363506",
+      "message": {
+        "messageId": "fd5c0f99-3068-49c7-bc43-dd1fb32f71b4",
+        "role": "user",
+        "text": "hold this local request while the queue drop is tested",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T08:29:36.233Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "c5685d31-f07f-4feb-88db-349fafe5306d",
+      "threadId": "9b5d5317-a893-40f3-b811-5dff0b363506",
+      "message": {
+        "messageId": "6aa117be-fd5c-413e-9c30-8ace8a86aa4b",
+        "role": "user",
+        "text": "drop this queued local submission",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T08:29:36.521Z",
+      "proofSettled": true
+    }
+  ],
+  "runtime": {
+    "executable": "/var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-attachment-native-jT2NeM/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/omp/omp",
+    "version": "omp/18.4.3",
+    "executableSha256": "866b140bae56092d7f4dbd923a7aa2420b6b92a21b6f1e6a344691246927fa28"
+  },
+  "ok": true,
+  "modelHits": 1,
+  "composerMode": true,
+  "intentState": "cancelled"
+}

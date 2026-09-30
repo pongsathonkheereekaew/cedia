@@ -1,0 +1,12 @@
+bun test v1.4.2 (744846f84)
+
+apps/macos/agent-window/test/queue-transcript-order.test.ts:
+(pass) OMP transcript order keeps queued user/reply pairs in visible turn order [0.42ms]
+(pass) OMP activity sequence stays inside its queued turn when timestamps invert [0.33ms]
+(pass) message normalization preserves an authoritative transcript order [0.08ms]
+(pass) messages without transcript order retain chronological fallback ordering [0.03ms]
+
+ 4 pass
+ 0 fail
+ 5 expect() calls
+Ran 4 tests across 1 file. [785.00ms]

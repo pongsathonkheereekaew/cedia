@@ -694,3 +694,328 @@ Disk space after the frontend-only build was approximately 41 GiB. No provider
 credential, Keychain, native app launch, deployment or excluded device work was
 used. The checkpoint retains prior worktree fixes, both queue proof stages and
 these qualifications; unrelated monochrome artwork remains outside it.
+
+### Packaged native composer queue — 2026-09-30
+
+The queue fix from checkpoint `24669f0a717` is now incorporated in the persistent
+Mac package through the normal `package:mac` command using the configured Node
+24 binary. Package stamp: `2026-09-30T06:00:41.178Z`; Agent Window aggregate
+SHA-256: `e1a6cb4f773f50326d8f7420e074035b222212d300ec657bc1da1d09b6449731`.
+The package checks pass 12/12 before and after native proof, including source
+asset/stamp equality. [Retained package checks](native-queue-package-check.log).
+
+An independent copy was made under the OS temporary directory. The proof reused
+the reviewed two-call Login Item shim in that copy only, verified its main module
+against the current build before shimming, and ad-hoc signed the copy. It launched
+with isolated HOME, user-data and host state, basic password storage and in-memory
+secret storage. No Keychain read/delete command was used. The runtime was the
+copied package's OMP 18.4.3 executable; the isolated host was started from repository
+source. This is not a bundled-host startup/adoption qualification.
+
+The real Electron Agent Window, without the browser fixture's injected IPC bridge,
+passed the same two-composer-submission/Drop last sequence. Final run:
+`2026-09-30T06-05-59.983Z`, exit 0. Exactly two turn submissions, one UI drop,
+one loopback model request, cancelled queued intent, empty queues and a still-running
+first turn were verified. Stop remained visible, and the cancelled text appeared
+only in Drop history, not as a transcript bubble. Renderer errors were empty.
+The native entry-script hash matches the earlier source proof:
+`41344f5ef6dd24dbd4c82538aa45f9eaee2ac6be79a8659a24540b796a51f2c7`.
+
+Evidence: [native queued screen](native-queue-before-drop.png),
+[native dropped screen](native-queue-after-drop.png), [result](native-queue-result.json),
+[run log](native-queue.log), and [Login Item interception](native-queue-login-shim.jsonl).
+The action method was Playwright Electron UI automation, not CUA. The scratch app
+was explicitly exited after capture to bypass active-task quit confirmation, then
+the outer smoke closed its host. No scratch app process remained. Normal quit,
+real login-cycle and OS Login Item persistence are not certified. A read-only
+`sfltool dumpbtm` attempt produced no output and was interrupted; no claim relies
+on it.
+
+Two harness-startup failures preceded the result: the path guard correctly refused
+a copy under `/tmp` rather than this Mac's OS temp directory, then Code-OSS rejected
+the long `native-profile` IPC socket path (`EINVAL`, over 103 characters). Moving
+the copy to the OS temp root and shortening the isolated profile folder to `u`
+resolved these without changing product code or connection deadlines. The reviewed
+native runner addition is proof-only. Root typecheck and the eight native proof
+helper tests pass. This closes the bounded native plain-text queue cancellation
+scenario; multi-entry execution, attachments and full D/F remain separate.
+The generated scratch application was removed after verifying its process had
+exited and its main module had a different inode from the installed app. The
+copy is reproducible from the retained installed package; durable proof artifacts
+remain above. Final free space was approximately 37 GiB. This native proof/runner
+follow-up is not yet committed; the published checkpoint remains `24669f0a717`.
+
+### Sequential composer execution — initial failure, 2026-09-30
+
+The new `bun scripts/omp-queue-smoke.ts --execute` scenario uses the same shipped
+frontend and packaged OMP executable in headless Chrome, with the source host and
+an isolated loopback SSE endpoint. It explicitly selects `one-at-a-time` follow-up
+mode; this is not a claim about the default or the runtime's `all` mode. Three real
+composer submissions hold A running while B/C wait. Responses are released only
+after checking the expected request, queue order and host intent state.
+
+Run `2026-09-30T06-32-51.653Z` failed the first completion gate. A's answer appeared
+and B's HTTP request began, but A's durable intent did not complete. The journal
+names A at `turn_end` sequence 140 and again at `turn_start` sequence 142 even
+though B's user message is now in the transcript. The existing runtime ledger
+adopts identity only at `agent_start` and releases it at `agent_end`; queued
+follow-ups can run inside that same agent loop. This is a real uncovered identity
+boundary, not a duplicate composer submission: exactly three dispatches and no
+renderer errors were observed. The host also requires explicit submission-level
+settlement rather than treating every model/tool `turn_end` as user-task completion.
+
+Evidence: [failure result](queue-execution-before-fix.json),
+[failure screen](queue-execution-before-fix.png), [run log](queue-execution-before-fix.log).
+The failed fixture was closed; its isolated journal remains available for diagnosis.
+Sequential execution acceptance remains open pending a corrected identity contract
+and rerun. No production code was changed by this initial proof, and the installed
+package remains the earlier qualified cancellation build. Free space: about 37 GiB.
+
+The cancellation recheck also exposed a renderer timing gap: run
+`2026-09-30T06-38-28.758Z` produced a second copy of the dropped prompt in the
+transcript. Its OMP session file contained only A, while B's durable intent was
+cancelled. The frontend's `hasQueueableLiveTurn` requires a projected active-turn
+ID, which can lag the live/running session phase after ACK. The OMP optimistic
+bubble guard now uses `hasLiveTurn`; the non-OMP renderer queue condition is
+unchanged. Evidence: [failed result](queue-drop-recheck-failure.json),
+[failed screen](queue-drop-recheck-failure.png), [failed log](queue-drop-recheck-failure.log).
+
+After rebuilding the source frontend, the real composer/Drop last smoke passed
+three consecutive runs with the packaged OMP executable and isolated source host:
+`06-53-08.322Z`, `06-53-24.238Z`, and `06-53-35.718Z`. Each retained one model
+request, two submissions, a cancelled queued intent, an empty queue and one copy
+of the removed text in Drop history only. This qualifies the tested source UI,
+not a new native package or proof that every timing interleaving is covered.
+Evidence: [run 1](queue-drop-race-fixed-1.log), [run 2](queue-drop-race-fixed-2.log),
+[run 3](queue-drop-race-fixed-3.log), [result](queue-drop-race-fixed-result.json),
+[final screen](queue-drop-race-fixed.png). Agent Window tests pass 424/424 with
+1,532 assertions; its typecheck and frontend build pass. Free space: about 35 GiB.
+
+### Submission boundary corrected; transcript ordering follow-up
+
+The OMP bridge now emits `cedia_turn_boundary` only after a prepared follow-up
+batch commits, and settles its final batch at the actual terminal `agent_end`
+emission. Tool/model rounds, named steering and cancelled preparation do not
+promote another submission. The host consumes the named batches without releasing
+its outer prompt command early, and can enrich an already-running intent with
+the model metadata subsequently reported by OMP. The refreshed patch SHA-256 is
+`6f02429fb272fb4fe6cd23d7622060e36d6505f121567f79c64184fbfd8bd28a`.
+
+Verification: [55 runtime tests](queue-runtime-tests.log) pass with 262 assertions;
+the coding-agent typecheck passes. The defined root test script passes
+[1,453 tests](queue-host-adapter-tests.log), 8,649 assertions. Root typecheck and
+the live OMP coverage check pass (1,101 mappings, zero fatal issues). An accidental
+unscoped `bun test` invocation also traversed upstream scripts and encountered a
+watchdog test failure; it is not reported as a passing full-upstream suite. That
+test left two marker files in `upstream/omp/omp-test-runner-watchdog-rTNs7n`, which
+the runtime source-attestation guard correctly rejected. Only those generated
+`started`/`continued` files and their empty directory were removed; the source
+patch was not expanded to include test residue.
+
+Run `2026-09-30T07-10-06.483Z`, using the prepared development OMP runtime and
+rebuilt source UI, passes every host execution gate: exactly three requests,
+A/B/C started and completed in order, and no queued work remains. The final UI
+gate still fails because B's answer is folded out of the visible transcript.
+The journal contains B's assistant message at sequences 160–164 and C's user
+message at 168–169. C retains its earlier enqueue timestamp, so timestamp sorting
+places it before B's answer. This is a presentation-order defect, not a lost
+OMP answer. Preserve the runtime timestamps and repair the UI's ordering contract.
+Evidence: [result](queue-execution-transcript-failure.json),
+[screen](queue-execution-transcript-failure.png),
+[log](queue-execution-transcript-failure.log). The installed package has not yet
+been rebuilt with these corrections; end-to-end sequential acceptance remains open.
+
+### Sequential composer execution — source and native package pass
+
+The UI now carries optional `transcriptOrder` from OMP's transcript projection
+through the read-model contract, normalization and timeline. It uses the same
+one-based coordinate as activity rows, preserving original timestamps while
+keeping queued answers and tool activity inside the correct response segment.
+Mixed optimistic rows retain stable source order; a newer authoritative snapshot
+order wins even when live text is retained. The focused regression captures the
+original inverted B-answer/C-user timestamps, tool placement with an optimistic
+D row, normalization-only order changes and the non-OMP chronological fallback.
+Independent review found and resolved mixed-order comparison/merge issues; full
+live-hot-path hydration was inspected but is not a new dedicated regression test.
+
+Source UI plus standalone OMP passed `--execute` in
+`2026-09-30T07-28-01.551Z`: [result](queue-execution-source-passed.json),
+[screen](queue-execution-source-passed.png), [log](queue-execution-source-passed.log).
+The final mixed-row correction was then rebuilt into package
+`2026-09-30T07:30:23.110Z`, which passes
+[12/12 package checks](queue-execution-package-check.log).
+Agent Window tests pass [428/428](queue-agent-tests.log), 1,537 assertions, and
+both Agent Window typecheck configurations pass. The
+[focused transcript tests](queue-transcript-focused-tests.log) pass 4/4.
+
+The first native execution run `2026-09-30T07-31-29.018Z` completed all three
+requests and displayed all six messages, but the proof incorrectly assumed DOM
+insertion order was visual order. `LegendList` recycles row elements. The retained
+[failure result](native-queue-execution-dom-order-failure.json),
+[screen](native-queue-execution-dom-order-failure.png) and
+[log](native-queue-execution-dom-order-failure.log) distinguish this runner defect
+from the earlier real timestamp-sorting defect. The runner now checks rendered
+row positions while retaining exact-text uniqueness and all host execution gates.
+
+Native rerun `2026-09-30T07-33-47.008Z` passes through real Electron IPC, the
+packaged frontend/OMP executable, an isolated source host and a loopback model:
+
+- Exactly three composer submissions and three sequential model requests.
+- A/B/C each transitions from waiting/running to completed at its named boundary.
+- Queue readback contains only the later submissions, then becomes empty.
+- All six user/assistant messages appear exactly once in visual execution order;
+  Stop disappears after completion, with zero renderer errors.
+- The owner-only route still rejects an unauthenticated read with 401.
+
+Evidence: [result with visual row positions](native-queue-execution-result.json),
+[queued screen](native-queue-execution-queued.png),
+[completed screen](native-queue-execution-completed.png),
+[log](native-queue-execution.log),
+[isolated Login Item shim log](native-queue-execution-login-shim.jsonl).
+Packaged Agent Window aggregate SHA-256:
+`f14520f9cae2155e0fc3bd4edf7943623762ccb2c4ff8c8c9d8a385b9029e752`;
+renderer entry SHA-256:
+`1af1db63f37d06e0c23ef2566d4eca21b2a4a7108af551c08ae850bcf0bde6a9`;
+installed and staged OMP executable SHA-256:
+`bfafe01e3106dfc3fb28b6ce32d86157a11e3ebc965b573b23a36d262e6fe954`.
+
+This closes the bounded native one-at-a-time plain-text execution scenario, not
+attachment lifecycle, provider-backed behavior, native all-mode execution,
+bundled-host startup, normal quit, real login-cycle or full D/F acceptance.
+The scratch application uses separate profile/HOME/state paths and two Login
+Item shims; no Keychain read/delete or paid provider call is part of this proof.
+
+Final root verification: the run concurrent with native execution hit the default
+five-second test-runner limit while applying the desktop patch set
+([failure log](queue-root-tests-timeout.log)). After the native run exited,
+`bun run test --timeout 60000` passed [1,453/1,453](queue-final-root-tests.log),
+8,649 assertions, in 83.80 seconds. Only the test invocation's budget changed;
+production timeouts and the patch-application test were not modified.
+
+The current package also passes native composer/Drop last in
+`2026-09-30T07-38-32.911Z`: two submissions, one held model request, the exact
+queued text cancelled and shown only in Drop history, empty queue readback, and
+the original turn still running. Evidence:
+[result](native-queue-drop-current-result.json),
+[screen](native-queue-drop-current.png), [log](native-queue-drop-current.log).
+An earlier cold-start attempt had an empty composer and zero dispatched commands
+when Send timed out ([result](native-queue-drop-startup-failure.json),
+[log](native-queue-drop-startup-failure.log)). The runner now waits for the
+fixture's selected model to appear before typing into the newly hydrated draft;
+no production readiness timeout or Send behavior was changed for that rerun.
+
+Root typecheck, Agent Window typechecks, documentation validation and
+`git diff --check` pass. The generated scratch application was removed after its
+process exited and its independent main-module inode was verified. Only that
+reproducible test copy was removed; the installed package, user data and all
+linked receipts remain. Final free space is approximately 35 GiB. These local
+corrections are not yet committed; the published checkpoint remains `24669f0a717`.
+
+## Image attachment lifecycle follow-up
+
+The provider-free composer proof now submits distinct tiny PNG images with A and
+queued B, then submits C without an image. The installed pre-fix assets exposed
+two separate projection defects:
+
+- Queue readback reports zero images for B: the OMP RPC queue bridge reads the
+  text-only queue accessor and hardcodes the image count to zero. The
+  [first failure](attachment-queue-before-fix.json) retains this assertion.
+- All three submissions execute in order, but the completed user transcript has
+  no image thumbnails. The CEDIA adapter retains OMP raw image content but omits
+  attachments from its renderer message projection. The
+  [transcript failure](attachment-transcript-before-fix.json) and
+  [screen](attachment-transcript-before-fix.png) retain the reproduced defect.
+
+Run `2026-09-30T08-02-46.469Z` used real OMP and a loopback model endpoint with
+the existing packaged renderer. A and B reached that endpoint as distinct
+normalized WebP images; C had no image in its latest user message. OMP resized
+the original 1×1 PNGs to 200×200 WebP, so the proof compares decoded image pixels
+with a small lossy-conversion tolerance rather than claiming byte identity.
+[Bounded request summaries](attachment-requests-before-fix.json) omit system
+prompts. The runner retains the queue-count failure while allowing execution to
+reach the independent transcript assertion; it does not waive either gate.
+
+This scope concerns raster image attachments. Generic file attachments currently
+contribute labels, not uploaded file bytes, and are not accepted by this proof.
+No paid provider, Keychain, external device or login-cycle action is involved.
+
+### Corrections and current verification
+
+The adapter now projects the latest authoritative user image content into bounded
+raster data-URI previews. The read-model schema allows these previews without
+widening the upload-command schema. Validation rejects remote URLs, SVG,
+malformed base64 and payloads above 10 MiB. Generated image names are explicit:
+OMP does not retain the original upload filename in this content. Immutable-entry
+and attachment-object weak caches avoid rescanning unchanged historical images.
+Safe previews survive stale/live snapshot merging; optimistic blob/remote URLs
+are not copied into the durable read model. Independent review found and then
+verified corrections for repeated validation and lost previews during merging.
+
+OMP now exposes a read-only detailed queue accessor using the same user filter,
+live-steering order and chip text as its existing text-only accessor. The RPC
+bridge projects real image counts without returning image bytes or mutating the
+queue. Drop behavior is unchanged. The consolidated patch SHA-256 is
+`fc9be37adecaa184c6f973b230cff883997bf4d93d0e6c6e355c5f6353f42ba5`.
+
+Two early source runs with immediate picker/whole-value `fill` sequencing failed:
+[C reused B's attachment](attachment-composer-sequencing-failure.json) and
+[A dispatched as image-only](attachment-composer-text-failure.json). The runner
+now waits for the attachment chip, enters text through keyboard events, asserts
+the exact dispatched text and attachment count, and waits for the consumed chip
+to disappear. The failures remain retained. No production composer workaround
+was added, and these runs do not establish that every rapid-input/shared-draft
+race is absent. The strengthened source proof passes in
+`2026-09-30T08-24-02.606Z` ([result](attachment-source-result.json),
+[log](cedia-attachment-source-keyboard.log)).
+
+Package `2026-09-30T08:25:21.069Z` passes
+[12/12 packaged checks](cedia-attachment-package-check.log). Native run
+`2026-09-30T08-26-52.520Z` passes using real Electron IPC, packaged renderer and
+packaged OMP, with the source host and isolated loopback fixture:
+
+- A/B/C preserve their entered text and carry image counts 1/1/0.
+- The latest user image in each model request matches the correct fixture after
+  OMP normalization; queued image counts are correct and no queue gate is waived.
+- Exactly three requests and three completed intents produce six unique,
+  visually ordered messages, then an empty queue and hidden Stop control.
+- A/B thumbnails decode correctly after completion and page reload; C has none.
+  Reload produces no additional model request and there are no renderer errors.
+
+Evidence: [native result](native-attachment-result.json),
+[completed screen](native-attachment-completed.png),
+[reloaded screen](native-attachment-reloaded.png),
+[native log](cedia-attachment-native-proof.log),
+[isolated Login Item shim log](native-attachment-login-shim.jsonl).
+The packaged Agent Window aggregate SHA-256 is
+`38d803224b7ed998d6979d129a3ed071ef3ff42aa04fa6e4b928606e9c994189`;
+renderer entry SHA-256 is
+`7d99f1c3496b084d0e457105af2cb1e7b66bd0a0592a51e56198a38730fcae88`;
+packaged OMP executable SHA-256 is
+`866b140bae56092d7f4dbd923a7aa2420b6b92a21b6f1e6a344691246927fa28`.
+
+Verification also passes [1,453 root tests](cedia-attachment-root-tests.log),
+[436 Agent Window tests](cedia-attachment-ui-final-tests.log),
+[10 queue projection tests](cedia-attachment-omp-tests.log),
+[8 focused attachment tests](cedia-attachment-transcript-tests.log),
+[root typecheck](cedia-attachment-root-typecheck.log), and
+[1,101 live coverage mappings](cedia-attachment-coverage.log). The root suite uses
+the existing 60-second test-runner budget; production deadlines are unchanged.
+
+This closes only the bounded native raster-image send/queue/transcript/reload
+scenario. Generic file bytes, provider-backed acceptance, bundled-host startup,
+normal quit, login-cycle and full D/F acceptance remain outside this proof.
+
+Native composer/Drop last also passes on this package in
+`2026-09-30T08-29-20.873Z` ([result](native-attachment-drop-result.json),
+[log](native-attachment-drop.log)): one held model request, queued turn cancelled,
+empty queue, no ghost transcript row and the active turn preserved. An initial
+attempt correctly refused to reuse the already instrumented scratch main module
+([guard log](native-attachment-staged-copy-refusal.log)); restoring only that
+scratch copy's two modules from the installed package allowed a fresh shimmed run.
+No installed module was changed by the proof.
+
+[Both Agent Window typechecks](cedia-attachment-ui-typecheck.log), documentation
+validation and `git diff --check` pass. The temporary native application was
+removed after process exit and independent-inode checks; it can be recreated from
+the retained installed package. User data and all receipts remain. The fixes are
+local and uncommitted; checkpoint `24669f0a717` remains the published revision.

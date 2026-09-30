@@ -1,0 +1,53 @@
+OK   OMP runtime is present at /var/folders/r7/96w_6l296fnck1z_4vnydbp80000gn/T/cedia-queue-native-final-uvGwzw/Cedia.app/Contents/Resources/app/extensions/cedia/runtime/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+ 99 |             return result;
+100 |           };
+101 |         });
+102 |         for (const [index, text] of [input.composer.firstText, input.queuedText, ...(input.execution ? [input.execution.thirdText] : [])].entries()) {
+103 |           await page.locator('[contenteditable="true"]').first().fill(text);
+104 |           if (index === 0) await page.getByRole("button", { name: "Send message", exact: true }).click({ timeout: 20_000 });
+                                                                                                       ^
+TimeoutError: click: Timeout 20000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('button', { name: 'Send message', exact: true })[22m
+[2m    - locator resolved to <button disabled type="submit" data-slot="button" aria-label="Send message" class="[&_svg,&_[data-slot=central-icon]]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap border font-medium text-[length:var(--app-font-size-ui,12px)] outline-none pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-1 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visib…>…</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is not enabled[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is not enabled[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    38 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is not enabled[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+  log: [
+  "  - waiting for getByRole('button', { name: 'Send message', exact: true })", "    - locator resolved to <button disabled type=\"submit\" data-slot=\"button\" aria-label=\"Send message\" class=\"[&_svg,&_[data-slot=central-icon]]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap border font-medium text-[length:var(--app-font-size-ui,12px)] outline-none pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-1 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visib…>…</button>",
+  "  - attempting click action", "    2 × waiting for element to be visible, enabled and stable",
+  "      - element is not enabled", "    - retrying click action", "    - waiting 20ms",
+  "    2 × waiting for element to be visible, enabled and stable", "      - element is not enabled",
+  "    - retrying click action", "      - waiting 100ms", "    38 × waiting for element to be visible, enabled and stable",
+  "       - element is not enabled", "     - retrying click action", "       - waiting 500ms"
+],
+
+      at dropQueueThroughBrowser (/Users/pond/cedia/scripts/lib/queue-browser-proof.ts:104:98)
+      at processTicksAndRejections (native:7:39)
+
+Bun v1.4.2 (macOS arm64)

@@ -1,0 +1,20 @@
+bun test v1.4.2 (744846f84)
+
+upstream/omp/packages/coding-agent/test/cedia-queue-bridge.test.ts:
+(pass) Cedia queue projection > projects the runtime's own queue and never invents a row [0.93ms]
+(pass) Cedia queue projection > projects authoritative image counts without changing queue order [0.04ms]
+(pass) Cedia queue projection > bounds a long submission and names the cut instead of hiding it [0.03ms]
+(pass) Cedia queue projection > bounds how many submissions one answer lists [0.13ms]
+(pass) Cedia queue projection > answers what a single drop removed, and the queue that remains [0.09ms]
+(pass) Cedia queue projection > reports an empty drop rather than a silent success [0.01ms]
+(pass) Cedia queue projection > drains every user submission with a clear, and reports each one it removed [0.13ms]
+
+upstream/omp/packages/coding-agent/test/agent-session-queue-projection.test.ts:
+(pass) AgentSession queued message projection > projects image counts while retaining the text-only API and queue order [63.68ms]
+(pass) AgentSession queued message projection > keeps only visible user rows, including user custom messages, in the projection [3.70ms]
+(pass) AgentSession queued message projection > lists live steering before queued steering without consuming either row [2.27ms]
+
+ 10 pass
+ 0 fail
+ 22 expect() calls
+Ran 10 tests across 2 files. [1326.00ms]

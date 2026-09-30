@@ -353,6 +353,14 @@ protocol targets, not existing API claims.
   echoes it in queue, turn-start and turn-end events. CEDIA projects those events; OMP alone
   decides when an accepted queued turn executes. Steer remains input to the current turn,
   not a separate queued turn. Queries and streaming must not wait for a whole turn to finish.
+  A model/tool `turn_end` is not necessarily a submitted intent's completion: one OMP
+  agent run can process multiple follow-ups. Explicit submission boundaries identify
+  the completed and newly running intent batches. In `one-at-a-time` mode each batch
+  contains one follow-up; in `all` mode the consumed batch runs and settles together.
+  CEDIA must not invent one model request per queued message or finish a tool round early.
+  Transcript presentation follows OMP's message order, not enqueue timestamps: a queued
+  user's original timestamp can precede the preceding submission's assistant response.
+  Preserve those timestamps while carrying authoritative order through the UI projection.
 - Transport/RPC acknowledgment means accepted, not turn completed. Store the command receipt
   separately from the turn projection: `prepared`, `queued`, `running`, `completed`, `failed`,
   `cancelled`, `needs_continue` or `outcome_unknown`, with an OMP event cursor and actual model.
@@ -5957,9 +5965,38 @@ deletions so dead code is not carried across.
     exposed renderer-local OMP follow-ups; source now sends them to OMP and
     avoids optimistic transcript bubbles for queued submissions. Fresh source
     frontend/real-host verification passes two composer submissions and Drop
-    last without a ghost bubble or extra model request. The installed package
-    has not yet incorporated/requalified this queue fix. The same receipt
-    retains failures, screenshots, result, command and remaining limitations.
+    last without a ghost bubble or extra model request. Package
+    `2026-09-30T06:00:41.178Z` now incorporates the fix and passes 12/12 checks;
+    an isolated staged copy passes the same composer/Drop last scenario through
+    real Electron UI automation with its packaged OMP binary and source host.
+    This is not CUA, bundled-host startup, normal quit or login-cycle acceptance.
+    The same receipt retains failures, screenshots, result and remaining limits.
+    The sequential A/B/C proof then exposed an OMP submission-boundary gap and
+    timestamp-based UI reordering. Explicit committed-batch boundaries now settle
+    the correct host intents; the UI preserves OMP transcript/activity order without
+    rewriting timestamps. Package `2026-09-30T07:30:23.110Z` passes 12/12 checks and
+    native one-at-a-time composer execution: three requests, three completed intents,
+    six unique visually ordered messages, empty queue and no Stop control at the end.
+    Runtime regression tests pass 55/55 and Agent Window tests 428/428. This bounded
+    fixture proof does not close attachments, provider-backed behavior or full D/F.
+    The receipt retains the actual failures and the virtualized-DOM runner correction.
+    Native composer/Drop last also passes on that package with one held request,
+    no ghost bubble and the active turn preserved. Final root tests pass 1,453/1,453
+    with a 60-second test-runner budget; root/UI typechecks pass. The temporary
+    native copy was removed, leaving about 35 GiB free. These follow-up corrections
+    remain local and uncommitted; the published checkpoint is `24669f0a717`.
+    The subsequent image lifecycle slice fixes missing transcript previews and
+    hardcoded zero image counts in the OMP queue projection. Package
+    `2026-09-30T08:25:21.069Z` passes 12/12 checks and native A/B/C image execution:
+    images on A/B only, correct queued counts, three requests/completed intents,
+    decoded thumbnails retained after reload, and no additional request on reload.
+    Root tests pass 1,453/1,453, Agent Window tests 436/436, focused attachment
+    tests 8/8 and queue projection tests 10/10; live coverage remains 1,101/1,101.
+    Independent review corrections preserve previews during stale snapshot merging
+    and cache unchanged validation. Failed immediate picker/fill sequences and the
+    strengthened keyboard-driven proof remain in the same local Mac receipt.
+    This closes a bounded raster-image scenario, not generic file-byte delivery,
+    every rapid-input/shared-draft race, provider-backed behavior or full D/F.
     The final `2026-09-30T03:15:47.176Z` package includes readiness-before-discovery,
     a single RPC stdout writer, scoped owner survival after stdout disconnect, and
     raw-string settings-editor hydration. Its real native OMP settings stale-write /

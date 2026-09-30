@@ -10,6 +10,7 @@
 
 import {
 	DEFAULT_SERVER_SETTINGS_VIEW,
+	readModelImageBase64ByteLength,
 	ThreadId,
 	type DesktopBridge,
 	type ProviderCompactThreadInput,
@@ -739,13 +740,87 @@ function turnIdsByEntry(state: TaskState): Map<string, string> {
 	return byEntry;
 }
 
+const TRANSCRIPT_IMAGE_MIME_TYPES = {
+	"image/png": "png",
+	"image/jpeg": "jpg",
+	"image/gif": "gif",
+	"image/webp": "webp",
+} as const;
+const FNV_OFFSET_BASIS_32 = 0x811c9dc5;
+const FNV_PRIME_32 = 0x01000193;
+const SECONDARY_IMAGE_HASH_SEED = 0x9e3779b9;
+const SECONDARY_IMAGE_HASH_MULTIPLIER = 0x85ebca6b;
+const transcriptImageAttachmentCache = new WeakMap<TranscriptEntry, unknown[] | undefined>();
+
+function fnv1a32(value: string, seed: number, multiplier: number): number {
+	let hash = seed >>> 0;
+	for (let index = 0; index < value.length; index += 1) {
+		hash ^= value.charCodeAt(index);
+		hash = Math.imul(hash, multiplier) >>> 0;
+	}
+	return hash >>> 0;
+}
+
+/**
+ * OMP message ids are not attachment ids: they may contain punctuation and are not guaranteed to
+ * stay within the renderer contract's alphabet. Hash both a message id and its image ordinal so
+ * the generated id is safe, stable across reloads, and does not collapse distinct punctuation
+ * into one id.
+ */
+function transcriptImageId(messageId: string, imageIndex: number): string {
+	const key = `${messageId}\u0000${imageIndex}`;
+	const primary = fnv1a32(key, FNV_OFFSET_BASIS_32, FNV_PRIME_32).toString(16).padStart(8, "0");
+	const secondary = fnv1a32(key, SECONDARY_IMAGE_HASH_SEED, SECONDARY_IMAGE_HASH_MULTIPLIER).toString(16).padStart(8, "0");
+	return `omp-image-${primary}${secondary}-${imageIndex + 1}`;
+}
+
+function transcriptImageAttachments(entry: TranscriptEntry): unknown[] | undefined {
+	if (transcriptImageAttachmentCache.has(entry)) return transcriptImageAttachmentCache.get(entry);
+	if (entry.role !== "user") {
+		transcriptImageAttachmentCache.set(entry, undefined);
+		return undefined;
+	}
+	let imageIndex = 0;
+	for (const frame of [...entry.rawFrames].reverse()) {
+		const message = record(frame.message);
+		if ((string(message?.role) ?? string(frame.role)) !== "user" || !Array.isArray(message?.content)) continue;
+		const attachments = message.content.flatMap((block) => {
+			const image = record(block);
+			if (image?.type !== "image") return [];
+			const mimeType = string(image.mimeType)?.toLowerCase();
+			const extension = mimeType ? TRANSCRIPT_IMAGE_MIME_TYPES[mimeType as keyof typeof TRANSCRIPT_IMAGE_MIME_TYPES] : undefined;
+			const byteLength = readModelImageBase64ByteLength(image.data);
+			if (!mimeType || !extension || byteLength === undefined) return [];
+			const index = imageIndex++;
+			return [{
+				type: "image",
+				id: transcriptImageId(entry.id, index),
+				name: `Image ${index + 1}.${extension}`,
+				mimeType,
+				sizeBytes: byteLength,
+				previewUrl: `data:${mimeType};base64,${image.data}`,
+			}];
+		});
+		const result = attachments.length > 0 ? attachments : undefined;
+		transcriptImageAttachmentCache.set(entry, result);
+		return result;
+	}
+	transcriptImageAttachmentCache.set(entry, undefined);
+	return undefined;
+}
+
 function messagesFromState(state: TaskState, fallbackTime: string, turnIds: ReadonlyMap<string, string>): unknown[] {
 	return state.transcript.flatMap((entry, index) => {
 		if (entry.role !== "user" && entry.role !== "assistant") return [];
 		const createdAt = entry.createdAt ?? fallbackTime;
+		const attachments = transcriptImageAttachments(entry);
 		return [{
 			id: entry.id || `message-${index + 1}`,
 			role: entry.role,
+			// OMP's journal order is causal even when queued-turn timestamps overlap. Keep
+			// createdAt untouched for display/diagnostics; the web timeline uses this only
+			// when it has an authoritative order on both messages being compared.
+			transcriptOrder: index + 1,
 			// A turn that ended on a provider error carries no text at all: OMP records the
 			// provider's own sentence on the frame instead, and the timeline then painted
 			// `(empty response)`, which read as a completion with nothing to say. `entryFailureText`
@@ -757,6 +832,7 @@ function messagesFromState(state: TaskState, fallbackTime: string, turnIds: Read
 			source: "native",
 			createdAt,
 			updatedAt: createdAt,
+			...(attachments ? { attachments } : {}),
 		}];
 	});
 }

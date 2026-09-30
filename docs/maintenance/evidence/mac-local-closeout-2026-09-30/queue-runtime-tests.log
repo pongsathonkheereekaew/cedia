@@ -1,0 +1,69 @@
+bun test v1.4.2 (744846f84)
+
+packages/coding-agent/test/agent-session-cedia-turn-boundary.test.ts:
+(pass) Cedia turn-boundary identity > promotes an all-mode follow-up batch only after the successful preparation commit [79.12ms]
+(pass) Cedia turn-boundary identity > does not settle or replace the current identity at a model turn boundary [19.13ms]
+(pass) Cedia turn-boundary identity > keeps a named steering submission outside the running Cedia identity [12.53ms]
+(pass) Cedia turn-boundary identity > does not promote a queued identity when preparation is cancelled [35.16ms]
+(pass) Cedia turn-boundary identity > does not emit a boundary for a tool round before the queued batch commits [18.32ms]
+
+packages/coding-agent/test/agent-session-session-stop-will-continue.test.ts:
+(pass) AgentSession session_stop willContinue > marks extension agent_end willContinue when session_stop schedules a hidden turn [13.40ms]
+
+packages/coding-agent/test/cedia-queue-bridge.test.ts:
+(pass) Cedia queue projection > projects the runtime's own queue and never invents a row [0.06ms]
+(pass) Cedia queue projection > bounds a long submission and names the cut instead of hiding it [0.02ms]
+(pass) Cedia queue projection > bounds how many submissions one answer lists [0.05ms]
+(pass) Cedia queue projection > answers what a single drop removed, and the queue that remains [0.06ms]
+(pass) Cedia queue projection > reports an empty drop rather than a silent success
+(pass) Cedia queue projection > drains every user submission with a clear, and reports each one it removed [0.05ms]
+
+packages/coding-agent/test/agent-session-queued-policy.test.ts:
+(pass) queued user delivery policy > retries cancelled real mnemopi recall and keeps one committed copy on later turns [58.98ms]
+(pass) queued user delivery policy > retries cancelled real hindsight recall and keeps one committed copy on later turns [6.46ms]
+(pass) queued user delivery policy > consumes an empty successful real mnemopi recall only when delivery commits [17.68ms]
+(pass) queued user delivery policy > consumes an empty successful real hindsight recall only when delivery commits [3.14ms]
+(pass) queued user delivery policy > retries failed real mnemopi recall on the next committed turn [15.83ms]
+(pass) queued user delivery policy > retries failed real hindsight recall on the next committed turn [25.64ms]
+(pass) queued user delivery policy > delivers real mnemopi recall with the winning tool policy in the same request [10.54ms]
+(pass) queued user delivery policy > delivers real hindsight recall with the winning tool policy in the same request [2.77ms]
+(pass) queued user delivery policy > discards late real mnemopi recall after the queue is replaced [9.78ms]
+(pass) queued user delivery policy > discards late real hindsight recall after the queue is replaced [2.42ms]
+(pass) queued user delivery policy > does not carry pending real mnemopi recall into a replacement session [15.41ms]
+(pass) queued user delivery policy > does not carry pending real hindsight recall into a replacement session [2.87ms]
+(pass) queued user delivery policy > declines real mnemopi delivery when its memory state is invalidated by reset in the hook [31.66ms]
+(pass) queued user delivery policy > declines real mnemopi delivery when its memory state is invalidated by rekey in the hook [12.96ms]
+(pass) queued user delivery policy > declines real hindsight delivery when its memory state is invalidated by reset in the hook [2.58ms]
+(pass) queued user delivery policy > declines real hindsight delivery when its memory state is invalidated by rekey in the hook [2.25ms]
+(pass) queued user delivery policy > discards older real mnemopi background recall when a tool-tail user preparation takes ownership [10.15ms]
+(pass) queued user delivery policy > bounds real mnemopi staged recall at an injection limit of %s [10.64ms]
+(pass) queued user delivery policy > bounds real mnemopi staged recall at an injection limit of %s [9.12ms]
+(pass) queued user delivery policy > bootstraps a fresh steer and delivers returned context once with separate policy blocks [21.91ms]
+(pass) queued user delivery policy > uses saved policy changes on idle steer and follow-up instead of the prior override [1.92ms]
+(pass) queued user delivery policy > refreshes policy for live queued work without preparing tool-free iterations again [1.22ms]
+(pass) queued user delivery policy > prepares all actual user bodies in a batch and preserves skill identity and companions [0.82ms]
+(pass) queued user delivery policy > discards policy and returned context on abort while preserving the undelivered steer [0.48ms]
+(pass) queued user delivery policy > uses a handler's refreshed base in the same request without an extension override [0.63ms]
+(pass) queued user delivery policy > rederives ordinary overrides from current tools and publishes only the successful context and recall [2.39ms]
+(pass) queued user delivery policy > rederives queued overrides from current tools and publishes only the successful context and recall [2.67ms]
+(pass) queued user delivery policy > does not re-enter handlers for a semantic no-op base refresh [2.11ms]
+(pass) queued user delivery policy > preserves absolute overrides and their downstream chain after a source-base retry [2.11ms]
+(pass) queued user delivery policy > retries a base change during returned-image normalization before publishing the request [12.17ms]
+(pass) queued user delivery policy > bounds repeated ordinary source-base churn and retains the original without publishing staged work [3.19ms]
+(pass) queued user delivery policy > bounds repeated queued source-base churn and retains the original without publishing staged work [2.17ms]
+(pass) queued user delivery policy > pauses automatic draining after live queued policy exhaustion until an explicit retry [3.03ms]
+(pass) queued user delivery policy > lets cancellation during retry retain the queued original without consuming recall [2.09ms]
+(pass) queued user delivery policy > declines a source-base change after preparation without partially committing memory or context [2.32ms]
+(pass) queued user delivery policy > does not apply late policy after abort during memory lookup [0.70ms]
+(pass) queued user delivery policy > does not apply late policy after abort during prompt rebuild [0.46ms]
+(pass) queued user delivery policy > does not apply late policy after abort during extension hook [0.29ms]
+(pass) queued user delivery policy > does not apply late policy after abort during extension hook after rebuild [0.26ms]
+(pass) queued user delivery policy > does not commit an ordinary prompt's stale policy after abort during preparation [1.44ms]
+(pass) queued user delivery policy > does not leak a pending queue preparation into a new session [4.41ms]
+(pass) queued user delivery policy > prepares a steer after a running tool settles, not on subsequent tool iterations [25.27ms]
+(pass) queued user delivery policy > does not add policy preparation to synthetic-only queue continuations [1.51ms]
+
+ 55 pass
+ 0 fail
+ 262 expect() calls
+Ran 55 tests across 4 files. [1291.00ms]

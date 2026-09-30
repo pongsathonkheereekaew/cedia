@@ -1,0 +1,68 @@
+{
+  "body": {
+    "state": "available",
+    "revision": 10,
+    "steering": [],
+    "followUp": [],
+    "dropped": [
+      {
+        "text": "drop this queued local submission",
+        "truncated": false,
+        "images": 0
+      }
+    ]
+  },
+  "commandId": "5a29dd8b-bc62-4d03-ae3a-1502b2a482bc",
+  "output": "/Users/pond/cedia/dist/queue-browser-proof/2026-09-30T06-53-35.718Z",
+  "assets": "/Users/pond/cedia/dist/agent-window",
+  "assetSha256": "84d76d755f1ea16dbbc0195a3698fc040822910f3e083372addb69c9124d143c",
+  "errors": [],
+  "submissions": [
+    {
+      "type": "thread.turn.start",
+      "commandId": "3999c83b-3b10-43a0-a7e8-37b332426528",
+      "threadId": "d20f7330-8262-4309-b8b8-396dfc9e1ba0",
+      "message": {
+        "messageId": "ca2db6de-0712-4761-ac40-3bbb6a8398e6",
+        "role": "user",
+        "text": "hold this local request while the queue drop is tested",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T06:53:38.070Z",
+      "proofSettled": true
+    },
+    {
+      "type": "thread.turn.start",
+      "commandId": "70a350e8-32a2-4c92-aa63-24a2dae47904",
+      "threadId": "d20f7330-8262-4309-b8b8-396dfc9e1ba0",
+      "message": {
+        "messageId": "d791eae4-65dd-401b-bf9f-5f3cb3587e39",
+        "role": "user",
+        "text": "drop this queued local submission",
+        "attachments": []
+      },
+      "modelSelection": {
+        "provider": "omp",
+        "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+      },
+      "assistantDeliveryMode": "streaming",
+      "dispatchMode": "queue",
+      "runtimeMode": "approval-required",
+      "interactionMode": "default",
+      "createdAt": "2026-09-30T06:53:39.243Z",
+      "proofSettled": true
+    }
+  ],
+  "ok": true,
+  "modelHits": 1,
+  "composerMode": true,
+  "intentState": "cancelled"
+}

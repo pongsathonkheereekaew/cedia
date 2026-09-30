@@ -1,0 +1,73 @@
+OK   OMP runtime is present at /Users/pond/cedia/dist/omp/omp
+OK   the runtime is the pinned 18.4.3 or later (omp/18.4.3)
+OK   fixture listener bound
+OK   the runtime answers its own steering and follow-up queues
+OK   a fresh runtime reports empty queues honestly
+OK   a session with no runtime reports absence with a reason
+OK   the queue route answers for a live session
+OK   the route carries both runtime queue sides
+OK   the route answers the runtime's empty queues
+OK   the drop route answers the runtime projection
+OK   an empty drop reports an explicit empty dropped list
+OK   a repeated command id replays the same drop receipt
+OK   an unknown mode is refused before the runtime call
+OK   an invalid mode claims no durable command
+OK   the held-turn fixture model is accepted by OMP
+OK   OMP accepts explicit one-at-a-time follow-up mode
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   composer submission is running in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+OK   composer submission is queued in host
+OK   composer uses only one held local model request
+OK   request 1 arrived exactly once
+OK   request 1 executes the expected prompt
+OK   later prompts are not batched into this request
+OK   later prompts are not batched into this request
+OK   intent 1 is running
+OK   durable intents distinguish completed, current and waiting work
+OK   OMP queue retains only the later prompts in order
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   intent 1 completed
+OK   request 2 arrived exactly once
+OK   request 2 executes the expected prompt
+OK   later prompts are not batched into this request
+OK   intent 2 is running
+OK   durable intents distinguish completed, current and waiting work
+OK   OMP queue retains only the later prompts in order
+OK   execution fixture receives only chat completions
+OK   fixture request is bounded
+OK   execution fixture receives the selected streaming model
+OK   requests are sequential with no retry or duplicate
+OK   intent 2 completed
+OK   request 3 arrived exactly once
+OK   request 3 executes the expected prompt
+OK   intent 3 is running
+OK   durable intents distinguish completed, current and waiting work
+OK   OMP queue retains only the later prompts in order
+OK   intent 3 completed
+OK   exactly three loopback model requests after completion
+122 |         await page.screenshot({ path: join(output, "queued.png"), fullPage: true });
+123 |         const receipt = await input.execution.finish();
+124 |         await panel.getByText("Nothing queued", { exact: true }).waitFor({ timeout: 20_000 });
+125 |         const messageRows = page.locator("[data-message-id]");
+126 |         for (const text of [input.composer!.firstText, input.queuedText, input.execution.thirdText, ...input.execution.replies]) {
+127 |           await messageRows.getByText(text, { exact: true }).waitFor({ timeout: 20_000 });
+                                                                   ^
+TimeoutError: waitFor: Timeout 20000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-message-id]').getByText('Local task B completed.', { exact: true }) to be visible[22m
+
+  log: [ "  - waiting for locator('[data-message-id]').getByText('Local task B completed.', { exact: true }) to be visible" ],
+
+      at dropQueueThroughBrowser (/Users/pond/cedia/scripts/lib/queue-browser-proof.ts:127:62)
+      at processTicksAndRejections (native:7:39)
+
+Bun v1.4.2 (macOS arm64)

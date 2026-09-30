@@ -1,0 +1,1 @@
+$ tsc --noEmit && tsc --noEmit -p tsconfig.vendor.json

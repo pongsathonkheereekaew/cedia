@@ -1,0 +1,96 @@
+{
+  "error": "Error: Composer dispatch 3 carried 1 attachments; expected 0",
+  "errors": [],
+  "browser": {
+    "text": "Cedia\nNew thread\nProjects\nQueue smoke\nQueue smoke\nChats\nNo chats yet\nSettings\nQueue smoke\nHand off\nAdd action\nIDE\n\nQueue A: first local task\n\n3:17 PM\n\nWorking for 7s\nThinking\nTask controls\n\n\n\n\nAsk for follow-up changes\nAsk for approval\nCedia queue smoke fixture\nPause\n\nEnvironment\n\nChanges\nLocal\nSelect branch\nCommit and Push\nCompare branch\n\nSubagents\n\nNo subagents in this task\n\nSources\n\nImage 1.webp\nLocal Servers\n0\n\nEditor\n\nOpen in Cedia IDE\nTerminal\nBrowser\nFiles\nSide chats\niOS Simulator\nhost · live\nmodel · cedia-queue-fixture/cedia-queue-fixture-model\nqueue · running cedia-queue-fixture/cedia-queue-fixture-model\nsession · running\nbranch · —\nToggle Sidebar",
+    "submissions": [
+      {
+        "type": "thread.turn.start",
+        "commandId": "ae6c9138-f175-46b6-8d92-b2a07cb7ce6e",
+        "threadId": "62132de1-eeb5-4bbd-b359-468b42ff8fcc",
+        "message": {
+          "messageId": "7e40bf6c-ae90-4020-a00c-ac53ba793ad0",
+          "role": "user",
+          "text": "Queue A: first local task",
+          "attachments": [
+            {
+              "type": "image",
+              "id": "f3548fd0-dec7-4431-bb90-4a996b461356",
+              "name": "queue-a-red.png",
+              "mimeType": "image/png",
+              "sizeBytes": 70
+            }
+          ]
+        },
+        "modelSelection": {
+          "provider": "omp",
+          "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+        },
+        "assistantDeliveryMode": "streaming",
+        "dispatchMode": "queue",
+        "runtimeMode": "approval-required",
+        "interactionMode": "default",
+        "createdAt": "2026-09-30T08:17:49.671Z",
+        "proofSettled": true
+      },
+      {
+        "type": "thread.turn.start",
+        "commandId": "bff316ce-f757-4039-910f-9d7c6fdc2a04",
+        "threadId": "62132de1-eeb5-4bbd-b359-468b42ff8fcc",
+        "message": {
+          "messageId": "77f459e4-1f6d-4b8b-8dad-af2152632477",
+          "role": "user",
+          "text": "Queue B: second local task",
+          "attachments": [
+            {
+              "type": "image",
+              "id": "0c5fc9d2-1897-42e6-9e35-3518db449715",
+              "name": "queue-b-white.png",
+              "mimeType": "image/png",
+              "sizeBytes": 70
+            }
+          ]
+        },
+        "modelSelection": {
+          "provider": "omp",
+          "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+        },
+        "assistantDeliveryMode": "streaming",
+        "dispatchMode": "queue",
+        "runtimeMode": "approval-required",
+        "interactionMode": "default",
+        "createdAt": "2026-09-30T08:17:57.367Z",
+        "proofSettled": true
+      },
+      {
+        "type": "thread.turn.start",
+        "commandId": "cf84e7dd-7faa-48dd-835e-031ed2d6ac00",
+        "threadId": "62132de1-eeb5-4bbd-b359-468b42ff8fcc",
+        "message": {
+          "messageId": "6281ba14-153f-499e-87c5-10c93cbe0891",
+          "role": "user",
+          "text": "Queue C: third local task",
+          "attachments": [
+            {
+              "type": "image",
+              "id": "0c5fc9d2-1897-42e6-9e35-3518db449715",
+              "name": "queue-b-white.png",
+              "mimeType": "image/png",
+              "sizeBytes": 70
+            }
+          ]
+        },
+        "modelSelection": {
+          "provider": "omp",
+          "model": "cedia-queue-fixture/cedia-queue-fixture-model"
+        },
+        "assistantDeliveryMode": "streaming",
+        "dispatchMode": "queue",
+        "runtimeMode": "approval-required",
+        "interactionMode": "default",
+        "createdAt": "2026-09-30T08:17:59.862Z",
+        "proofSettled": true
+      }
+    ]
+  }
+}
