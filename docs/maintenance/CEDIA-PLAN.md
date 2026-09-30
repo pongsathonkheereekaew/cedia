@@ -6006,6 +6006,9 @@ deletions so dead code is not carried across.
     package revisions; they are not relabelled as final-build reruns.
     The temporary Login Item retargeting during native
     inspection was restored to the persistent application; see the local receipt.
+    Re-verified on `e3d8f3c6b2d`: coverage 1,101/1,101 with zero gaps, root 1,453/1,453,
+    Agent Window 436/436, `check:repo` CI-OK, root/UI typechecks clean and
+    `check:packaged` 12/12 on `2026-09-30T08:25:21.069Z`.
     D/W/N/F acceptance remains open. Details and exclusions are in the
     [baseline receipt](evidence/baseline-snapshot-2026-09-30/findings.md) and
     [local Mac receipt](evidence/mac-local-closeout-2026-09-30/findings.md).
