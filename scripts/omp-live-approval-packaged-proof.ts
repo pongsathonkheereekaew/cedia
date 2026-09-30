@@ -190,6 +190,60 @@ try {
 	await agents.screenshot({ path: join(output, "agents-composer.png") });
 	check(true, "the fixture task composer is visible in the packaged Agents window");
 
+	const useIde = process.env.CEDIA_APPROVAL_USE_IDE === "1";
+	if (useIde) {
+		const ideOpened = (browser as any).waitForEvent("window", { timeout: 30_000 });
+		const openIdeButtons = (agents as any).getByRole("button", { name: "Open in IDE", exact: true });
+		await openIdeButtons.first().waitFor({ timeout: 20_000 });
+		let launched = false;
+		for (let i = 0; i < (await openIdeButtons.count()); i++) {
+			if (await openIdeButtons.nth(i).isEnabled()) { await openIdeButtons.nth(i).click(); launched = true; break; }
+		}
+		check(launched, "Open in IDE launched from the Agents window");
+		const ide = await ideOpened;
+		await ide.waitForURL(/workbench/, { timeout: 30_000 });
+		await (ide as any).bringToFront();
+		await new Promise(r => setTimeout(r, 5000));
+		const commandInput = ide.locator(".quick-input-widget input").first();
+		let paletteVisible = false;
+		for (let attempt = 0; attempt < 3 && !paletteVisible; attempt++) {
+			await ide.keyboard.press("Meta+Shift+P");
+			try { await commandInput.waitFor({ state: "visible", timeout: 8_000 }); paletteVisible = true; }
+			catch { await new Promise(r => setTimeout(r, 2000)); }
+		}
+		check(paletteVisible, "the IDE command palette opens for Focus Composer");
+		await ide.waitForTimeout(1000);
+		const paletteText = await ide.locator(".quick-input-widget").innerText().catch(() => "");
+		check(!/No matching results/i.test(paletteText), "Cedia Focus Composer command is available");
+		await ide.screenshot({ path: join(output, "ide-palette.png") });
+		await commandInput.fill(">Focus Composer");
+		await ide.waitForTimeout(500);
+		await commandInput.press("Enter");
+		await ide.locator(".quick-input-widget").waitFor({ state: "hidden", timeout: 15_000 }).catch(() => {});
+		// The dock composer lives inside a vscode-webview frame that the top-level
+		// page DOM cannot pierce; scan webview frames like the Send-race proof does.
+		const ideDeadline = Date.now() + 90_000;
+		let ideEditorFound = false;
+		while (Date.now() < ideDeadline && !ideEditorFound) {
+			const frames = (ide as any).frames().filter((frame: any) =>
+				typeof frame.url === "function" && frame.url().startsWith("vscode-webview://"));
+			for (const frame of frames) {
+				try {
+					if (await frame.locator('[data-testid="composer-editor"][contenteditable="true"]').count() > 0
+						&& await frame.locator('button[aria-label="Send message"]').count() > 0) {
+						ideEditorFound = true;
+						break;
+					}
+				} catch { /* frame navigated mid-probe */ }
+			}
+			if (!ideEditorFound) await new Promise(r => setTimeout(r, 1000));
+		}
+		await ide.screenshot({ path: join(output, "ide-dock-state.png") });
+		check(ideEditorFound, "the IDE dock webview mounts the Cedia composer with Send");
+		await ide.screenshot({ path: join(output, "ide-composer.png") });
+		check(true, "the IDE dock composer is mounted and visible (computer-use types here)");
+	}
+
 	await writeFile(typeReady, JSON.stringify({ stagedAppPath: resolvedAppPath, output, runId, sessionId: session.id, prompt: PROMPT }) + "\n");
 	console.log(`CUA_TYPE_READY: ${typeReady}`);
 	await waitForPath(typeRelease, 180_000);
