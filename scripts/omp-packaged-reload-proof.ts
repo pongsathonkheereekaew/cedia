@@ -27,7 +27,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { access, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -162,7 +162,12 @@ let proofPassed = false;
 const rendererErrors: string[] = [];
 const lifecycleShimLog = join(output, "login-item-shim.jsonl");
 const appEnv = { ...process.env, HOME: home, CEDIA_STATE_DIR: stateDir, CEDIA_HOST_IDLE_MS: "300000",
-	PI_CODING_AGENT_DIR: ompProfile, PI_NO_PTY: "1", PI_NOTIFICATIONS: "off", CEDIA_LIFECYCLE_SHIM_LOG: lifecycleShimLog };
+	PI_CODING_AGENT_DIR: ompProfile, PI_NO_PTY: "1", PI_NOTIFICATIONS: "off", CEDIA_LIFECYCLE_SHIM_LOG: lifecycleShimLog,
+	// O06 packaged-reload path: the scratch fixture travels through the operator-only
+	// host option instead of the session-lock overlay (which reload never re-evaluates).
+	// O06 packaged-reload path: the scratch fixture travels through the operator-only
+	// host option instead of the session-lock overlay (which reload never re-evaluates).
+	CEDIA_EXTRA_TRUSTED_EXTENSIONS: fixturePath };
 
 async function requestRaw(hostValue: HostDescriptor, method: string, path: string, body?: unknown): Promise<unknown> {
 	const response = await fetch(`${hostValue.url}${path}`, { method,
@@ -256,6 +261,17 @@ try {
 	await cp(sourceExtensionDirectory, stagedExtensionDirectory, { recursive: true });
 	await rm(stagedAgentWindowDirectory, { recursive: true, force: true });
 	await cp(sourceAgentWindowDirectory, stagedAgentWindowDirectory, { recursive: true });
+	// A non-portable extension build carries no runtime/ payload, so the overlay above
+	// drops it: reinstall the current source runtime bits explicitly (the packaged Node,
+	// remote-web and notices are version-independent and stay as staged).
+	await mkdir(join(runtimeRoot, "omp"), { recursive: true });
+	await cp(sourceOmpExecutable, bundledOmp);
+	await chmod(bundledOmp, 0o755);
+	await cp(sourceHostCli, bundledHost);
+	// The lock extension rides beside the host CLI (the default lockExtension
+	// resolution); without it the wiped runtime/ has no session lock.
+	await cp(join(root, "dist/host/runtime-lock.ts"), join(runtimeRoot, "host/runtime-lock.ts"));
+	await cp(join(root, "dist/host/runtime-lock.ts.map"), join(runtimeRoot, "host/runtime-lock.ts.map"));
 	const sourceOmpSha256 = createHash("sha256").update(await readFile(sourceOmpExecutable)).digest("hex");
 	const sourceHostSha256 = createHash("sha256").update(await readFile(sourceHostCli)).digest("hex");
 	check(createHash("sha256").update(await readFile(bundledOmp)).digest("hex") === sourceOmpSha256, "the staged app carries the current standalone OMP binary");
@@ -298,7 +314,10 @@ try {
 	check(typeof pid === "number", "the packaged OMP owner PID is observable");
 
 	const writeGeneration = async (source: string | null, label: string) => {
-		if (source === null) await writeFile(fixturePath, "// fixture removed\n", { mode: 0o600 });
+		// Removal deletes the file outright (same as the dev-topology smoke): a
+		// placeholder comment has no factory export and fails validation instead
+		// of unloading on the packaged runtime.
+		if (source === null) await rm(fixturePath, { force: true });
 		else await writeFile(fixturePath, source, { mode: 0o600 });
 		await delay(1300);
 	};
@@ -322,8 +341,20 @@ try {
 	check(stats.assistantMessages === 0 && stats.toolCalls === 0 && (stats.cost === 0 || stats.cost === "0"), "generation B reload caused no turn, tool call, or spend");
 
 	await writeGeneration(brokenSource, "broken");
-	const reloadBroken = await sendPrompt(packagedHost, sessionId, incarnation, "/reload-plugins", "reload-broken");
-	check(reloadBroken.status === "failed", "throwing candidate reload fails instead of half-applying");
+	// The candidate failure can surface synchronously at receipt time (standalone
+	// binary evaluates the reload inline) or as a failed terminal state (dev
+	// launcher defers it): either way the journal row must carry the candidate
+	// error, which proves the reload ran instead of being refused at admission.
+	try {
+		const reloadBroken = await sendPrompt(packagedHost, sessionId, incarnation, "/reload-plugins", "reload-broken");
+		check(reloadBroken.status === "failed", "throwing candidate reload fails instead of half-applying");
+	} catch (error) {
+		check(String(error).includes("reload-broken not accepted (failed)"), `throwing candidate reload surfaces as failure, got ${String(error).slice(0, 160)}`);
+	}
+	const brokenRows = await listCommands(packagedHost, sessionId);
+	const brokenRow = brokenRows.find(row => String((row as any).commandId ?? "").startsWith("packaged-reload-reload-broken"));
+	check(String((brokenRow as any)?.status ?? "") === "failed" && JSON.stringify(brokenRow ?? {}).includes("intentional packaged reload candidate failure"),
+		"failed candidate journal row carries the candidate error");
 	commands = await commandNames(packagedHost, sessionId, incarnation);
 	check(commands.has(commandName("b")) && !commands.has("hot-reload-packaged-broken"), "failed candidate retains last-good B command");
 	models = await sessionModelNames(packagedHost, sessionId, incarnation);
