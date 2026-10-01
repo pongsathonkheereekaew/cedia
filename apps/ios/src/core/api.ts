@@ -12,6 +12,7 @@ import { isRecord, nonEmptyString, type LoginProviderOption, type ModelOption, t
 import type { ArtifactChunk, ArtifactReceipt } from "../../../../packages/protocol/src/artifacts.ts";
 import { parseArtifactChunk, parseArtifactReceipt } from "./artifacts.ts";
 import { parseHostReview, type HostReviewPayload } from "./review-sheet.ts";
+import { parseOwnerListing, type OwnerListing } from "./owners.ts";
 import { TransportError, type ClientTransport, type TransportMethod } from "./transport.ts";
 
 function encoded(value: string): string {
@@ -202,6 +203,14 @@ export class CediaApi {
 
   startSession(sessionId: string): Promise<Session> {
     return this.request<unknown>("POST", `/v1/sessions/${encoded(sessionId)}/start`).then(body => objectBody<Session>(body, "session"));
+  }
+
+  /**
+   * Owner-gated discovery of live/stale/conflicting task owners (CLI attach surface).
+   * Read-only: it never starts, adopts, or cleans up an owner.
+   */
+  listOwners(): Promise<OwnerListing> {
+    return this.request<unknown>("GET", "/v1/owners").then(body => parseOwnerListing(body));
   }
 
   getSession(sessionId: string): Promise<Session> {

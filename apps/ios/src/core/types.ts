@@ -99,6 +99,9 @@ export interface MobileTaskState {
   readonly project: Project | null;
   readonly projects: readonly Project[];
   readonly sessions: readonly Session[];
+  /** Owner-gated discovery listing (GET /v1/owners); empty until the first refresh. */
+  readonly owners: readonly import("./owners.ts").OwnerEntry[];
+  readonly ownersTruncated: boolean;
   readonly session: Session | null;
   readonly transcript: readonly TranscriptEntry[];
   /** OMP's opt-in virtual TUI terminals, scoped to the selected session incarnation. */
@@ -140,6 +143,7 @@ export type MobileAction =
   | { readonly type: "projects"; readonly projects: readonly Project[] }
   | { readonly type: "project"; readonly project: Project | null }
   | { readonly type: "sessions"; readonly sessions: readonly Session[] }
+  | { readonly type: "owners"; readonly owners: readonly import("./owners.ts").OwnerEntry[]; readonly truncated: boolean }
   | { readonly type: "session"; readonly session: Session | null }
   /** Re-read the selected task's record without switching tasks or clearing its mounted view. */
   | { readonly type: "session_refresh"; readonly session: Session }

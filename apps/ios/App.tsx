@@ -133,6 +133,7 @@ import {
 } from "./src/core/index.ts";
 import { terminalInputCommand, terminalNegotiateCommand, terminalResizeCommand } from "./src/core/virtual-terminal.ts";
 import { commandFailurePlan } from "./src/core/command-recovery.ts";
+import { isDiscoverableOwner, ownerRowPresentation, type OwnerEntry } from "./src/core/owners.ts";
 import { VirtualTerminalPanel } from "./src/components/VirtualTerminal.tsx";
 import { emptyThinkingParams, ompCommandData, parentSessionFromOmpState, THINKING_NOT_ADVERTISED, thinkingFromOmpState, type ThinkingParams } from "../macos/src/thinking-params.ts";
 import { taskSnapshotCache } from "./src/storage/cache.ts";
@@ -618,6 +619,12 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
         const sessions = await api.listSessions(current);
         dispatch({ type: "sessions", sessions });
       }
+      try {
+        const listing = await api.listOwners();
+        dispatch({ type: "owners", owners: [...listing.owners], truncated: listing.truncated });
+      } catch {
+        dispatch({ type: "owners", owners: [], truncated: false });
+      }
       setConnection("connected");
     } catch (error) {
       setConnection("offline", error instanceof Error ? error.message : String(error));
@@ -969,6 +976,66 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
       setBusy(false);
     }
   }, [api, catchUp, setConnection]);
+
+  const refreshOwners = useCallback(async () => {
+    if (!api) return;
+    try {
+      const listing = await api.listOwners();
+      dispatch({ type: "owners", owners: [...listing.owners], truncated: listing.truncated });
+    } catch {
+      dispatch({ type: "owners", owners: [], truncated: false });
+    }
+  }, [api]);
+
+  const openOwner = useCallback(async (taskId: string) => {
+    if (!api) return;
+    const known = stateRef.current.sessions.find(item => item.id === taskId);
+    if (known) {
+      await selectSession(known);
+      return;
+    }
+    setBusy(true);
+    try {
+      await selectSession(await api.getSession(taskId));
+    } catch (error) {
+      setConnection("offline", error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [api, selectSession, setConnection]);
+
+  const attachOwner = useCallback(async (taskId: string) => {
+    if (!api) return;
+    setBusy(true);
+    try {
+      const started = await api.startSession(taskId);
+      dispatch({ type: "session_refresh", session: started });
+      const current = stateRef.current.project?.id;
+      if (current) {
+        const sessions = await api.listSessions(current);
+        dispatch({ type: "sessions", sessions });
+        await selectSession(sessions.find(item => item.id === taskId) ?? started);
+      } else {
+        await selectSession(started);
+      }
+      await refreshOwners();
+      setConnection("connected");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (commandFailurePlan(error) === "surface_recovery") {
+        try {
+          dispatch({ type: "session_refresh", session: await api.getSession(taskId) });
+        } catch {
+          // The failed attach already explains itself; the next read retries the status.
+        }
+        setConnection("connected");
+      } else {
+        setConnection("offline", message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [api, refreshOwners, selectSession, setConnection]);
 
   const reconcileSession = useCallback(async () => {
     const session = stateRef.current.session;
@@ -1380,6 +1447,10 @@ function CediaRoot({ transport, secretStore = securePairingStore, cache = taskSn
           setSelectedView={setSelectedView}
           selectedProject={selectedProject}
           projectSessions={projectSessions}
+          owners={state.owners}
+          ownersTruncated={state.ownersTruncated}
+          onOpenOwner={openOwner}
+          onAttachOwner={attachOwner}
           onSelectProject={selectProject}
           onSearch={query => dispatch({ type: "search", query })}
           onShowArchived={() => dispatch({ type: "show_archived", value: !stateRef.current.showArchived })}
@@ -1427,6 +1498,10 @@ function Dashboard(props: {
   setSelectedView: (value: MobileInboxView) => void;
   selectedProject: Project | null;
   projectSessions: readonly Session[];
+  owners: readonly OwnerEntry[];
+  ownersTruncated: boolean;
+  onOpenOwner: (taskId: string) => void;
+  onAttachOwner: (taskId: string) => void;
   onSelectProject: (project: Project) => void;
   onSearch: (query: string) => void;
   onShowArchived: () => void;
@@ -1471,6 +1546,7 @@ function Dashboard(props: {
     const q = state.searchQuery.trim().toLowerCase();
     return !q || `${project.name} ${project.path}`.toLowerCase().includes(q);
   });
+  const discoverableOwners = props.owners.filter(isDiscoverableOwner);
   const sessions = props.projectSessions.filter(session => state.showArchived || !session.archived).filter(session => {
     const q = state.searchQuery.trim().toLowerCase();
     return !q || session.title.toLowerCase().includes(q);
@@ -1537,6 +1613,7 @@ function Dashboard(props: {
           <>
             {projects.length ? projects.map(project => <ProjectCard key={project.id} project={project} styles={styles} palette={palette} selected={project.id === props.selectedProject?.id} onSelect={() => props.onSelectProject(project)} onPin={() => props.onPinProject(project)} onArchive={() => props.onArchiveProject(project)} />) : state.projects.length ? <EmptyState styles={styles} palette={palette} title="No matching projects" body="No project matches this search." onAction={props.onOpenPairing} action="Connect your Mac" /> : null}
             {props.selectedProject ? (sessions.length ? sessions.map(session => <SessionCard key={session.id} session={session} styles={styles} palette={palette} onSelect={() => props.onSelectSession(session)} onPin={() => props.onPinSession(session)} onArchive={() => props.onArchiveSession(session)} />) : <EmptyState styles={styles} palette={palette} title="No tasks in this project" body="Start a session on your Mac to see it here." onAction={props.onOpenPairing} action="Connect your Mac" />) : null}
+            {discoverableOwners.length ? (<><Text style={styles.sectionTitle}>Elsewhere on this Mac</Text>{discoverableOwners.map(entry => <OwnerCard key={entry.taskId} entry={entry} styles={styles} palette={palette} onOpen={() => props.onOpenOwner(entry.taskId)} onAttach={() => props.onAttachOwner(entry.taskId)} />)}{props.ownersTruncated ? <Text style={styles.cardSubtitle}>Older tasks are hidden; the list is capped.</Text> : null}</>) : null}
           </>
         )}
         {!state.projects.length && !props.state.lastError ? <View style={styles.unavailable}><Text style={styles.unavailableTitle}>Waiting for your Mac</Text><Text style={styles.unavailableBody}>Pair your Mac to continue the same workspace from this phone.</Text><Pressable onPress={props.onOpenPairing} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Open connection</Text></Pressable></View> : null}
@@ -1560,6 +1637,12 @@ function SessionCard(props: { session: Session; styles: ReturnType<typeof makeSt
   const { session, styles, palette } = props;
   const running = session.status === "running";
   return <View style={styles.card}><Pressable onPress={props.onSelect} style={styles.cardMain} accessibilityRole="button" accessibilityLabel={`Open task ${session.title}`}><View style={[styles.taskGlyph, { backgroundColor: running ? palette.accentSoft : palette.elevated }]}><Text style={[styles.taskGlyphText, { color: running ? palette.accent : palette.muted }]}>{running ? "•" : "›"}</Text></View><View style={styles.cardCopy}><Text style={styles.cardTitle} numberOfLines={1}>{session.title}</Text><Text style={styles.cardSubtitle}>{running ? "Working now" : session.status === "recovery_required" ? "Needs reconciliation" : `Updated ${formatRelativeTime(session.updatedAt)}`}</Text></View></Pressable><View style={styles.cardActions}><Pressable onPress={props.onPin} accessibilityRole="button" accessibilityLabel={session.pinned ? `Unpin ${session.title}` : `Pin ${session.title}`}><Text style={[styles.actionIcon, session.pinned && { color: palette.accent }]}>{session.pinned ? "★" : "☆"}</Text></Pressable><Pressable onPress={props.onArchive} accessibilityRole="button" accessibilityLabel={session.archived ? "Restore task" : "Archive task"}><Text style={styles.actionIcon}>{session.archived ? "↩" : "…"}</Text></Pressable></View></View>;
+}
+
+function OwnerCard(props: { entry: OwnerEntry; styles: ReturnType<typeof makeStyles>; palette: Palette; onOpen: () => void; onAttach: () => void }) {
+  const { styles, palette } = props;
+  const presentation = ownerRowPresentation(props.entry);
+  return <View style={styles.card}><Pressable onPress={props.onOpen} style={styles.cardMain} accessibilityRole="button" accessibilityLabel={`Open task ${props.entry.title}`}><View style={[styles.taskGlyph, { backgroundColor: palette.accentSoft }]}><Text style={[styles.taskGlyphText, { color: palette.accent }]}>◈</Text></View><View style={styles.cardCopy}><Text style={styles.cardTitle} numberOfLines={1}>{props.entry.title}</Text><Text style={styles.cardSubtitle}>{presentation.badge} · {presentation.detail}</Text></View></Pressable>{presentation.canAttach ? <View style={styles.cardActions}><Pressable onPress={props.onAttach} accessibilityRole="button" accessibilityLabel={`Attach ${props.entry.title} here`}><Text style={styles.actionIcon}>⎘</Text></Pressable></View> : null}</View>;
 }
 
 function EmptyState(props: { styles: ReturnType<typeof makeStyles>; palette: Palette; title: string; body: string; action: string; onAction: () => void }) {

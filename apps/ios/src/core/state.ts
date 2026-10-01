@@ -27,6 +27,8 @@ export function createInitialMobileState(overrides: Partial<MobileTaskState> = {
     project: null,
     projects: [],
     sessions: [],
+    owners: [],
+    ownersTruncated: false,
     session: null,
     transcript: [],
     virtualTerminals: [],
@@ -501,6 +503,8 @@ export function reduceMobileState(state: MobileTaskState, action: MobileAction):
       return { ...state, project: action.project, session: null, draft: "", transcript: [], virtualTerminals: [], events: [], cursor: 0, hasMoreEvents: false, uiRequests: [], presentations: [], loginProviders: [], seenEventKeys: [], activeToolIds: [], attentionCount: 0 };
     case "sessions":
       return { ...state, sessions: action.sessions };
+    case "owners":
+      return { ...state, owners: action.owners, ownersTruncated: action.truncated };
     case "session": {
       const sessionChanged = action.session?.id !== state.session?.id;
       return { ...state, session: action.session, draft: sessionChanged ? "" : state.draft, transcript: [], virtualTerminals: [], events: [], cursor: 0, hasMoreEvents: false, uiRequests: [], presentations: [], loginProviders: [], seenEventKeys: [], activeToolIds: [], attentionCount: 0 };
