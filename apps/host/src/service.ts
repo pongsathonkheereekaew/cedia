@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { OmpRpcClient, OmpCommandError, OmpRequestTimeoutError } from "../../../packages/omp-adapter/src/client.ts";
@@ -90,6 +90,14 @@ export interface HostOptions {
   /** Bound a deliberately held fixture ACK without changing the 30s default. */
   ompRequestTimeoutMs?: number;
   lockExtension?: string;
+  /**
+   * Operator-only extra `--trusted-extension` paths, appended before the lock
+   * extension (O06 packaged-reload path). Set at host startup from
+   * `CEDIA_EXTRA_TRUSTED_EXTENSIONS`; never settable by clients — HostOptions
+   * originate at server startup, not from session frames. Each entry must be
+   * an absolute path to an existing file and is realpath'd like the lock.
+   */
+  extraTrustedExtensions?: string[];
   onEvent?: (event: SessionEvent) => void;
   onFatal?: (error: Error) => void;
   editors?: EditorConnections;
@@ -253,6 +261,7 @@ export class CediaHost {
   readonly #options: HostOptions;
   readonly #modelCatalog: OmpModelCatalog;
   readonly #providerAuth: ProviderAuthManager;
+  readonly #extraTrustedExtensions: string[];
   readonly #runtimes = new Map<string, Runtime>();
   readonly #starting = new Map<string, Promise<Session>>();
   readonly #forking = new Map<string, Promise<SessionView>>();
@@ -268,6 +277,21 @@ export class CediaHost {
 
   constructor(options: HostOptions) {
     this.#options = options;
+    this.#extraTrustedExtensions = (options.extraTrustedExtensions ?? []).map(candidate => {
+      if (typeof candidate !== "string" || candidate.length === 0 || !isAbsolute(candidate)) {
+        throw new HostError("invalid_option", `extraTrustedExtensions needs absolute file paths, got ${JSON.stringify(candidate)}`, 400);
+      }
+      let resolved: string;
+      try {
+        resolved = realpathSync(candidate);
+      } catch {
+        throw new HostError("invalid_option", `extraTrustedExtensions path does not exist: ${candidate}`, 400);
+      }
+      if (!statSync(resolved).isFile()) {
+        throw new HostError("invalid_option", `extraTrustedExtensions path is not a file: ${candidate}`, 400);
+      }
+      return resolved;
+    });
     this.store = options.store;
     this.#modelCatalog = createOmpModelCatalog({
       ompExecutable: options.ompExecutable,
@@ -4247,7 +4271,9 @@ export class CediaHost {
           args: ["--no-title", "--cwd", session.cwd,
             ...(forkSource === undefined ? ["--session", session.sessionFile] : ["--fork", forkSource]),
             "--session-dir", directory,
-            ...(this.#options.ompArgs ?? []), "--trusted-extension", lockExtension],
+            ...(this.#options.ompArgs ?? []),
+            ...this.#extraTrustedExtensions.flatMap(extension => ["--trusted-extension", extension]),
+            "--trusted-extension", lockExtension],
           env: {
             ...(this.#options.ompEnv ?? process.env),
             XDG_STATE_HOME: (this.#options.ompEnv ?? process.env).XDG_STATE_HOME ?? join(this.#options.stateDir, "xdg-state"),

@@ -1,6 +1,6 @@
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve, join, dirname } from "node:path";
+import { resolve, join, dirname, delimiter } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -9,6 +9,15 @@ import { startHostServer, type StartedHostServer } from "./server.ts";
 import { isProcessAlive, shouldStopHost } from "./host-lifetime.ts";
 import { resolveBundledRemoteWeb } from "./remote-web-assets.ts";
 import type { HostDescriptor } from "../../../packages/protocol/src/index.ts";
+
+/**
+ * Operator-only extra `--trusted-extension` paths for runtimes this host starts
+ * (O06 packaged-reload path). Delimiter-separated absolute paths; blank entries
+ * are ignored and validation (absolute, existing file) happens in CediaHost.
+ */
+export function extraTrustedExtensionsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  return (env.CEDIA_EXTRA_TRUSTED_EXTENSIONS ?? "").split(delimiter).map(entry => entry.trim()).filter(entry => entry.length > 0);
+}
 
 const stateDir = resolve(process.env.CEDIA_STATE_DIR ?? join(homedir(), "Library", "Application Support", "Cedia", "host"));
 async function healthy(): Promise<boolean> {
@@ -75,6 +84,7 @@ async function main(): Promise<void> {
   // gateway is not started at all, which is the honest state for a build that carries no export.
   const remoteWeb = resolveBundledRemoteWeb({ runtimeRoot: resolve(dirname(fileURLToPath(import.meta.url)), "..") });
   server = await startHostServer({ stateDir, ompExecutable: process.env.CEDIA_OMP_PATH ?? (useBundled ? bundledOmp : undefined),
+    extraTrustedExtensions: extraTrustedExtensionsFromEnv(process.env),
     virtualUi: process.env.CEDIA_RPC_VIRTUAL_UI === "1" || (useBundled && process.env.CEDIA_RPC_VIRTUAL_UI !== "0"),
     ownerBridge: process.env.CEDIA_RPC_OWNER_BRIDGE === "1" || (useBundled && process.env.CEDIA_RPC_OWNER_BRIDGE !== "0"),
     editorBridge: process.env.CEDIA_RPC_EDITOR_BRIDGE === "1" || (useBundled && process.env.CEDIA_RPC_EDITOR_BRIDGE !== "0"),

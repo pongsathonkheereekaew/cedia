@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -55,7 +55,7 @@ function slowProbeExecutable(): string {
   return path;
 }
 
-function makeHost(mode = "normal", ompExecutable = fixture, extraEnv: NodeJS.ProcessEnv = {}): FixtureHost {
+function makeHost(mode = "normal", ompExecutable = fixture, extraEnv: NodeJS.ProcessEnv = {}, extraHostOptions: Record<string, unknown> = {}): FixtureHost {
   const directory = temporaryDirectory();
   const projectPath = join(directory, "project");
   mkdirSync(projectPath, { recursive: true });
@@ -67,6 +67,7 @@ function makeHost(mode = "normal", ompExecutable = fixture, extraEnv: NodeJS.Pro
     ompExecutable,
     nativeBridge: mode === "native-permission",
     ompEnv: { CEDIA_NODE: fixtureNode, CEDIA_FAKE_HOST_MODE: mode, ...extraEnv },
+    ...extraHostOptions,
   });
   const session = host.createSession(project.id, "Fixture task");
   const fixtureHost = { directory, host, store, sessionId: session.id };
@@ -1124,6 +1125,35 @@ describe("CediaHost", () => {
     await expect(fixtureHost.host.deleteSession(fixtureHost.sessionId)).rejects.toMatchObject({ code: "not_found" });
     // The runtime is no longer tracked, so a later start cannot resurrect it.
     await expect(fixtureHost.host.startSession(fixtureHost.sessionId)).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("operator extra trusted extensions (O06 packaged-reload path)", () => {
+  it("appends extras before the lock extension on runtime spawn", async () => {
+    const directory = temporaryDirectory();
+    const extra = join(directory, "extra-fixture.ts");
+    writeFileSync(extra, "export default {};");
+    const argsLog = join(directory, "spawn-args.json");
+    const fixtureHost = makeHost("normal", fixture, { CEDIA_FAKE_ARGS_LOG: argsLog }, { extraTrustedExtensions: [extra] });
+    await fixtureHost.host.startSession(fixtureHost.sessionId);
+    await waitFor(() => existsSync(argsLog));
+    const args = (JSON.parse(readFileSync(argsLog, "utf8")) as { args: string[] }).args;
+    const flags = args.flatMap((arg, index) => arg === "--trusted-extension" ? [args[index + 1]] : []);
+    expect(flags.length).toBe(2);
+    expect(flags[0]).toBe(realpathSync(extra));
+    expect(flags[1].endsWith("runtime-lock.ts")).toBe(true);
+    await fixtureHost.host.stopSession(fixtureHost.sessionId);
+  });
+
+  it("rejects non-absolute and missing extra extension paths at construction", () => {
+    const directory = temporaryDirectory();
+    const projectPath = join(directory, "project");
+    mkdirSync(projectPath, { recursive: true });
+    const store = DurableStore.open({ stateDir: directory, recover: false });
+    expect(() => new CediaHost({ store, stateDir: directory, ompExecutable: fixture, extraTrustedExtensions: ["relative/extension.ts"] }))
+      .toThrow("absolute file paths");
+    expect(() => new CediaHost({ store, stateDir: directory, ompExecutable: fixture, extraTrustedExtensions: [join(directory, "missing.ts")] }))
+      .toThrow("does not exist");
   });
 });
 

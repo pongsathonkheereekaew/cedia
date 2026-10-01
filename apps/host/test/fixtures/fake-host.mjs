@@ -17,6 +17,9 @@ const forkSessionFile = isFork
 if (process.env.CEDIA_FAKE_FORK_ARGS_LOG && forkIndex >= 0) {
   writeFileSync(process.env.CEDIA_FAKE_FORK_ARGS_LOG, JSON.stringify({ args, source: args[forkIndex + 1], sessionDir }));
 }
+if (process.env.CEDIA_FAKE_ARGS_LOG) {
+  writeFileSync(process.env.CEDIA_FAKE_ARGS_LOG, JSON.stringify({ args }));
+}
 
 const frame = value => process.stdout.write(`${JSON.stringify(value)}\n`);
 const response = (command, id, data) => frame({
