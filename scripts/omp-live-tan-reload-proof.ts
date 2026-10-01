@@ -5,10 +5,13 @@
  * loopback server that accepts and never answers (request arrival proves it
  * is genuinely mid-inference). While the roster shows the tan live, a parent
  * `/reload-plugins` must REFUSE with the shared-registry parking error.
- * After `agents/kill` parks the child, rewrite + reload proceeds and the
- * replacement is visible. Fixture generations ride --trusted-extension;
- * the session model is the hanging loopback; nothing can reach a real
- * provider (no auth is even copied in).
+ * After `agents/kill` parks the child, rewrite + reload SHOULD proceed but
+ * currently never settles (suspected product hang — see the findings file);
+ * sibling commands complete normally. Fixture generations ride
+ * --trusted-extension; the session model is the hanging loopback; nothing
+ * can reach a real provider (no auth is even copied in).
+ *
+ * STATUS 2026-10-01: live refusal proven; post-park reload fails honestly.
  *
  * Run: bun scripts/omp-live-tan-reload-proof.ts
  */
