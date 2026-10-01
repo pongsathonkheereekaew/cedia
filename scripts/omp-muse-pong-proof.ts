@@ -85,7 +85,8 @@ try {
   const view = await started.router({ method: "GET", path: `/v1/sessions/${session.id}`, token: owner });
   const v = view.body as any;
   console.log(`SESSION-STATUS: ${v.status} turns=${JSON.stringify((v.turns ?? []).map((x: any) => x.state))}`);
-  outcome = answer.toLowerCase() === "pong" ? "ANSWERED" : answer ? "WRONG-TEXT" : "TIMEOUT";
+  const expected = (process.env.CEDIA_PONG_EXPECT ?? "pong").toLowerCase();
+  outcome = answer.toLowerCase() === expected ? "ANSWERED" : answer ? "WRONG-TEXT" : "TIMEOUT";
   console.log(`OUTCOME: ${outcome}`);
   await started.router({ method: "POST", path: `/v1/sessions/${session.id}/stop`, token: owner }).catch(() => {});
 } finally {
