@@ -6206,6 +6206,7 @@ deletions so dead code is not carried across.
     stale selected-slash refusal in the same PID and session incarnation with zero inference. The
     earlier generation-primitives checkpoint's red probe is an intermediate-stage result and is
     superseded by the [O06 live transaction receipt](evidence/o06-extension-live-transaction-2026-09-28/findings.md).
+| [`o06-packaged-reload-boundary-2026-10-01`](evidence/o06-packaged-reload-boundary-2026-10-01/findings.md) | O06 boundary probe: the staged lock overlay loads fixture generation A through the packaged owner, but a rewritten lock does not swap on `/reload-plugins` (completes, catalog unchanged); direct `--trusted-extension` swaps fine on the same binary, and settings/discovery placements do not load for hosted sessions — packaged reload has no swappable extension path today. Specifies the implementation requirement; dev-runtime reload requalified green on 18.4.3. |
     Remaining qualification: another live session sharing the model registry still blocks reload;
     standalone interactive/ACP concurrent reload and packaged capture remain open, as do the other
     O06/F and D acceptance rows.
