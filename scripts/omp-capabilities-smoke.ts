@@ -138,8 +138,8 @@ try {
 	}
 	check(allApplyTimingsValid, "every live settings key carries one of OMP's four apply timings");
 	check(
-		listed.length === 498 && applyCounts.immediate === 13 && applyCounts.turn_boundary === 416 &&
-			applyCounts.new_session === 39 && applyCounts.reload === 30,
+		listed.length === 522 && applyCounts.immediate === 21 && applyCounts.turn_boundary === 435 &&
+			applyCounts.new_session === 30 && applyCounts.reload === 36,
 		`the live timing distribution matches the pinned source audit (${JSON.stringify(applyCounts)})`,
 	);
 	check(

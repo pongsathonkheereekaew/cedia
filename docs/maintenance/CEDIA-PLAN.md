@@ -97,7 +97,7 @@ requirements change, this file changes; supporting records do not become another
 - Section order in this file is stable and intended: read §0 forward. Section numbers are
   identifiers and never reorder.
 
-**Current status (2026-09-30): the implementation baseline uses OMP 18.4.3.**
+**Current status (2026-10-01): the implementation baseline uses OMP 18.4.8.**
 The current source coverage gate passes 1,101/1,101 mappings with zero gaps. Root,
 Agent Window and iOS tests/typechecks pass on the pinned runtime. This is a source
 baseline, not D/W/N/F acceptance. The Mac package has now been rebuilt and passes
@@ -5925,7 +5925,7 @@ deletions so dead code is not carried across.
     Execution follows R1–R8 in §8, with §2.3 capability families, §3.C–§3.D behavior/screens,
     §6.4 settings and §6.5 remote boundaries.
 
-    **Current checkpoint (2026-09-30):** OMP is pinned to 18.4.3; current verification
+    **Current checkpoint (2026-10-01):** OMP is pinned to 18.4.8 (`717f97f4d2`); current verification
     passes 1,101/1,101 source mappings, 1,452 root tests and 429 Agent Window/settings tests;
     the baseline separately recorded 172 iOS tests. Root and Agent Window typechecks pass.
     Source, patches and cited baseline receipts were retained in owner-authorized commit

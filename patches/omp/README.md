@@ -1,6 +1,6 @@
 # Cedia OMP runtime patch
 
-Baseline: OMP 18.4.3, revision in `manifest.json` (floor 18.1.18), original MIT notice retained in `docs/upstream-notices/omp-LICENSE.txt`. The `0001` patch is the frozen 18.1.18 record; `0002` is the active rebased patch the manifest selects for the pinned revision.
+Baseline: OMP 18.4.8, revision in `manifest.json` (floor 18.1.18), original MIT notice retained in `docs/upstream-notices/omp-LICENSE.txt`. The `0001`/`0002` patches are frozen 18.1.18/18.4.3 records; `0003` is the active rebased patch the manifest selects for the pinned revision.
 
 The consolidated patch keeps the OMP harness and native tools in OMP. It adds opt-in virtual TUI transport and a structured native permission ClientBridge. Stock behavior remains selected when the corresponding environment flags are absent.
 

@@ -1,5 +1,5 @@
 {
-  "revision": "fc671eba383f2a7208500836673b485c0dc7073d",
+  "revision": "717f97f4d22b3d65c4a4eef6a744255d46f4d1a6",
   "patches": [
     {
       "file": "0001-cedia-rpc-bridges.patch",
@@ -8,6 +8,10 @@
     {
       "file": "0002-cedia-rpc-bridges-18.4.3.patch",
       "sha256": "fc9be37adecaa184c6f973b230cff883997bf4d93d0e6c6e355c5f6353f42ba5"
+    },
+    {
+      "file": "0003-cedia-rpc-bridges-18.4.8.patch",
+      "sha256": "3be134095abd915e8ffeec6fc16c4deab7715241cc9b9d5af8cad900fefb2e60"
     }
   ]
 }
