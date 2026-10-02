@@ -14,10 +14,13 @@ import { OmpClientStateError, OmpCommandError, type OmpRpcClient } from "../../.
 import type { CediaUiCommandType, RpcAck } from "../../../packages/omp-adapter/src/types.ts";
 import {
   OmpSettingsValidationError,
-  parseOmpSettingsKeys,
-  parseOmpSettingsValue,
   type OmpSettingsKey,
+  parseOmpSettingsKeys,
+  parseOmpSettingsMutation,
+  parseOmpSettingsValue,
+  type OmpSettingsContext,
   type OmpSettingsKeysSnapshot,
+  type OmpSettingsMutation,
   type OmpSettingsValue,
 } from "../../../packages/protocol/src/index.ts";
 
@@ -72,29 +75,43 @@ export class OmpSettingsNotEditableError extends Error {
 }
 
 /**
- * How Cedia treats one settings path (plan §6.4, "Only verified editable keys appear").
+ * How Cedia treats one settings path (plan §6.4.1, S1: presentation is not permission).
  *
- * - `editable`: a normal surface may show and write it.
+ * - `editable`: a normal surface may show and write it (OMP TUI row present, non-credential).
  * - `protected`: a credential path; the provider-auth surface owns it, and a generic settings
  *   control never shows or writes it.
- * - `advanced`: real and reachable, but with no settings row of its own.
- * - `excluded`: the plan excludes it from the settings surface (provider endpoint/order/enabled
- *   fields).
+ * - `advanced`: real and discoverable, but with no Basic row of its own. Advanced placement
+ *   is presentation, not a write prohibition by itself; scoped writes land in S3.
+ * - `excluded`: an explicit product exclusion with owner reason (broker/rooms/updater/voice).
+ *   S1a removes the seven incorrect native-OMP exclusions per §6.4.1; explicit
+ *   broker/room/update/voice exclusions (including nested activating fields) land in S1b
+ *   after the pending owner answers, so they are not silently allowed here.
  */
 export type OmpSettingDisposition = "editable" | "protected" | "advanced" | "excluded";
 
 /**
- * Paths §6.4 excludes from the settings surface, listed rather than pattern-matched so a new key
- * cannot be excluded by accident: provider endpoints, ordering and enabled/hidden fields.
+ * Explicit product exclusions only, listed rather than pattern-matched so a new key
+ * cannot be excluded by accident (§6.4.1 S1b, owner-accepted recommendations).
+ * The seven native OMP paths unblocked in S1a stay discoverable and are absent here.
+ * Kept writable by design: speech.voice + tts.localVoice (TTS output stays applicable),
+ * marketplace.autoUpdate (extension marketplace, not the OMP runtime updater),
+ * vault.enabled (Obsidian Vault integration, not the D3 credential vault),
+ * images.urls.sshTarget/sshRemotePort (blob broker, not D2 SSH remote-access).
  */
 const EXCLUDED_SETTINGS_PATHS: ReadonlyMap<string, string> = new Map([
-  ["enabledProviders", "§6.4 excludes provider enabled/hidden fields from the settings surface."],
-  ["disabledProviders", "§6.4 excludes provider enabled/hidden fields from the settings surface."],
-  ["modelProviderOrder", "§6.4 excludes provider ordering from the settings surface."],
-  ["providers.antigravityEndpoint", "§6.4 excludes provider endpoint settings from the settings surface."],
-  ["searxng.endpoint", "§6.4 excludes endpoint settings from the settings surface."],
-  ["compaction.remoteEndpoint", "§6.4 excludes endpoint settings from the settings surface."],
-  ["dev.autoqaPush.endpoint", "§6.4 excludes endpoint settings from the settings surface."],
+  ["live.voice", "Owner-deferred voice input (2026-09-23): realtime voice is outside this delivery; shown only in Capability status."],
+  ["stt.enabled", "Owner-deferred voice input (2026-09-23): speech-to-text is outside this delivery; stored values cannot activate voice through Advanced."],
+  ["stt.language", "Owner-deferred voice input (2026-09-23): speech-to-text is outside this delivery."],
+  ["stt.submitTrigger", "Owner-deferred voice input (2026-09-23): speech-to-text is outside this delivery."],
+  ["collab.relayUrl", "Owner decision D1 (2026-09-25): public-room collaboration is excluded; remote access rides Tailscale, not rooms."],
+  ["collab.webUrl", "Owner decision D1 (2026-09-25): public-room collaboration is excluded."],
+  ["collab.displayName", "Owner decision D1 (2026-09-25): public-room collaboration is excluded."],
+  ["collab.autoStart", "Owner decision D1 (2026-09-25): public-room collaboration is excluded."],
+  ["update.channel", "Owner decision D5 (2026-09-25): OMP self-updater is permanently forbidden; runtime updates ship as CEDIA releases."],
+  ["startup.checkUpdate", "Owner decision D5 (2026-09-25): OMP update checks belong to CEDIA releases, not the pinned runtime."],
+  ["providers.tinyModelDevice", "Owner decision D5 (2026-09-25): local tiny-model provisioning is excluded."],
+  ["providers.tinyModelDtype", "Owner decision D5 (2026-09-25): local tiny-model provisioning is excluded."],
+  ["auth.broker.url", "Owner decision D3 (2026-09-25): running a credential vault broker service is excluded; OMP keeps provider auth and Cedia never copies credentials."],
 ]);
 
 /** The disposition Cedia gives one settings key, with the reason whenever it is not `editable`. */
@@ -186,4 +203,141 @@ export async function writeOmpSettingsValue(
   }
   if (result === undefined) return undefined;
   return parseOmpSettingsValue(result);
+}
+
+/** Whether the runtime behind this client speaks the scoped settings contract. */
+export async function readOmpSettingsServiceVersion(client: OmpSettingsClient): Promise<number | undefined> {
+  // The adapter exposes the ready frame; a settings service answers version 1.
+  const ready = (client as { readyFrame?: { cediaSettingsServiceVersion?: unknown } }).readyFrame;
+  return typeof ready?.cediaSettingsServiceVersion === "number" ? ready.cediaSettingsServiceVersion : undefined;
+}
+
+/** Full schema metadata: label, help, defaults, env and group. Falls back to keys.list on old runtimes. */
+export async function readOmpSettingsDescribe(client: OmpSettingsClient): Promise<OmpSettingsKeysSnapshot | undefined> {
+  try {
+    const result = await control(client, "settings.keys.describe");
+    if (result === undefined) return undefined;
+    return parseOmpSettingsKeys(result);
+  } catch (error) {
+    if (error instanceof OmpCommandError && error.code === "cedia_control_unknown_operation") {
+      const legacy = await control(client, "settings.keys.list");
+      if (legacy === undefined) return undefined;
+      return parseOmpSettingsKeys(legacy);
+    }
+    throw error;
+  }
+}
+
+export interface OmpSettingsReadScope {
+  readonly context: OmpSettingsContext;
+  readonly projectDir?: string;
+}
+
+/** One effective settings value in an explicit scope, or `undefined` without a bridge. */
+export async function readOmpSettingsValueIn(
+  client: OmpSettingsClient,
+  path: string,
+  read: OmpSettingsReadScope,
+): Promise<OmpSettingsValue | undefined> {
+  let result: unknown;
+  try {
+    result = await control(client, "settings.get", {
+      path,
+      scope: read.context.scope,
+      ...(read.context.scope === "project" ? { projectDir: read.projectDir } : {}),
+    });
+  } catch (error) {
+    if (error instanceof OmpCommandError && error.code === "cedia_control_invalid_payload")
+      throw new OmpSettingsPathError(path, error.message);
+    throw error;
+  }
+  if (result === undefined) return undefined;
+  return parseOmpSettingsValue(result);
+}
+
+/** Remove one persisted override through the owner, with readback. */
+export async function unsetOmpSettingsValue(
+  client: OmpSettingsClient,
+  request: { path: string; expectedRevision?: string },
+): Promise<OmpSettingsValue | undefined> {
+  let result: unknown;
+  try {
+    result = await control(client, "settings.unset", {
+      path: request.path,
+      ...(request.expectedRevision === undefined ? {} : { expectedRevision: request.expectedRevision }),
+    });
+  } catch (error) {
+    if (error instanceof OmpCommandError && error.code === "cedia_control_stale_settings_revision")
+      throw new OmpSettingsRevisionError(request.expectedRevision ?? "(none)", error.message);
+    if (error instanceof OmpCommandError && error.code === "cedia_control_invalid_payload")
+      throw new OmpSettingsRejectedError(request.path, error.message);
+    throw error;
+  }
+  if (result === undefined) return undefined;
+  return parseOmpSettingsValue(result);
+}
+
+export interface OmpSettingsMutateResult {
+  readonly values: readonly OmpSettingsValue[];
+  readonly scope: "global" | "project";
+}
+
+/** Apply a validated scoped mutation through the owner, with readback of every change. */
+export async function mutateOmpSettings(
+  client: OmpSettingsClient,
+  mutation: OmpSettingsMutation,
+  projectDir?: string,
+): Promise<OmpSettingsMutateResult | undefined> {
+  const parsed = parseOmpSettingsMutation({ ...mutation, changes: [...mutation.changes] });
+  let result: unknown;
+  try {
+    result = await control(client, "settings.mutate", {
+      context:
+        parsed.context.scope === "project"
+          ? { scope: "project", projectDir }
+          : { scope: "global" },
+      ...(parsed.expectedRevision === undefined ? {} : { expectedRevision: parsed.expectedRevision }),
+      changes: parsed.changes,
+    });
+  } catch (error) {
+    if (error instanceof OmpCommandError && error.code === "cedia_control_stale_settings_revision")
+      throw new OmpSettingsRevisionError(parsed.expectedRevision ?? "(none)", error.message);
+    if (error instanceof OmpCommandError && error.code === "cedia_control_invalid_payload") {
+      const first = parsed.changes[0];
+      throw new OmpSettingsRejectedError(first?.path ?? "(mutation)", error.message);
+    }
+    throw error;
+  }
+  if (result === undefined) return undefined;
+  if (parsed.context.scope === "project") {
+    const record = result as { values?: unknown; scope?: unknown };
+    if (!Array.isArray(record.values)) throw new OmpSettingsValidationError("A project mutation answers its values");
+    return { values: record.values.map(entry => parseOmpSettingsValue(entry)), scope: "project" };
+  }
+  if (!Array.isArray(result)) throw new OmpSettingsValidationError("A global mutation answers its values");
+  return { values: result.map(entry => parseOmpSettingsValue(entry)), scope: "global" };
+}
+
+export interface OmpSettingsResetPreview {
+  readonly path: string;
+  readonly globalConfigured: boolean;
+  readonly current: OmpSettingsValue;
+}
+
+/** Preview an unset of the named paths. Writes nothing. */
+export async function previewOmpSettingsReset(
+  client: OmpSettingsClient,
+  paths: readonly string[],
+): Promise<readonly OmpSettingsResetPreview[] | undefined> {
+  const result = await control(client, "settings.reset.preview", { paths: [...paths] });
+  if (result === undefined) return undefined;
+  const record = result as { entries?: unknown } & unknown;
+  const entries = Array.isArray(result) ? result : (record as { entries?: unknown }).entries;
+  if (!Array.isArray(entries)) throw new OmpSettingsValidationError("A reset preview answers its entries");
+  return entries.map(entry => {
+    const item = entry as Record<string, unknown>;
+    if (typeof item.path !== "string" || typeof item.globalConfigured !== "boolean" || item.current === undefined)
+      throw new OmpSettingsValidationError("A reset preview entry names its path, state and current value");
+    return { path: item.path, globalConfigured: item.globalConfigured, current: parseOmpSettingsValue(item.current) };
+  });
 }

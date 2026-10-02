@@ -85,6 +85,9 @@ export async function startHostServer(options: Omit<HostOptions, "store"> & {
       ompSettingsKeys: () => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("../../../packages/protocol/src/index.ts").OmpSettingsKeysSnapshot>>;
       ompSettingsValue: (path: string) => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("../../../packages/protocol/src/index.ts").OmpSettingsValue>>;
       ompSettingsWrite: (request: { path: string; value: unknown; expectedRevision?: string }) => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("../../../packages/protocol/src/index.ts").OmpSettingsValue>>;
+      ompSettingsValueIn: (path: string, context: import("../../../packages/protocol/src/index.ts").OmpSettingsContext) => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("../../../packages/protocol/src/index.ts").OmpSettingsValue>>;
+      ompSettingsMutate: (mutation: import("../../../packages/protocol/src/index.ts").OmpSettingsMutation) => Promise<{ values: readonly import("../../../packages/protocol/src/index.ts").OmpSettingsValue[]; scope: "global" | "project" }>;
+      ompSettingsResetPreview: (paths: string[]) => Promise<{ path: string; globalConfigured: boolean; current: import("../../../packages/protocol/src/index.ts").OmpSettingsValue }[]>;
       /** Cedia's product-policy layer as the live runtime reports it (plan §2.8). */
       ompPolicy: () => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("./omp-policy.ts").OmpCreditPolicy>>;
       lifecycle: {
@@ -110,6 +113,9 @@ export async function startHostServer(options: Omit<HostOptions, "store"> & {
       ompSettingsKeys: () => host!.ompSettingsKeys(),
       ompSettingsValue: (path: string) => host!.ompSettingsValue(path),
       ompSettingsWrite: (request: { path: string; value: unknown; expectedRevision?: string }) => host!.ompSettingsWrite(request),
+      ompSettingsValueIn: (path, context) => host!.ompSettingsValueIn(path, context),
+      ompSettingsMutate: mutation => host!.ompSettingsMutate(mutation),
+      ompSettingsResetPreview: paths => host!.ompSettingsResetPreview(paths),
       ompPolicy: () => host!.ompPolicy(),
       lifecycle: {
         snapshot: () => lifecycle.snapshot(),

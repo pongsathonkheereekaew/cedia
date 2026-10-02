@@ -9,9 +9,16 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
 import {
-  ompSettingValueQueryOptions,
-  ompSettingsKeysQueryOptions,
   getOmpSettingsApi,
+  mutateOmpSettings,
+  ompSettingsKeysQueryOptions,
+  ompSettingsProjectsQueryOptions,
+  ompSettingsSessionsQueryOptions,
+  ompSettingScopedValueQueryOptions,
+  previewOmpSettingsReset,
+  type OmpSettingsMutation,
+  type OmpSettingsResetPreviewEntry,
+  type OmpSettingsScopeSelection,
   type OmpSettingValueAnswer,
 } from "~/lib/ompSettingsReactQuery";
 import {
@@ -30,13 +37,17 @@ import {
   filterOmpSettingKeys,
   formatOmpSettingValue,
   groupOmpSettingKeys,
+  isOmpBasicKey,
+  isOmpSettingMasked,
   isOmpSettingsStaleRevisionError,
   ompSettingApplyLabel,
   ompSettingChoices,
   ompSettingDispositionLabel,
+  ompSettingProvenanceLabel,
   parseOmpSettingInput,
   settingValueToEditorText,
   type OmpSettingKey,
+  type OmpSettingScope,
   type OmpSettingValue,
 } from "./OmpSettingsPanel.logic";
 import {
@@ -143,7 +154,21 @@ function SettingEditor({
   );
 }
 
-function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; readonly active: boolean }) {
+function scopeBadge(selection: OmpSettingsScopeSelection): string {
+  if (selection.scope === "project") return "Project";
+  if (selection.scope === "session") return "Session";
+  return "Shared";
+}
+
+function OmpSettingRow({
+  setting,
+  active,
+  selection,
+}: {
+  readonly setting: OmpSettingKey;
+  readonly active: boolean;
+  readonly selection: OmpSettingsScopeSelection;
+}) {
   const { rowRef, visible } = useLazyRowVisibility(active);
   const queryClient = useQueryClient();
   const [loadRequested, setLoadRequested] = useState(false);
@@ -153,7 +178,7 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
   const [conflict, setConflict] = useState(false);
   const [savedRevision, setSavedRevision] = useState<string | null>(null);
   const shouldLoad = active && (visible || loadRequested);
-  const valueQuery = useQuery(ompSettingValueQueryOptions(setting.path, shouldLoad));
+  const valueQuery = useQuery(ompSettingScopedValueQueryOptions(setting.path, selection, shouldLoad));
   const value = availableValue(valueQuery.data);
 
   useEffect(() => {
@@ -162,28 +187,49 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
 
   const writeMutation = useMutation({
     mutationFn: async (input: { readonly value: unknown; readonly expectedRevision: string }) => {
-      const written = await getOmpSettingsApi().setOmpSetting({
-        path: setting.path,
-        value: input.value,
-        expectedRevision: input.expectedRevision,
-      });
-      // A successful PATCH is a readback from the host. The row still refetches below so the
-      // success state is shown only after the renderer has observed the new effective value.
-      return written;
+      const mutation: OmpSettingsMutation =
+        selection.scope === "project" && selection.projectId
+          ? {
+              context: { scope: "project", projectId: selection.projectId },
+              expectedRevision: input.expectedRevision,
+              changes: [{ path: setting.path, operation: "set", value: input.value }],
+            }
+          : {
+              context: { scope: "global" },
+              expectedRevision: input.expectedRevision,
+              changes: [{ path: setting.path, operation: "set", value: input.value }],
+            };
+      try {
+        return await mutateOmpSettings(mutation);
+      } catch (error) {
+        // An older window shell has no scoped contract: fall back to the legacy
+        // single-path write, which keeps its editable-only rule by construction.
+        if (!(error instanceof Error) || !error.message.includes("newer window shell")) throw error;
+        if (setting.disposition !== "editable") throw error;
+        const written = await getOmpSettingsApi().setOmpSetting({
+          path: setting.path,
+          value: input.value,
+          expectedRevision: input.expectedRevision,
+        });
+        return { values: [], scope: "global" as const, legacy: written };
+      }
     },
   });
 
+  const writable =
+    (setting.disposition === "editable" || setting.disposition === "advanced") &&
+    selection.scope !== "session";
   const beginEditing = useCallback(() => {
-    if (!value || setting.disposition !== "editable") return;
+    if (!value || !writable) return;
     setDraft(settingValueToEditorText(value));
     setParseError(null);
     setConflict(false);
     setSavedRevision(null);
     setEditing(true);
-  }, [setting.disposition, value]);
+  }, [value, writable]);
 
   const save = useCallback(async () => {
-    if (!value || setting.disposition !== "editable") return;
+    if (!value || !writable) return;
     setParseError(null);
     setSavedRevision(null);
     let parsed: unknown;
@@ -194,10 +240,13 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
       return;
     }
     try {
-      const written = await writeMutation.mutateAsync({ value: parsed, expectedRevision: value.settingsRevision });
-      if (written.state !== "available") {
-        setParseError(`No live OMP runtime: ${written.reason}`);
-        return;
+      const outcome = await writeMutation.mutateAsync({ value: parsed, expectedRevision: value.settingsRevision });
+      if ("legacy" in outcome) {
+        const written = outcome.legacy as { state: string; reason?: string };
+        if (written.state !== "available") {
+          setParseError(`No live OMP runtime: ${written.reason ?? "unknown"}`);
+          return;
+        }
       }
       // A codexResets.autoRedeem write changes the stored half of the policy row. Re-read it
       // through the same read-only route instead of deriving a policy from this editable value.
@@ -221,7 +270,7 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
         setParseError(errorMessage(error));
       }
     }
-  }, [draft, queryClient, setting.disposition, setting.type, value, valueQuery, writeMutation]);
+  }, [draft, queryClient, setting.path, setting.type, value, valueQuery, writeMutation, writable]);
 
   const refreshAndRetry = useCallback(async () => {
     setConflict(false);
@@ -241,10 +290,14 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
     }
   }, [valueQuery]);
 
-  const description = setting.disposition === "editable"
+  const description = setting.disposition === "editable" || setting.disposition === "advanced"
     ? `${setting.type}${setting.projectWritable ? " · project layer supported" : ""} · ${ompSettingApplyLabel(setting)}`
     : `${ompSettingDispositionLabel(setting.disposition)} · ${setting.reason ?? "Cedia does not edit this path."} · ${ompSettingApplyLabel(setting)}`;
-  const layerState = value ? (value.configured ? "Configured layer" : "Schema default") : null;
+  const layerState = value ? `${ompSettingProvenanceLabel(value)} · ${scopeBadge(selection)} scope` : null;
+  const masked = value && isOmpSettingMasked(value);
+  const defaultText = setting.defaultJson === undefined ? null : `Default ${JSON.stringify(setting.defaultJson)}`;
+  const envText = setting.envVar ? `Environment overrides with ${setting.envVar}` : null;
+  const labelText = setting.label && setting.label !== setting.path ? setting.label : null;
   const valueText = value
     ? formatOmpSettingValue(value)
     : valueQuery.data?.state === "unavailable"
@@ -254,7 +307,7 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
         : valueQuery.isPending && shouldLoad
           ? "Reading effective value…"
           : "Value not loaded yet";
-  const canEdit = setting.disposition === "editable" && value !== undefined && !value.credential && !value.redacted && value.tooLarge !== true;
+  const canEdit = writable && value !== undefined && !value.credential && !value.redacted && value.tooLarge !== true;
 
   return (
     <div ref={rowRef} className={SETTINGS_CARD_ROW_CLASS_NAME} data-slot="settings-row">
@@ -266,11 +319,27 @@ function OmpSettingRow({ setting, active }: { readonly setting: OmpSettingKey; r
               {ompSettingDispositionLabel(setting.disposition)}
             </span>
           </div>
+          {labelText ? <p className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>{labelText}</p> : null}
           <p className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>{description}</p>
+          {setting.description ? <p className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>{setting.description}</p> : null}
           <div className="pt-1 text-xs text-muted-foreground">
             <span className="font-mono">{valueText}</span>
             {layerState ? <span className="ml-2">({layerState})</span> : null}
           </div>
+          {masked && value && Object.hasOwn(value, "storedGlobal") ? (
+            <p className="pt-1 text-xs text-muted-foreground">
+              A saved shared value (<span className="font-mono">{JSON.stringify(value.storedGlobal)}</span>) is masked by a stronger layer right now.
+            </p>
+          ) : null}
+          {defaultText && !(value && value.configured) ? (
+            <p className="pt-1 text-xs text-muted-foreground">{defaultText}.</p>
+          ) : null}
+          {envText ? <p className="pt-1 text-xs text-muted-foreground">{envText}.</p> : null}
+          {selection.scope === "session" ? (
+            <p className="pt-1 text-xs text-muted-foreground">
+              Inspect-only view of a live task. Change persistent settings in the Shared or Project scope; drive this task from its composer.
+            </p>
+          ) : null}
           {savedRevision ? (
             <p className="pt-1 text-xs text-muted-foreground">
               Saved and read back at revision <span className="font-mono">{savedRevision}</span>. A change may reach a running session after reload or in a new task.
@@ -387,10 +456,13 @@ function CediaCreditPolicySurface({ active }: { readonly active: boolean }) {
 export function OmpSettingsSubset({
   paths,
   active = true,
+  selection,
 }: {
   readonly paths: readonly string[];
   readonly active?: boolean;
+  readonly selection?: OmpSettingsScopeSelection;
 }) {
+  const scopeSelection = selection ?? { scope: "global" as const };
   const keysQuery = useQuery({ ...ompSettingsKeysQueryOptions(), enabled: active });
   const answer = keysQuery.data?.state === "available" ? keysQuery.data : undefined;
   const wanted = useMemo(() => {
@@ -419,21 +491,96 @@ export function OmpSettingsSubset({
   return (
     <>
       {wanted.map((setting) => (
-        <OmpSettingRow key={setting.path} setting={setting} active={active} />
+        <OmpSettingRow key={setting.path} setting={setting} active={active} selection={scopeSelection} />
       ))}
     </>
   );
 }
 
+type OmpSettingsView = "basic" | "advanced";
+
 export function OmpSettingsPanel({ active = true }: OmpSettingsPanelProps) {
-  const keysQuery = useQuery({ ...ompSettingsKeysQueryOptions(), enabled: active });
+  const queryClient = useQueryClient();
+  const keysQuery = useQuery({ ...ompSettingsKeysQueryOptions(), enabled: active, refetchOnWindowFocus: true });
   const [filter, setFilter] = useState("");
+  const [view, setView] = useState<OmpSettingsView>("basic");
+  const [scope, setScope] = useState<OmpSettingScope>("global");
+  const [projectId, setProjectId] = useState<string | undefined>(undefined);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [preview, setPreview] = useState<readonly OmpSettingsResetPreviewEntry[] | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
   const answer = keysQuery.data?.state === "available" ? keysQuery.data : undefined;
-  const filteredKeys = useMemo(
-    () => filterOmpSettingKeys(answer?.keys ?? [], filter),
-    [answer?.keys, filter],
+  const projectsQuery = useQuery({ ...ompSettingsProjectsQueryOptions(active && scope === "project") });
+  const sessionsQuery = useQuery({ ...ompSettingsSessionsQueryOptions(projectId, active && scope === "session") });
+  const projects = useMemo(
+    () => (projectsQuery.data ?? []).filter(project => project.archived !== true),
+    [projectsQuery.data],
   );
+  const sessions = useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data]);
+  const selection: OmpSettingsScopeSelection = useMemo(
+    () => ({
+      scope,
+      ...(scope === "project" && projectId ? { projectId } : {}),
+      ...(scope === "session" && sessionId ? { sessionId } : {}),
+    }),
+    [scope, projectId, sessionId],
+  );
+  const viewKeys = useMemo(() => {
+    const keys = answer?.keys ?? [];
+    if (view !== "basic") return keys;
+    return keys.filter(isOmpBasicKey);
+  }, [answer?.keys, view]);
+  const filteredKeys = useMemo(() => filterOmpSettingKeys(viewKeys, filter), [viewKeys, filter]);
   const groups = useMemo(() => groupOmpSettingKeys(filteredKeys), [filteredKeys]);
+  const scopeReady =
+    scope === "global" || (scope === "project" && !!projectId) || (scope === "session" && !!sessionId);
+
+  const runPreview = useCallback(async () => {
+    setPreview(null);
+    setPreviewError(null);
+    try {
+      // Preview the visible category: every configured global override in view.
+      const paths = viewKeys
+        .filter(key => key.disposition !== "protected" && key.disposition !== "excluded")
+        .map(key => key.path);
+      setPreview(await previewOmpSettingsReset(paths));
+    } catch (error) {
+      setPreviewError(errorMessage(error));
+    }
+  }, [viewKeys]);
+
+  const runReset = useCallback(async () => {
+    if (!preview || scope === "session") return;
+    setResetting(true);
+    setPreviewError(null);
+    try {
+      const revision = preview.find(entry => entry.globalConfigured)?.current.settingsRevision;
+      const mutation: OmpSettingsMutation =
+        scope === "project" && projectId
+          ? {
+              context: { scope: "project", projectId },
+              ...(revision === undefined ? {} : { expectedRevision: revision }),
+              changes: preview.filter(entry => entry.globalConfigured).map(entry => ({ path: entry.path, operation: "unset" as const })),
+            }
+          : {
+              context: { scope: "global" },
+              ...(revision === undefined ? {} : { expectedRevision: revision }),
+              changes: preview.filter(entry => entry.globalConfigured).map(entry => ({ path: entry.path, operation: "unset" as const })),
+            };
+      if (mutation.changes.length === 0) {
+        setPreview(null);
+        return;
+      }
+      await mutateOmpSettings(mutation);
+      setPreview(null);
+      await queryClient.invalidateQueries({ queryKey: ["cedia", "omp-settings"] });
+    } catch (error) {
+      setPreviewError(errorMessage(error));
+    } finally {
+      setResetting(false);
+    }
+  }, [preview, scope, projectId, queryClient]);
 
   if (!active) return null;
 
@@ -443,34 +590,128 @@ export function OmpSettingsPanel({ active = true }: OmpSettingsPanelProps) {
       <SettingsSectionShell title="OMP settings">
         <div className="mb-3 space-y-2">
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Setting paths and apply timing come from the live OMP inventory. Values are read only as rows enter view, and credential paths stay redacted. Each row states when a saved change takes effect, or when its timing is unclassified.
+            Setting paths and apply timing come from the live OMP inventory, with no task required. Basic shows frequent controls; Advanced reveals the complete classified inventory, including keys without OMP rows. Values are read only as rows enter view, and credential paths stay redacted. Each row states when a saved change takes effect, or when its timing is unclassified.
           </p>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Settings view">
+            {(["basic", "advanced"] as const).map(choice => (
+              <Button key={choice} size="xs" variant={view === choice ? "default" : "outline"} onClick={() => setView(choice)}>
+                {choice === "basic" ? "Basic" : "Advanced"}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Settings scope">
+            {(["global", "project", "session"] as const).map(choice => (
+              <Button
+                key={choice}
+                size="xs"
+                variant={scope === choice ? "default" : "outline"}
+                onClick={() => {
+                  setScope(choice);
+                  setPreview(null);
+                  setPreviewError(null);
+                }}
+              >
+                {choice === "global" ? "Shared" : choice === "project" ? "Project" : "Session"}
+              </Button>
+            ))}
+          </div>
+          {scope === "project" ? (
+            <select
+              value={projectId ?? ""}
+              onChange={event => {
+                setProjectId(event.target.value || undefined);
+                setPreview(null);
+              }}
+              aria-label="Project scope"
+              className="w-full rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-background-control-opaque)] px-2 py-1.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <option value="" disabled>Choose a project</option>
+              {projectsQuery.isPending ? <option value="" disabled>Reading projects…</option> : null}
+              {projects.map(project => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {scope === "session" ? (
+            <select
+              value={sessionId ?? ""}
+              onChange={event => setSessionId(event.target.value || undefined)}
+              aria-label="Session scope"
+              className="w-full rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-background-control-opaque)] px-2 py-1.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <option value="" disabled>Choose a live task</option>
+              {sessions.map(session => (
+                <option key={session.id} value={session.id}>
+                  {session.title}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <Input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter by setting path or tab"
+            placeholder="Filter by path, label, group or help text"
             aria-label="Filter OMP settings"
             variant="soft"
             className="w-full"
           />
         </div>
 
+        {scope !== "global" && !scopeReady ? (
+          <SettingsEmptyState layout="status">
+            {scope === "project"
+              ? "Choose a project to inspect its configuration. Project writes resolve the trusted directory and refuse while the IDE holds its config dirty."
+              : "Choose a live task for an inspect-only view. Session controls stay in the task; nothing here starts, steers or rewrites it."}
+          </SettingsEmptyState>
+        ) : null}
         {keysQuery.isPending ? <SettingsEmptyState layout="status">Reading the live OMP settings inventory…</SettingsEmptyState> : null}
         {keysQuery.isError ? (
           <SettingsEmptyState layout="status" tone="destructive">Could not read OMP settings: {errorMessage(keysQuery.error)}</SettingsEmptyState>
         ) : null}
         {keysQuery.data?.state === "unavailable" ? (
-          <SettingsEmptyState layout="status">No live OMP runtime. {keysQuery.data.reason}</SettingsEmptyState>
+          <SettingsEmptyState layout="status">No OMP configuration is reachable. {keysQuery.data.reason}</SettingsEmptyState>
         ) : null}
-        {answer && groups.length === 0 ? <SettingsEmptyState layout="status">No OMP settings match this filter.</SettingsEmptyState> : null}
-        {answer ? groups.map((group) => (
+        {answer && scopeReady && groups.length === 0 ? <SettingsEmptyState layout="status">No OMP settings match this filter.</SettingsEmptyState> : null}
+        {answer && scopeReady ? groups.map((group) => (
           <section key={group.label} className="mt-6 space-y-2">
             <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.label}</h2>
             <SettingsCard>
-              {group.keys.map((setting) => <OmpSettingRow key={setting.path} setting={setting} active={active} />)}
+              {group.keys.map((setting) => (
+                <OmpSettingRow key={`${selection.scope}:${selection.projectId ?? ""}:${selection.sessionId ?? ""}:${setting.path}`} setting={setting} active={active} selection={selection} />
+              ))}
             </SettingsCard>
           </section>
         )) : null}
+        {answer && scopeReady && scope !== "session" ? (
+          <div className="mt-6 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="xs" variant="outline" onClick={() => void runPreview()}>
+                Preview {scope === "project" ? "project" : "shared"} reset
+              </Button>
+              {preview ? (
+                <Button size="xs" variant="destructive-outline" disabled={resetting || preview.every(entry => !entry.globalConfigured)} onClick={() => void runReset()}>
+                  {resetting ? "Resetting…" : `Reset ${preview.filter(entry => entry.globalConfigured).length} overrides`}
+                </Button>
+              ) : null}
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Reset removes only explicit overrides in this view and reveals the next inherited value. Credentials, files, history, devices and source resources are never part of a reset.
+            </p>
+            {previewError ? <p className="text-xs text-destructive" role="alert">{previewError}</p> : null}
+            {preview ? (
+              <SettingsCard>
+                {preview.filter(entry => entry.globalConfigured).map(entry => (
+                  <SettingsListRow key={entry.path} title={entry.path} description={`Currently ${JSON.stringify(entry.current.value)}`} />
+                ))}
+                {preview.every(entry => !entry.globalConfigured) ? (
+                  <SettingsListRow title="Nothing to reset" description="No explicit overrides in this view." />
+                ) : null}
+              </SettingsCard>
+            ) : null}
+          </div>
+        ) : null}
       </SettingsSectionShell>
     </>
   );

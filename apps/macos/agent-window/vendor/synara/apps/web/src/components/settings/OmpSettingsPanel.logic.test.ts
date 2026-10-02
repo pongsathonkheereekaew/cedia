@@ -4,9 +4,12 @@ import {
   filterOmpSettingKeys,
   formatOmpSettingValue,
   groupOmpSettingKeys,
+  isOmpBasicKey,
+  isOmpSettingMasked,
   isOmpSettingsStaleRevisionError,
   ompSettingApplyLabel,
   ompSettingChoices,
+  ompSettingProvenanceLabel,
   parseOmpSettingInput,
   settingValueToEditorText,
 } from "./OmpSettingsPanel.logic";
@@ -100,5 +103,56 @@ describe("OMP settings panel logic", () => {
   it("recognizes only the typed stale-revision failure as a conflict", () => {
     expect(isOmpSettingsStaleRevisionError(Object.assign(new Error("moved"), { code: "omp_settings_stale_revision" }))).toBe(true);
     expect(isOmpSettingsStaleRevisionError(Object.assign(new Error("other"), { code: "omp_settings_rejected" }))).toBe(false);
+  });
+});
+
+describe("OMP settings Basic view and provenance", () => {
+  const basic = (overrides: Record<string, unknown> = {}) => ({
+    path: "cycleOrder",
+    type: "array",
+    credential: false,
+    ui: true,
+    tab: "models",
+    projectWritable: false,
+    disposition: "editable" as const,
+    ...overrides,
+  });
+
+  it("curates frequent controls without hiding anything from Advanced", () => {
+    expect(isOmpBasicKey(basic())).toBe(true);
+    expect(isOmpBasicKey(basic({ path: "searxng.endpoint", tab: "providers" }))).toBe(true);
+    expect(isOmpBasicKey(basic({ path: "compaction.thresholdTokens", tab: "context", ui: false }))).toBe(true);
+    expect(isOmpBasicKey(basic({ path: "tools.approvalMode", tab: "tools" }))).toBe(true);
+    // Credentials, exclusions and internals never surface as Basic.
+    expect(isOmpBasicKey(basic({ path: "auth.broker.token", credential: true, disposition: "protected" as const }))).toBe(false);
+    expect(isOmpBasicKey(basic({ path: "live.voice", disposition: "excluded" as const }))).toBe(false);
+    expect(isOmpBasicKey(basic({ path: "display.subagentLivePreview", tab: "appearance" }))).toBe(false);
+  });
+
+  it("filters by label, group and help text, never by secret values", () => {
+    const rows = [
+      basic({ path: "searxng.endpoint", label: "SearXNG Endpoint", group: "Services", description: "Base URL of search" }),
+      basic({ path: "cycleOrder" }),
+    ];
+    expect(filterOmpSettingKeys(rows, "searxng").map(key => key.path)).toEqual(["searxng.endpoint"]);
+    expect(filterOmpSettingKeys(rows, "services").map(key => key.path)).toEqual(["searxng.endpoint"]);
+    expect(filterOmpSettingKeys(rows, "base url").map(key => key.path)).toEqual(["searxng.endpoint"]);
+  });
+
+  it("names provenance and detects masking", () => {
+    const base = {
+      path: "searxng.endpoint",
+      credential: false,
+      redacted: false,
+      configured: true,
+      value: "http://env:8080",
+      settingsRevision: "rev",
+    };
+    expect(ompSettingProvenanceLabel({ ...base, provenance: "env" })).toBe("Set by the environment");
+    expect(ompSettingProvenanceLabel({ ...base, provenance: "global" })).toBe("Saved in shared settings");
+    expect(ompSettingProvenanceLabel({ ...base, provenance: undefined })).toBe("Schema default");
+    expect(isOmpSettingMasked({ ...base, provenance: "env", storedGlobal: "http://saved:8080" })).toBe(true);
+    expect(isOmpSettingMasked({ ...base, provenance: "global", storedGlobal: "http://env:8080" })).toBe(false);
+    expect(isOmpSettingMasked({ ...base, provenance: "global" })).toBe(false);
   });
 });

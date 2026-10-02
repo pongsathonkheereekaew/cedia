@@ -12,6 +12,7 @@ import { ComposerStackedPanel } from "./ComposerStackedPanel";
 import {
   serverQueueMutationOptions,
   serverQueueQueryOptions,
+  serverQueueRowMutationOptions,
   type CediaQueueAnswer,
   type CediaQueueEntry,
 } from "../../lib/serverReactQuery";
@@ -31,28 +32,84 @@ function imageLabel(images: number): string | null {
   return `${images} image${images === 1 ? "" : "s"}`;
 }
 
-function QueueEntry({ entry, index }: { readonly entry: CediaQueueEntry; readonly index: number }) {
+function QueueEntry({
+  entry,
+  index,
+  queue,
+  busy,
+  onRemove,
+  onPromote,
+}: {
+  readonly entry: CediaQueueEntry;
+  readonly index: number;
+  readonly queue?: "steering" | "followUp";
+  readonly busy?: boolean;
+  readonly onRemove?: (entry: CediaQueueEntry, queue: "steering" | "followUp") => void;
+  readonly onPromote?: (entry: CediaQueueEntry) => void;
+}) {
+  // Rows past the addressable length cannot name themselves back to OMP;
+  // those submissions still drop through Drop last/all below.
+  const addressable = !entry.truncated;
   return (
     <li
       data-queue-index={index}
       className="rounded-md border border-border/60 bg-background/50 px-2 py-1.5"
     >
       <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-foreground/85">{entry.text}</p>
-      <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground">
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground">
         {entry.truncated ? <span>Text truncated</span> : null}
         {imageLabel(entry.images) ? <span>{imageLabel(entry.images)}</span> : null}
+        {onRemove && queue && addressable ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onRemove(entry, queue)}
+            aria-label={`Remove queued submission ${index + 1}`}
+            className="underline decoration-dotted underline-offset-2 hover:text-foreground disabled:opacity-50"
+          >
+            Remove
+          </button>
+        ) : null}
+        {onRemove && !addressable ? <span title="Long submissions drop through Drop last/all">Unaddressable</span> : null}
+        {onPromote && queue === "followUp" && addressable ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onPromote(entry)}
+            aria-label={`Promote queued submission ${index + 1} to steering`}
+            className="underline decoration-dotted underline-offset-2 hover:text-foreground disabled:opacity-50"
+          >
+            Promote
+          </button>
+        ) : null}
       </div>
     </li>
   );
 }
 
-function QueueGroup({ label, entries }: { readonly label: string; readonly entries: readonly CediaQueueEntry[] }) {
+function QueueGroup({
+  label,
+  entries,
+  queue,
+  busy,
+  onRemove,
+  onPromote,
+}: {
+  readonly label: string;
+  readonly entries: readonly CediaQueueEntry[];
+  readonly queue: "steering" | "followUp";
+  readonly busy: boolean;
+  readonly onRemove?: (entry: CediaQueueEntry, queue: "steering" | "followUp") => void;
+  readonly onPromote?: (entry: CediaQueueEntry) => void;
+}) {
   if (entries.length === 0) return null;
   return (
     <section aria-label={label}>
       <p className="mb-1 text-[11px] font-medium text-foreground/75">{label}</p>
       <ul className="max-h-32 space-y-1 overflow-auto pr-1">
-        {entries.map((entry, index) => <QueueEntry key={`${label}-${index}`} entry={entry} index={index} />)}
+        {entries.map((entry, index) => (
+          <QueueEntry key={`${label}-${index}`} entry={entry} index={index} queue={queue} busy={busy} onRemove={onRemove} onPromote={onPromote} />
+        ))}
       </ul>
     </section>
   );
@@ -73,7 +130,12 @@ export function CediaQueuePanel({
   dropError = null,
   busy = false,
   onDrop,
-}: CediaQueuePanelProps) {
+  onRemove,
+  onPromote,
+}: CediaQueuePanelProps & {
+  readonly onRemove?: (entry: CediaQueueEntry, queue: "steering" | "followUp") => void;
+  readonly onPromote?: (entry: CediaQueueEntry) => void;
+}) {
   if (state?.state === "unavailable") {
     return (
       <ComposerStackedPanel
@@ -127,8 +189,8 @@ export function CediaQueuePanel({
 
       {hasQueuedEntries ? (
         <div className="space-y-2">
-          <QueueGroup label="Steering" entries={state.steering} />
-          <QueueGroup label="Follow-up" entries={state.followUp} />
+          <QueueGroup label="Steering" entries={state.steering} queue="steering" busy={busy} onRemove={onRemove} onPromote={onPromote} />
+          <QueueGroup label="Follow-up" entries={state.followUp} queue="followUp" busy={busy} onRemove={onRemove} onPromote={onPromote} />
         </div>
       ) : (
         <p className="text-[11px] leading-relaxed text-muted-foreground">Nothing queued</p>
@@ -156,8 +218,10 @@ export function CediaQueueSurface({ sessionId }: { readonly sessionId: string })
   const queryClient = useQueryClient();
   const queueQuery = useQuery(serverQueueQueryOptions(sessionId, sessionId.length > 0));
   const mutation = useMutation(serverQueueMutationOptions({ sessionId, queryClient }));
+  const rowMutation = useMutation(serverQueueRowMutationOptions({ sessionId, queryClient }));
   const [dropped, setDropped] = useState<readonly CediaQueueEntry[] | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const onDrop = useCallback(async (mode: "last" | "all") => {
     if (mutation.isPending) return;
@@ -175,6 +239,26 @@ export function CediaQueueSurface({ sessionId }: { readonly sessionId: string })
     }
   }, [mutation]);
 
+  const onRemove = useCallback(async (entry: CediaQueueEntry, queue: "steering" | "followUp") => {
+    if (rowMutation.isPending) return;
+    setRowError(null);
+    try {
+      await rowMutation.mutateAsync({ commandId: newCommandId(), message: entry.text, queue });
+    } catch (error) {
+      setRowError(errorMessage(error));
+    }
+  }, [rowMutation]);
+
+  const onPromote = useCallback(async (entry: CediaQueueEntry) => {
+    if (rowMutation.isPending) return;
+    setRowError(null);
+    try {
+      await rowMutation.mutateAsync({ promote: true as const, commandId: newCommandId(), message: entry.text });
+    } catch (error) {
+      setRowError(errorMessage(error));
+    }
+  }, [rowMutation]);
+
   const state = queueQuery.data ?? (queueQuery.isError
     ? { state: "unavailable" as const, reason: errorMessage(queueQuery.error) }
     : null);
@@ -182,9 +266,11 @@ export function CediaQueueSurface({ sessionId }: { readonly sessionId: string })
     <CediaQueuePanel
       state={state}
       dropped={dropped}
-      dropError={dropError}
-      busy={mutation.isPending}
+      dropError={dropError ?? rowError}
+      busy={mutation.isPending || rowMutation.isPending}
       onDrop={onDrop}
+      onRemove={onRemove}
+      onPromote={onPromote}
     />
   );
 }

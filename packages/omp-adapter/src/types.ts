@@ -76,6 +76,8 @@ export const RPC_COMMAND_TYPES = [
 	"prompt",
 	"steer",
 	"follow_up",
+	"remove_queued_message",
+	"promote_queued_message",
 	"abort",
 	"abort_and_prompt",
 	"new_session",
@@ -98,6 +100,7 @@ export const RPC_COMMAND_TYPES = [
 	"set_interrupt_mode",
 	"compact",
 	"set_auto_compaction",
+	"set_cache_warming",
 	"set_auto_retry",
 	"abort_retry",
 	"bash",
@@ -317,6 +320,8 @@ export interface RpcCommandPayloadMap {
 	prompt: { message: string; images?: unknown[]; streamingBehavior?: "steer" | "followUp"; cediaIntentId?: string; cediaSelectedSlashCommand?: string };
 	steer: { message: string; images?: unknown[]; cediaIntentId?: string };
 	follow_up: { message: string; images?: unknown[]; cediaIntentId?: string };
+	remove_queued_message: { message: string; queue: "steering" | "followUp" };
+	promote_queued_message: { message: string };
 	abort: EmptyPayload;
 	abort_and_prompt: { message: string; images?: unknown[]; cediaIntentId?: string };
 	new_session: { parentSession?: string };
@@ -339,6 +344,7 @@ export interface RpcCommandPayloadMap {
 	set_interrupt_mode: { mode: "immediate" | "wait" };
 	compact: { customInstructions?: string };
 	set_auto_compaction: { enabled: boolean };
+	set_cache_warming: { mode: "off" | "streaming" | "idle" };
 	set_auto_retry: { enabled: boolean };
 	abort_retry: EmptyPayload;
 	bash: { command: string };

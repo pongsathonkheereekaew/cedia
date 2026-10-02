@@ -27,6 +27,23 @@ export type OmpQueueDropRequest = {
 	readonly mode: OmpQueueDropMode;
 };
 
+export type OmpQueueRowAddress = "steering" | "followUp";
+
+export type OmpQueueRemoveRequest = {
+	readonly commandId: string;
+	readonly incarnation: string;
+	/** Full row text (rows display up to 4,096 chars; longer submissions use drop last/all). */
+	readonly message: string;
+	readonly queue: OmpQueueRowAddress;
+};
+
+export type OmpQueuePromoteRequest = {
+	readonly commandId: string;
+	readonly incarnation: string;
+	/** Full row text of a follow-up row to move into steering. */
+	readonly message: string;
+};
+
 /** A validation failure from an OMP queue result. */
 export class OmpQueueValidationError extends TypeError {
 	readonly name = "OmpQueueValidationError";

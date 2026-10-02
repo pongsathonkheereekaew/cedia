@@ -16,7 +16,7 @@ import { createCediaNativeApi } from "../src/cedia-adapter.ts";
  */
 
 const audit = JSON.parse(
-	readFileSync(join(import.meta.dir, "../../../../docs/maintenance/evidence/omp-complete-scope-2026-09-23/config-cli.json"), "utf8"),
+	readFileSync(join(import.meta.dir, "../../../../docs/maintenance/evidence/omp-complete-scope-2026-10-02/config-cli.json"), "utf8"),
 ) as {
 	slashCommands: { name: string; aliases?: string[]; subcommands?: (string | { name?: string })[]; surfaces?: string[]; tuiOnly?: boolean }[];
 };

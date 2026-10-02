@@ -175,6 +175,19 @@ export interface CediaQueueDropInput {
   readonly mode: "last" | "all";
 }
 
+export interface CediaQueueRemoveInput {
+  readonly commandId?: string;
+  readonly incarnation?: string;
+  readonly message: string;
+  readonly queue: "steering" | "followUp";
+}
+
+export interface CediaQueuePromoteInput {
+  readonly commandId?: string;
+  readonly incarnation?: string;
+  readonly message: string;
+}
+
 export type CediaBashAnswer =
   | {
       readonly state: "available";
@@ -810,6 +823,8 @@ interface CediaProgressApi {
 interface CediaQueueApi {
   readonly getQueue: (sessionId: string) => Promise<unknown>;
   readonly dropQueued: (sessionId: string, input: CediaQueueDropInput) => Promise<unknown>;
+  readonly removeQueuedMessage?: (sessionId: string, input: CediaQueueRemoveInput) => Promise<unknown>;
+  readonly promoteQueuedMessage?: (sessionId: string, input: CediaQueuePromoteInput) => Promise<unknown>;
 }
 
 interface CediaContextApi {
@@ -1790,6 +1805,35 @@ export function serverQueueMutationOptions(input: { readonly sessionId: string; 
     mutationKey: serverMutationKeys.queue(input.sessionId),
     mutationFn: async (body: CediaQueueDropInput) =>
       parseCediaQueueDropAnswer(await getCediaQueueApi().dropQueued(input.sessionId, body)),
+    onSuccess: (answer) => {
+      input.queryClient.setQueryData(serverQueryKeys.queue(input.sessionId), answer);
+      void input.queryClient.invalidateQueries({ queryKey: serverQueryKeys.queue(input.sessionId) });
+    },
+  });
+}
+
+function parseCediaQueueRowAnswer(value: unknown, outcome: "removed" | "promoted"): CediaQueueAnswer {
+  const answer = parseCediaQueueAnswer(value);
+  if (answer.state === "available") {
+    const flag = (answer as unknown as Record<string, unknown>)[outcome];
+    if (flag !== true && flag !== false) throw new Error("Cedia host returned an invalid queue row response.");
+  }
+  return answer;
+}
+
+export function serverQueueRowMutationOptions(input: { readonly sessionId: string; readonly queryClient: QueryClient }) {
+  return mutationOptions({
+    mutationKey: [...serverMutationKeys.queue(input.sessionId), "row"],
+    mutationFn: async (body: CediaQueueRemoveInput | ({ readonly promote: true } & CediaQueuePromoteInput)) => {
+      const api = getCediaQueueApi();
+      if ("promote" in body) {
+        if (typeof api.promoteQueuedMessage !== "function") throw new Error("Queue promote needs a newer window shell.");
+        const { promote: _promote, ...rest } = body;
+        return parseCediaQueueRowAnswer(await api.promoteQueuedMessage(input.sessionId, rest), "promoted");
+      }
+      if (typeof api.removeQueuedMessage !== "function") throw new Error("Queue remove needs a newer window shell.");
+      return parseCediaQueueRowAnswer(await api.removeQueuedMessage(input.sessionId, body), "removed");
+    },
     onSuccess: (answer) => {
       input.queryClient.setQueryData(serverQueryKeys.queue(input.sessionId), answer);
       void input.queryClient.invalidateQueries({ queryKey: serverQueryKeys.queue(input.sessionId) });

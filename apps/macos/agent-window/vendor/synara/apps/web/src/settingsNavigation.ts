@@ -28,7 +28,7 @@ export const SETTINGS_SECTION_IDS = [
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
-export type SettingsNavGroupId = "personal" | "coding" | "system" | "archived";
+export type SettingsNavGroupId = "general" | "ai-omp" | "ide" | "archived";
 
 /**
  * Deep-link scroll targets inside settings panels. Each id is shared by its DOM owner and callers
@@ -54,16 +54,16 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   id: SettingsNavGroupId;
   label: string;
 }> = [
-  { id: "personal", label: "Personal" },
-  { id: "coding", label: "Coding" },
-  { id: "system", label: "System" },
+  { id: "general", label: "General" },
+  { id: "ai-omp", label: "AI/OMP" },
+  { id: "ide", label: "IDE" },
   { id: "archived", label: "Archived" },
 ];
 
 export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   {
     id: "general",
-    group: "personal",
+    group: "general",
     label: "General",
     description: "Choose defaults for new chats, navigation, and the Environment panel.",
     icon: "settings-gear-4",
@@ -71,7 +71,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "remote",
-    group: "personal",
+    group: "general",
     label: "Remote",
     description: "Reach this Mac from your tailnet: the gateway address, device enrollment, and paired devices.",
     icon: "globe",
@@ -79,7 +79,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "profile",
-    group: "personal",
+    group: "general",
     label: "Profile",
     description: "Your local display name, handle, and avatar.",
     icon: "user",
@@ -87,7 +87,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "appearance",
-    group: "personal",
+    group: "general",
     label: "Appearance",
     description: "Customize the theme, typography, density, and time format.",
     icon: "color-palette",
@@ -95,7 +95,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "notifications",
-    group: "personal",
+    group: "general",
     label: "Notifications",
     description: "Choose how Cedia tells you when work finishes or needs attention.",
     icon: "bell",
@@ -103,7 +103,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "behavior",
-    group: "personal",
+    group: "general",
     label: "Chat behavior",
     description: "Control live responses, follow-ups, review defaults, and safety confirmations.",
     icon: "settings-slider-hor",
@@ -111,15 +111,15 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "shortcuts",
-    group: "personal",
+    group: "ide",
     label: "Keybindings",
-    description: "Capture, customize, and add shortcuts for every Cedia command.",
+    description: "Edit the real IDE keybindings file Cedia and the workbench share. OMP terminal shortcuts stay separate.",
     icon: "shortcut",
-    eyebrow: "Key bindings",
+    eyebrow: "IDE key bindings",
   },
   {
     id: "providers",
-    group: "coding",
+    group: "ai-omp",
     label: "Agent providers",
     description: "Choose visible coding agents and manage their installed CLI tools.",
     icon: "puzzle",
@@ -127,7 +127,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "models",
-    group: "coding",
+    group: "ai-omp",
     label: "Models & writing",
     description: "Choose the model used for Git writing and add custom model slugs.",
     icon: "brain",
@@ -135,7 +135,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "omp",
-    group: "coding",
+    group: "ai-omp",
     label: "AI / OMP settings",
     description: "Inspect and edit the live OMP configuration with revision-safe writes.",
     icon: "brain",
@@ -143,7 +143,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "advanced",
-    group: "system",
+    group: "ai-omp",
     label: "System tools",
     description: "Manage sessions, recovery tools, low-level keybindings, and version details.",
     icon: "toolbox",
@@ -151,7 +151,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   },
   {
     id: "status",
-    group: "system",
+    group: "ai-omp",
     label: "Capability status",
     description: "See what this Cedia host supports, what needs setup, and what is not implemented yet.",
     icon: "circle-info",

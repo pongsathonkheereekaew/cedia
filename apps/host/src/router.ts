@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
-import { CEDIA_PROTOCOL_VERSION, type CommandRequest, type HostLifecycleAdmissionReceipt, type HostLifecycleSnapshot, type HostLifecycleStatus, type HostOmpCapabilitySnapshot, type HostOmpSettingsAnswer, type OmpGoalCommandRequest, type OmpSettingsKeysSnapshot, type OmpSettingsValue, type HostQuitReceipt, type UiResponseRequest } from "../../../packages/protocol/src/index.ts";
+import { CEDIA_PROTOCOL_VERSION, parseOmpSettingsContext, parseOmpSettingsMutation, type CommandRequest, type HostLifecycleAdmissionReceipt, type HostLifecycleSnapshot, type HostLifecycleStatus, type HostOmpCapabilitySnapshot, type HostOmpSettingsAnswer, type OmpGoalCommandRequest, type OmpSettingsContext, type OmpSettingsKeysSnapshot, type OmpSettingsMutation, type OmpSettingsValue, type HostQuitReceipt, type UiResponseRequest } from "../../../packages/protocol/src/index.ts";
 import { isGitMethod } from "../../../packages/protocol/src/git.ts";
 import { OMP_BASELINE_VERSION } from "../../../packages/omp-adapter/src/types.ts";
 import { DeviceAuth } from "./auth.ts";
@@ -18,7 +18,7 @@ import { SettingsConflictError, SettingsStore } from "./settings.ts";
 import { DraftConflictError, DraftStore } from "./drafts.ts";
 import { OmpCapabilityRevisionError } from "./omp-capabilities.ts";
 import { ompSettingDisposition } from "./omp-settings.ts";
-import { OmpSettingsNotEditableError, OmpSettingsPathError, OmpSettingsRevisionError } from "./omp-settings.ts";
+import { OmpSettingsNotEditableError, OmpSettingsPathError, OmpSettingsRejectedError, OmpSettingsRevisionError, OmpSettingsValidationError } from "./omp-settings.ts";
 import type { OmpAdvisorCommandRequest } from "./omp-advisor.ts";
 import type { OmpAdvisorConfigScope, OmpAdvisorConfigWriteRequest } from "./omp-advisor-config.ts";
 import { MAX_ADVISOR_CONFIG_TEXT_CHARS } from "./omp-advisor-config.ts";
@@ -248,6 +248,26 @@ function bashAbortCommand(value: Record<string, unknown>): OmpBashAbortRequest {
   const commandId = string(value.commandId, "commandId");
   const incarnation = string(value.incarnation, "incarnation");
   return { commandId, incarnation };
+}
+
+function queueRowCommand(value: Record<string, unknown>, kind: "remove" | "promote"): { commandId: string; incarnation: string; message: string; queue?: string } {
+  for (const key of Object.keys(value)) {
+    if (!["commandId", "incarnation", "message", "queue"].includes(key)) throw new HostError("invalid_body", `Unsupported queue ${kind} field ${key}`, 400);
+    if (kind === "promote" && key === "queue") throw new HostError("invalid_body", "Queue promote addresses follow-up rows only", 400);
+  }
+  const message = string(value.message, "message");
+  if (message.length === 0 || message.length > 4096) throw new HostError("invalid_body", "A queue row message is 1-4096 chars; longer submissions use drop last/all", 400);
+  const out: { commandId: string; incarnation: string; message: string; queue?: string } = {
+    commandId: string(value.commandId, "commandId"),
+    incarnation: string(value.incarnation, "incarnation"),
+    message,
+  };
+  if (kind === "remove") {
+    const queue = string(value.queue, "queue");
+    if (queue !== "steering" && queue !== "followUp") throw new HostError("invalid_body", "A queue removal names queue steering or followUp", 400);
+    out.queue = queue;
+  }
+  return out;
 }
 
 function queueDropCommand(value: Record<string, unknown>): OmpQueueDropRequest {
@@ -482,7 +502,10 @@ function gitFailure(error: unknown, runtimePaths: readonly string[]): HostError 
 }
 
 /** Identical authenticated application router for loopback HTTP and encrypted relay. */
-export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService; ompCapabilities?: (expectedRevision?: string) => Promise<HostOmpCapabilitySnapshot>; ompSettingsKeys?: () => Promise<HostOmpSettingsAnswer<OmpSettingsKeysSnapshot>>; ompSettingsValue?: (path: string) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>; ompSettingsWrite?: (request: { path: string; value: unknown; expectedRevision?: string }) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>; /** Cedia's product-policy layer as the live runtime reports it (§2.8). */ ompPolicy?: () => Promise<HostOmpSettingsAnswer<OmpCreditPolicy>>; lifecycle?: { snapshot(): HostLifecycleSnapshot; identity(): unknown; adopt(input: unknown, stateDir: string, protocolVersion: number): HostLifecycleSnapshot; assertAccepting(): void; status?: () => HostLifecycleStatus; requestQuit?: () => HostLifecycleSnapshot; resume?: () => HostLifecycleSnapshot }; /** The selected remote path's local end, so the capability row reports whether it is up (§6.5). */ gateway?: () => { readonly url: string } | undefined; /** Issue one short-lived enrollment code into the gateway's own store (§6.5). */ issueRemoteEnrollment?: (name: string) => { readonly code: string; readonly pin: string; readonly expiresAt: string }; stateDir?: string; settings?: SettingsStore; drafts?: DraftStore } = {}): HostRouter {
+export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService; ompCapabilities?: (expectedRevision?: string) => Promise<HostOmpCapabilitySnapshot>; ompSettingsKeys?: () => Promise<HostOmpSettingsAnswer<OmpSettingsKeysSnapshot>>; ompSettingsValue?: (path: string) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>; ompSettingsWrite?: (request: { path: string; value: unknown; expectedRevision?: string }) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>;
+      ompSettingsValueIn?: (path: string, context: OmpSettingsContext) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>;
+      ompSettingsMutate?: (mutation: OmpSettingsMutation) => Promise<{ values: readonly OmpSettingsValue[]; scope: "global" | "project" }>;
+      ompSettingsResetPreview?: (paths: string[]) => Promise<{ path: string; globalConfigured: boolean; current: OmpSettingsValue }[]>; /** Cedia's product-policy layer as the live runtime reports it (§2.8). */ ompPolicy?: () => Promise<HostOmpSettingsAnswer<OmpCreditPolicy>>; lifecycle?: { snapshot(): HostLifecycleSnapshot; identity(): unknown; adopt(input: unknown, stateDir: string, protocolVersion: number): HostLifecycleSnapshot; assertAccepting(): void; status?: () => HostLifecycleStatus; requestQuit?: () => HostLifecycleSnapshot; resume?: () => HostLifecycleSnapshot }; /** The selected remote path's local end, so the capability row reports whether it is up (§6.5). */ gateway?: () => { readonly url: string } | undefined; /** Issue one short-lived enrollment code into the gateway's own store (§6.5). */ issueRemoteEnrollment?: (name: string) => { readonly code: string; readonly pin: string; readonly expiresAt: string }; stateDir?: string; settings?: SettingsStore; drafts?: DraftStore } = {}): HostRouter {
   const responses = new ResponseChunks();
   return async (request: HostRequest): Promise<HostResponse> => {
     try {
@@ -574,9 +597,33 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
         // which paths this surface may write at all - and the runtime owns the value's schema and
         // the revision. Both providers must be wired, so an unclassified path cannot slip through a
         // half-wired host.
+        const write = body();
+        if (Object.hasOwn(write, "changes")) {
+          // Scoped mutations: global writes through the taskless service, project
+          // writes through the trusted directory with dirty-buffer coordination.
+          // Advanced placement is presentation, not a write prohibition, on this
+          // contract; protected and excluded paths stay refused with their reason.
+          if (!extras.ompSettingsMutate)
+            throw new HostError("omp_settings_unavailable", "No scoped settings owner is wired", 503);
+          let mutation: OmpSettingsMutation;
+          try {
+            mutation = parseOmpSettingsMutation(write);
+          } catch (error) {
+            throw new HostError("invalid_body", error instanceof Error ? error.message : "Invalid settings mutation", 400);
+          }
+          try {
+            result = await extras.ompSettingsMutate(mutation);
+          } catch (error) {
+            if (error instanceof OmpSettingsPathError) throw new HostError(error.code, error.message, 404);
+            if (error instanceof OmpSettingsNotEditableError) throw new HostError(error.code, error.message, 403);
+            if (error instanceof OmpSettingsRevisionError) throw new HostError(error.code, error.message, 409);
+            if (error instanceof OmpSettingsRejectedError) throw new HostError(error.code, error.message, 400);
+            if (error instanceof HostError) throw error;
+            throw error;
+          }
+        } else {
         if (!extras.ompSettingsWrite || !extras.ompSettingsKeys)
           throw new HostError("omp_settings_unavailable", "No OMP settings owner is wired", 503);
-        const write = body();
         const writePath = string(write.path, "path");
         if (!Object.hasOwn(write, "value")) throw new HostError("invalid_body", "A settings write needs a value", 400);
         const expectedRevision = write.expectedRevision === undefined ? undefined : string(write.expectedRevision, "expectedRevision");
@@ -602,21 +649,57 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
           // is the caller's request, not a server fault, and keeps the runtime's own words.
           if (error instanceof Error && error.name === "OmpSettingsRejectedError") throw new HostError("omp_settings_rejected", error.message, 400);
           throw error;
+          }
         }
       } else if (parts.length === 4 && parts[1] === "omp" && parts[2] === "settings" && parts[3] === "value" && method === "GET") {
         owner();
         const path = (url.searchParams.get("path") ?? "").trim();
         if (!path) throw new HostError("invalid_query", "A settings path is required", 400);
-        if (!extras.ompSettingsValue) throw new HostError("omp_settings_unavailable", "No OMP settings owner is wired", 503);
-        try {
-          const value = await extras.ompSettingsValue(path);
-          result = value.state === "available" ? { state: value.state, ...value.answer } : value;
-        } catch (error) {
-          // A key the running runtime does not define is a missing resource, not a transport
-          // failure: the caller learns which key it asked for.
-          if (error instanceof OmpSettingsPathError) throw new HostError(error.code, error.message, 404);
-          throw error;
+        const scope = url.searchParams.get("scope");
+        if (scope !== null) {
+          // Scoped reads resolve an explicit configuration: global and project go
+          // through the taskless service, session reads a named existing task.
+          let context: OmpSettingsContext;
+          try {
+            context = parseOmpSettingsContext({
+              scope,
+              ...(url.searchParams.get("projectId") === null ? {} : { projectId: url.searchParams.get("projectId") }),
+              ...(url.searchParams.get("sessionId") === null ? {} : { sessionId: url.searchParams.get("sessionId") }),
+            });
+          } catch (error) {
+            throw new HostError("invalid_query", error instanceof Error ? error.message : "Invalid settings scope", 400);
+          }
+          if (!extras.ompSettingsValueIn) throw new HostError("omp_settings_unavailable", "No scoped settings owner is wired", 503);
+          try {
+            const value = await extras.ompSettingsValueIn(path, context);
+            result = value.state === "available" ? { state: value.state, ...value.answer } : value;
+          } catch (error) {
+            if (error instanceof OmpSettingsPathError) throw new HostError(error.code, error.message, 404);
+            if (error instanceof HostError) throw error;
+            throw error;
+          }
+        } else {
+          if (!extras.ompSettingsValue) throw new HostError("omp_settings_unavailable", "No OMP settings owner is wired", 503);
+          try {
+            const value = await extras.ompSettingsValue(path);
+            result = value.state === "available" ? { state: value.state, ...value.answer } : value;
+          } catch (error) {
+            // A key the running runtime does not define is a missing resource, not a transport
+            // failure: the caller learns which key it asked for.
+            if (error instanceof OmpSettingsPathError) throw new HostError(error.code, error.message, 404);
+            throw error;
+          }
         }
+      } else if (parts.length === 4 && parts[1] === "omp" && parts[2] === "settings" && parts[3] === "reset-preview" && method === "POST") {
+        // Preview an unset of the named global paths. Writes nothing.
+        owner();
+        if (!extras.ompSettingsResetPreview) throw new HostError("omp_settings_unavailable", "No scoped settings owner is wired", 503);
+        const preview = body();
+        if (!Array.isArray(preview.paths) || preview.paths.length === 0 || preview.paths.length > 512)
+          throw new HostError("invalid_body", "A reset preview names 1-512 paths", 400);
+        for (const entry of preview.paths)
+          if (typeof entry !== "string" || entry.length === 0) throw new HostError("invalid_body", "Reset preview paths must be non-empty strings", 400);
+        result = { entries: await extras.ompSettingsResetPreview(preview.paths as string[]) };
       } else if (parts.length === 2 && parts[1] === "settings" && method === "GET") {
         owner();
         result = extras.settings?.read() ?? { error: "Settings owner unavailable" };
@@ -903,6 +986,27 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
           if (method !== "POST") throw new HostError("method_not_allowed", "Unsupported method", 405);
           if ([...url.searchParams.keys()].length > 0) throw new HostError("invalid_query", "Queue drop does not accept query fields", 400);
           result = await host.queueDrop(id, device.id, queueDropCommand(body()));
+        } else if (action === "queue" && parts.length === 5 && parts[4] === "remove") {
+          owner();
+          if (method !== "POST") throw new HostError("method_not_allowed", "Unsupported method", 405);
+          if ([...url.searchParams.keys()].length > 0) throw new HostError("invalid_query", "Queue remove does not accept query fields", 400);
+          const remove = queueRowCommand(body(), "remove");
+          result = await host.queueRemoveMessage(id, device.id, {
+            commandId: remove.commandId,
+            incarnation: remove.incarnation,
+            message: remove.message,
+            queue: remove.queue as "steering" | "followUp",
+          });
+        } else if (action === "queue" && parts.length === 5 && parts[4] === "promote") {
+          owner();
+          if (method !== "POST") throw new HostError("method_not_allowed", "Unsupported method", 405);
+          if ([...url.searchParams.keys()].length > 0) throw new HostError("invalid_query", "Queue promote does not accept query fields", 400);
+          const promote = queueRowCommand(body(), "promote");
+          result = await host.queuePromoteMessage(id, device.id, {
+            commandId: promote.commandId,
+            incarnation: promote.incarnation,
+            message: promote.message,
+          });
         } else if (action === "pause" && parts.length === 4 && method === "GET") {
           owner();
           if ([...url.searchParams.keys()].length > 0) throw new HostError("invalid_query", "Pause does not accept query fields", 400);

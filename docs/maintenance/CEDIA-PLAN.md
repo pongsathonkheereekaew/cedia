@@ -88,6 +88,9 @@ requirements change, this file changes; supporting records do not become another
   headless Chromium test; fixture catalogs add and remove models and the rendered catalog follows.
   The provider browser suite passes 8/8 after its settings-panel harness gets the required query
   provider. No packaged, remote or device runtime event or F acceptance is claimed).
+- Revision: 2026-10-02 (settings implementation planning: §6.4.1 specifies the complete
+  OMP settings destination, included/excluded surfaces and remaining ownership gaps;
+  §8.3 defines execution packets tracked under item 70. Documentation only, no runtime acceptance).
 - Repository: `/Users/pond/cedia` on branch `main`. Layout is one repo; `apps/*` and
   `packages/*` are module boundaries, not remotes.
 - Language rule: **every document in this repository is written in English.** No `.th.md`
@@ -1256,13 +1259,14 @@ Receipt: [`evidence/dead-code-retirement-2026-09-17/`](evidence/dead-code-retire
 
 ### 6.4 Settings, migration and branding contract
 
-**Target owner routing.** The proposed host settings service owns CEDIA app preferences,
+**Target owner routing.** The host settings service owns CEDIA app preferences,
 replacing competing writes to `synara:app-settings:v1` and extension `cedia.productPrefs`.
-Use `GET /v1/settings` and revision-checked `PATCH /v1/settings` as proposed contracts:
+Use the existing `GET /v1/settings` and revision-checked `PATCH /v1/settings` contracts:
 responses identify revision, supported field metadata and redacted values; patches name
 expected revision, category and changed supported values. Unsupported key/scope is rejected;
 stale revision produces a conflict and fresh read, never a silent last-writer overwrite.
-These routes do not exist in the current host. Global app/OMP/IDE preference mutations
+The routes currently persist eight app-preference fields; §6.4.1/§8.3 complete the
+remaining applicable controls and their ownership. Global app/OMP/IDE preference mutations
 are owner-only; controllers receive only the redacted values/capabilities required by their
 surfaces and may write their own device-local display preferences. Per-task model/control
 commands retain their existing controller authorization. A successful app patch is atomic; writes to
@@ -1313,8 +1317,8 @@ a failed live read. Session extension models must not leak into another task or
 global configuration, and removed models are revalidated against the same owner
 before selection.
 
-**Explicit exclusions:** all non-OMP harness binary paths, homes, endpoint/password/socket
-settings, custom-model arrays, provider enabled/hidden/order/install/update fields; generic
+**Explicit exclusions:** binary paths, homes, endpoint/password/socket settings, custom-model
+arrays and provider enabled/hidden/order/install/update fields belonging to non-OMP harnesses; generic
 `textGenerationProvider`/writing-model defaults; Synara accounts and their cloud/reset-credit controls,
 AppSnap/Safari vault, alternate branded icons, non-Mac titlebar settings, and automatic
 `resumeChatsAfterQuit`. OMP is fixed as the harness rather than an editable `defaultProvider`.
@@ -1322,6 +1326,9 @@ Simulator auto-open is hidden until its device capability is real; propose off b
 so it does not open a panel unsolicited. PR diff-color controls wait for real PR support.
 Profile identity fields are not needed for personal device authorization and stay hidden
 unless a concrete local display use is implemented. Advanced never bypasses these exclusions.
+These exclusions do not exclude OMP model providers, provider ordering, custom models or
+OMP-native service endpoints. Their configuration remains in scope under §6.4.1, with
+credential handling, product policy and explicit external-service activation preserved.
 
 **Reset/migration rules:** one registry drives visible controls, search/deep links, validation,
 reset preview, import and background effects. Reset identifies category/scope/affected keys;
@@ -1344,6 +1351,141 @@ release notes and updater destination are CEDIA-owned. Keep upstream source iden
 and required license notices; do not mass-rename internal Synara symbols. Source scanning
 must distinguish provenance from user-facing leaks, and runtime checks must cover deep
 links, old profiles, error messages, network effects and both windows.
+
+#### 6.4.1 Complete settings destination (implementation plan, 2026-10-02)
+
+**Goal and baseline.** Provide one searchable settings center from both Mac windows,
+with complete coverage of the settings and configuration facilities of the pinned OMP.
+This continues R2/O04/O06; it does not start another settings service or another plan.
+The inspected CEDIA revision is `bcf5f3425fc`; `upstream-lock.json` pins OMP 18.4.8 at
+`717f97f4d22b3d65c4a4eef6a744255d46f4d1a6`, plus the active tracked OMP patch.
+Use the live registry in `config/all-settings.ts`/`config/registry.ts` as the key authority.
+Direct registry enumeration on 2026-10-02 returns **522 keys**: 393 with TUI row metadata
+and 129 without; eight are credentials. Types are 207 booleans, 130 numbers, 89 enums,
+53 strings, 28 arrays and 15 records. Existing host classification is 387 editable,
+120 advanced but write-denied, eight protected and seven excluded. These are source
+observations, not packaged-runtime verification. The dated 2026-09-29 audit and old
+498/516 counts are comparison evidence, not a fixed allowlist or proof that every key
+has a usable settings control. Six source keys absent from that audit are `ratchet.enabled`,
+`display.subagentLivePreview`, `input.bareExitOnEmptySession`, `input.bareSlashCommands`,
+`modelPresets` and `browser.tern`. Reconcile the stale 18.4.3 prose in
+`docs/UPSTREAM-LOCK.md` during S1 without upgrading the pinned runtime.
+Reproduce the count from the repo root without loading user configuration:
+
+```sh
+bun -e 'import { orderedSettings } from "./upstream/omp/packages/coding-agent/src/config/all-settings.ts"; const rows = orderedSettings(); console.log({total: rows.length, tuiRows: rows.filter(row => row.ui).length, credentials: rows.filter(row => row.isCredential).length});'
+```
+
+**Completeness means discoverability, correct ownership and working operations.** Every
+registered key has exactly one classified descriptor; Basic and Advanced are views of
+those same descriptors. Every specialized configuration resource has an owner-backed
+management destination. Non-settings commands retain their task/IDE destination and a
+searchable link where relevant. Missing CEDIA integration remains open work even when
+the older source coverage gate reports zero unmapped entries.
+
+The planning default for the CLI/TUI preference question is to allow supported writes
+in Advanced, labelled `OMP CLI/TUI only`. This changes terminal preferences through OMP;
+it never makes them CEDIA chrome or keyboard authorities. Credentials and explicit
+product exclusions keep their separate dispositions. This is a reviewable planning
+assumption pending the owner's answer, not a claimed new owner decision.
+
+**Navigation and contents.** Retain General, AI/OMP and IDE as the three top-level
+groups. Use a dense settings list with section navigation, search, explicit scope and
+an optional details pane. Basic is the default AI/OMP view; Advanced reveals the complete
+classified inventory, including keys without OMP TUI rows. Preserve stable key-based
+anchors independently of translated labels. Capability status is a separate diagnostic
+destination linked from the settings footer, not a collection of working toggles.
+
+| Destination | Included contents | Boundary |
+|---|---|---|
+| General > Appearance | Shared application Light/Dark/System, density, chat width/font, supported UI/code/terminal fonts, time format, accessibility overrides | App chrome is shared; editor syntax and OMP terminal themes remain separate. Expose a setting only with a real consumer. |
+| General > Workflow | Sidebar/project/task order, Environment visibility, streaming display, effort-slider presentation, diff wrap, archive/delete/terminal confirmations, startup/window restoration | Send remains queue and Steer remains separate. Dirty-buffer/lifecycle guards remain mandatory. Project/worktree policy opens the owning project settings. |
+| General > Notifications, Shortcuts, Remote, About & Updates | Per-device delivery preferences and OS status; CEDIA keybindings; Tailscale/device enrollment; actual application/runtime versions and CEDIA update actions | Enrollment, revocation, OS consent and updates are actions, excluded from category reset. No invented update availability. |
+| AI/OMP > Providers & Models | OMP provider auth/accounts, enabled/disabled/order preferences, registry/catalog and favorites, custom providers/models/endpoints, persistent model roles/defaults, thinking/auto effort, service tiers and usage | Provider means a model provider inside OMP. Task model/effort remain composer controls. Secrets use the OMP auth owner; credits require their existing explicit action. |
+| AI/OMP > Agent Behavior | Session defaults, retry/fallback, streaming transport defaults, planning/goal/loop defaults, task/subagent defaults, Advisor, Prewalk and supported agent definitions | Persistent defaults here; live goal/plan/queue/agent controls stay in the task. Saving never starts a goal, agent or model request. |
+| AI/OMP > Context & Memory | Context loading, compaction, TTSR, image handling, memory backend, memories/autolearn, Sharpshooter, Mnemopi and Hindsight configuration | Backend configuration and readiness are distinct; inspecting settings never provisions a service. Clear/drop/compact actions remain explicit and scoped. |
+| AI/OMP > Tools & Execution | Tool enablement/approval policy, edit behavior, shell/execution limits, Python/Eval/notebook, LSP, task execution, search/web/SearXNG, browser/native integration, IDA, blob broker and supported TTS output | Use native OMP validators and dependency probes. OMP shell/LSP settings do not overwrite Code-OSS terminals or language settings. STT/live voice stays deferred. |
+| AI/OMP > Skills & Instructions | Skills, rules/context sources, system prompts, templates, slash/custom commands, agents and their user/project/plugin provenance | Catalog, supported enablement and IDE source editing; executable changes use OMP management/reload and preserve the previous good generation on failure. |
+| AI/OMP > MCP & Extensions | MCP transports/servers/tools/prompts/resources/auth and reconnect; hooks, extensions/plugins/packages/marketplaces and source configuration | Use OMP managers only. Setup/install/update/remove/reload are explicit actions; an unloaded catalog is not an empty successful catalog. |
+| AI/OMP > Advanced | Every remaining classified registry key, typed arrays/records, effective values and overrides, CLI/TUI display/theme/status-line/input preferences and OMP terminal keybinding source | Advanced placement is not a write prohibition. Keybindings outside the settings registry get their own supported source workflow. No unrestricted writable whole-config JSON editor. |
+| AI/OMP > Diagnostics & Storage | Redacted config validation, source/provenance, runtime/bridge revisions, configured storage/GC/telemetry/maintenance policies and supported diagnostics/export | Separate preference reset from deleting sessions, clearing memory, repairing databases or exporting data. External telemetry/export destinations remain explicit. |
+| IDE | Real Code-OSS User/Workspace settings for editor syntax/fonts, save/format, language tooling, debug, extensions, terminal and keyboard bindings | Specialist controls open the actual IDE settings/keyboard editor. AI-window navigation preserves project identity and dirty buffers. |
+
+Basic exposes providers/default model and effort, model roles, approval mode, context/
+compaction defaults, planning/agent defaults and links to Skills/MCP/Memory. All other
+supported settings remain searchable without requiring the user to know their group.
+Conditional rows retain a discoverable prerequisite, such as selecting a memory backend;
+they must not silently disappear from Advanced or coverage.
+
+**What is absent, relocated or restricted.**
+
+| Item | Disposition |
+|---|---|
+| Other agent harness selectors, installers, homes and auth; Synara accounts/cloud agents/credit-reset services; Tab/private engines | Excluded. OMP providers named Claude/Codex/etc. are still valid model providers. |
+| Generic writing-model settings, AppSnap/Safari vault, alternate app icons, unsupported titlebar options and unused profile identity fields | Excluded from working settings, search, reset and background effects. Preserve inert legacy data. |
+| OMP public rooms; SSH CLI remote-access integration; credential vault broker/forward proxy; external-link sharing; local tiny-model provisioning; OMP self-updater | Retain the owner's D1-D5 exclusions in [the decision receipt](evidence/owner-decisions-2026-09-25/findings.md). SSH tools are not categorically banned. Runtime updates belong to CEDIA releases. Inspectable stored values must not expose an activation bypass. |
+| Microphone/STT/live voice | Owner-deferred, shown only in Capability status with the reason. Existing stored settings remain preserved and cannot activate voice through Advanced. TTS output remains applicable. |
+| Send/Stop/Steer, current model/mode, queue, plan approval, goals, live agents/jobs, session branch/history/review | Task controls, not persistent preference switches. Settings search can link to the correct contextual destination; no task means an explanatory unavailable state. |
+| Archived tasks, session deletion, memory clear, database rebuild and workspace cleanup | Dedicated history/storage/task actions with affected-data preview; never part of Reset settings. |
+| Secrets, immutable defaults, environment/CLI/runtime overrides, product policy | Show provenance/configured state and a reason or owning action. Never expose secret values; never edit an inherited layer by pretending it is the selected writable layer. |
+| Missing bridge or unqualified dependency | Capability status records integration missing or dependency unavailable separately. Applicable missing integration blocks completion; no fake successful save and no permanent exclusion merely because a writer is absent. |
+
+**Every row's contract.** The OMP bridge supplies type, enum/range/structured constraints,
+label/description, default, sensitivity, condition, supported scopes and operations,
+effective/stored values with provenance, source identity, revision and apply timing.
+The presentation registry adds only CEDIA grouping, Basic/Advanced placement and the
+explicit policy disposition. One registry projection drives navigation, search, controls,
+reset previews and coverage; backend authorization validates the same disposition.
+Provider credentials and potentially secret nested fields use redacted structured
+representations and owner operations, never a generic value editor or search index.
+
+The specialized resource inventory additionally covers OMP `models.yml`/`models.yaml`
+through ModelRegistry and AuthStorage; user/project `mcp.json` and imported MCP source
+provenance through MCP managers; instructions/rules/skills/templates/commands/agent
+definitions and extension/plugin roots through discovery and loaders; user/project
+`WATCHDOG.yml` through the Advisor config bridge; and OMP terminal keybindings through
+their source owner. Resolve paths from the active OMP profile/agent directory instead
+of hardcoding `~/.omp`. Preserve compatibility sources and imported read-only layers.
+`models.db`, auth databases and plugin locks are managed resources, not raw editable
+settings files. Catalog source names shared with another product do not select its harness.
+
+Global means the shared OMP configuration used by terminal OMP. Project means an explicitly
+selected project and its supported local configuration file. Session is an inspect-only
+effective view tied to a named existing task; temporary controls link to that task. Never
+choose the first running OMP process to infer project scope. Overlay, environment and
+runtime layers remain inspect-only unless their existing owner exposes a specific action.
+Show when a saved global value is masked by a stronger layer. A missing project writer
+is source-linked/read-only until S3 implements it; it is not a successful global fallback.
+
+Opening Settings with no task must read/configure OMP without starting an execution
+session, loading unrequested executable packages or contacting a model. Use a typed
+configuration-only entry point in the pinned OMP and the existing host transport.
+For a named live task, read its existing owner and do not create a second executor.
+An unreachable owner yields unavailable, never cached values labelled live.
+
+Writes require owner authorization, explicit context, expected revision and schema
+validation. Recheck disk generations, preserve unknown fields, flush atomically and read
+back from the owner before reporting Saved. A conflict keeps the user's draft and offers
+refresh/compare/retry; it never silently retries a changed write. Apply timing distinguishes
+immediate, next turn, explicit reload and new session. Persisted and effective states are
+reported separately across live sessions; saving never silently restarts a running task.
+
+Reset removes only explicit overrides in the selected category/scope, exposing the next
+inherited/default value. It is not writing today's default as a new override. Preview names
+the keys, shared-CLI impact and owner-specific actions; credentials, files, history, devices
+and source resources are excluded. Cross-owner resets report each result separately.
+
+**Observed gaps to close, not new greenfield services.** The source already has app CAS,
+OMP schema/value/set bridges, provider/management operations and settings conflict tests.
+The remaining issues include: eight app-owned fields versus broader renderer storage;
+Personal/Coding/System navigation and stale multiple-harness copy; no taskless OMP settings;
+incomplete value/provenance/default metadata; Advanced rows denied by the host's `editable`
+check; no complete category/scope unset path; and seven native OMP settings incorrectly
+excluded by `apps/host/src/omp-settings.ts`. Those seven are `enabledProviders`,
+`disabledProviders`, `modelProviderOrder`, `providers.antigravityEndpoint`, `searxng.endpoint`,
+`compaction.remoteEndpoint` and `dev.autoqaPush.endpoint`. Classify them by their actual
+OMP owner, sensitivity and activation policy. Configuring a destination does not authorize
+background upload, automatic activation or credential disclosure.
 
 ### 6.5 Remote design and remaining decision gates
 
@@ -1718,6 +1860,224 @@ only their named unavailable case. Persist a release qualification manifest with
 patch tree, UI/client revisions, capabilities, tested environments and receipts. F requires
 D/W/N and all applicable O01–O12 gates; no `integration_missing` entry may remain, and no
 feature can be reclassified as optional solely to turn the gate green.
+
+### 8.3 Settings implementation packets (2026-10-02)
+
+These packets implement §6.4/§6.4.1 within R2 and O04/O06. They are execution definitions;
+the single progress checklist remains §10 item 70. Planning does not authorize starting
+implementation in this turn. Existing qualified paths are extended, not replaced wholesale.
+
+**Architecture and file ownership.** TypeScript/Bun host and protocol carry owner routing;
+the existing React/TanStack Query settings route renders the same surface in both windows;
+Code-OSS retains IDE configuration and bindings. For the paths below, `WEB` means
+`apps/macos/agent-window/vendor/synara/apps/web/src`, and `OMP` means
+`upstream/omp/packages/coding-agent`. These are path abbreviations, not new directories.
+OMP source changes must be exported through the active tracked patch
+`patches/omp/0003-cedia-rpc-bridges-18.4.8.patch` and its manifest using §6.1's patch workflow.
+Do not hand-edit the patch or claim a prepared source-tree change is a shipped runtime.
+
+**S1. Establish exact coverage and correct the exclusion policy.**
+
+- Modify `apps/host/src/omp-settings.ts`, `scripts/check-omp-coverage.ts`,
+  `scripts/lib/omp-coverage.ts`, `packages/protocol/src/index.ts` and the corresponding
+  `apps/host/test/omp-settings.test.ts` / `scripts/lib/omp-coverage.test.ts` tests.
+  Add `apps/host/test/omp-settings-inventory.test.ts` for full-registry fixtures.
+- Enumerate the current registry, schema constraints, sensitivity and special-resource
+  catalog. Reconcile current source/patch hashes with the older audit and human-readable
+  upstream lock. Regenerate evidence only through the existing audit workflow and index
+  any new dated receipt in §13; no second hand-maintained list of 522 key definitions.
+- Separate presentation placement (`basic`/`advanced`/CLI-only) from permission
+  (`editable`/`protected`/`read-only`/explicit exclusion). Reclassify the seven OMP-native
+  exclusions by owner/policy. Keep broker/room/update/voice restrictions explicit, including
+  nested fields that could activate an excluded service.
+- First failing cases: one added source key with no disposition fails coverage;
+  `modelPresets` is discoverable despite no TUI row; native `enabledProviders` and
+  `searxng.endpoint` are not excluded as other-harness settings; `auth.broker.token`
+  never acquires a generic editor. Then implement and rerun the inventory tests.
+- Deliverable: every current key and specialized resource has a classification and
+  destination; missing management/writers remain integration gaps, not green mappings.
+
+**S2. Add complete metadata and explicit, taskless configuration context. After S1.**
+
+- Extend `OMP/src/modes/rpc/{rpc-types,cedia-capability-bridge}.ts`,
+  `OMP/src/config/{settings,registry}.ts`, `packages/protocol/src/index.ts`,
+  `packages/omp-adapter/src/{client,types}.ts`, `apps/host/src/{omp-settings,service,router,server}.ts`
+  and `apps/macos/agent-window/src/cedia-adapter.ts`. Add a small UI-neutral
+  `OMP/src/config/cedia-settings-service.ts` used by the existing RPC bridge and a
+  configuration-only entry point routed through `OMP/src/cli/config-cli.ts` and
+  `OMP/src/main.ts`.
+- Reuse registry defaults/validation, `Settings.loadReadOnly` for reads, `getProvenance`,
+  profile resolution and reload logic. Mutations use the writable OMP settings lifecycle,
+  not the read-only instance. The config entry point loads no execution session or
+  arbitrary extensions. Its fixed typed requests are transported by the existing adapter;
+  it is not an SDK agent or a shell-command-string API.
+- Use the following proposed protocol shape, negotiated as a new settings contract version;
+  old clients keep their existing global path and cannot accidentally write a project:
+
+  ```ts
+  type OmpSettingsContext =
+    | { scope: "global" }
+    | { scope: "project"; projectId: string }
+    | { scope: "session"; sessionId: string };
+  interface OmpSettingsMutation {
+    context: Exclude<OmpSettingsContext, { scope: "session" }>;
+    expectedRevision: string;
+    changes: Array<
+      | { path: string; operation: "set"; value: Json }
+      | { path: string; operation: "unset" }
+    >;
+  }
+  ```
+
+  `Json` is the existing protocol JSON type. Context-bearing inventory/value requests
+  and mutation replies include the resolved context and source revision. Host project
+  IDs resolve trusted directories; clients do not pass arbitrary filesystem paths.
+  Descriptors add label/help/default/constraints/condition and supported operations;
+  value replies add redacted provenance and stored-versus-effective state. Extend the
+  current strict parsers and reject unnegotiated versions rather than ignoring fields.
+- First failing cases: zero tasks still returns the registry and global config with zero
+  provider calls; projects A/B with different values never borrow the first live owner's
+  settings; environment-over-global masking is visible; a secret in an array/record never
+  enters the payload. Test invalid/missing project IDs, unavailable task owners and profile
+  changes. Extend `packages/omp-adapter/test/cedia-capabilities.test.ts` and host settings tests.
+- Deliverable: Settings opens without creating a task and each value identifies its scope,
+  source, default and actual apply timing. Metadata alone grants no mutation permission.
+
+**S3. Complete scoped writes, unset/reset and live invalidation. After S2.**
+
+- Extend the same owning OMP config service, host settings routes and protocol tests;
+  reuse `OMP/test/config/{settings-entry-writes,settings-reload}.test.ts` and add
+  `apps/host/test/omp-settings-context.test.ts` for route-level context/conflict fixtures.
+- Global writes use OMP's set/unset/flush lifecycle. Preserve the specialized model-role
+  project writer. Add a guarded OMP-owned project writer for other supported project
+  settings, with canonical file resolution, parsed structured updates, disk-generation
+  checks, atomic replacement, unknown-field preservation and dirty IDE-buffer coordination.
+  Imported/overlay/environment sources remain read-only and identify the correct source.
+- Require expected revision for the new mutation contract; compare disk state before
+  commit, serialize mutations per source and verify owner readback after flush. A failed
+  flush must not become a saved UI state. Reject a mixed transaction before any unsupported
+  field is written. Cross-owner operations remain separate transactions with separate results.
+- Provide reset preview using the same category/scope descriptor set; `unset` removes the
+  selected explicit overrides and returns the newly effective values. Preserve credentials,
+  unrelated fields, MCP/skill files and task selections. Never reset by unlinking config files.
+- Broadcast config invalidation to both windows and affected OMP owners. Report per-key
+  immediate/turn-boundary/reload/new-session state and pending application, with explicit
+  reload only when allowed. CLI disk edits trigger refresh/conflict; no automatic replay.
+- First failing cases: two windows race the same revision; an external CLI edit occurs
+  after read; project reset reveals global inheritance; a global save is masked by project;
+  malformed config/permission denied/flush failure preserve data and drafts; mixed-owner
+  reset reports a partial failure; a running turn is neither restarted nor resent.
+- Deliverable: supported advanced and project writes work with readback, reset is scoped,
+  and stale values cannot silently overwrite newer configuration.
+
+**S4. Build the shared settings navigation and typed controls. After S1-S3.**
+
+- Modify `WEB/settingsNavigation.ts`, `settingsSearchIndex.ts`,
+  `routes/_chat.settings.tsx`, `lib/ompSettingsReactQuery.ts`,
+  `components/settings/OmpSettingsPanel.{tsx,logic.ts}` and `SettingControls.tsx`.
+  Add `WEB/components/settings/OmpSettingControl.tsx` for type-driven fields and
+  `apps/macos/agent-window/test/settings-navigation.test.ts` for destination tests.
+- Implement General/AI-OMP/IDE, Basic/Advanced, explicit Global/Project/Session context,
+  grouped inventory and stable key targets. Search metadata and key aliases, never secret
+  values. A global search hit selects its group/view and focuses the exact row. Translate
+  old deep links to their retained destination; excluded links go to an explanatory state.
+- Render booleans as switches, enums as option controls, numbers with bounds, strings as
+  inputs, and arrays/records with validated structured editors. A per-key structured source
+  editor is acceptable for arbitrary OMP record shapes; no writable whole-config dump.
+  Show inherited/default/policy state, pending apply, errors and reset preview in row details.
+- Remove stale harness installer/writing-model search entries and all unreachable controls.
+  Keep known optional dependencies discoverable with setup status, and route integration
+  gaps to Capability status. Preserve draft edits across conflict/failed-save states.
+- Add `WEB/components/settings/OmpSettingsPanel.browser.tsx`: edit one of every type;
+  filter a no-TUI key; keyboard-focus a search hit; change scope; verify no session activation;
+  exercise stale-save retry, inherited reset, unknown enum and large/redacted values.
+  Check narrow IDE dock and full Agent window with accessible labels and no horizontal
+  overlap. Deliverable: every supported key is usable through one consistent renderer.
+
+**S5. Complete specialized OMP management destinations. After S2; merge with S4.**
+
+- Reuse `apps/host/src/{provider-auth,model-catalog,omp-advisor-config}.ts`, existing
+  management operations in `service.ts`/`router.ts`, `WEB/components/settings/OmpProviderSettingsPanel.tsx`
+  and existing Cedia management/context/agent surfaces. Add focused settings panels only
+  where a management destination is missing; no new backend registry beside OMP.
+- Cover models config/custom endpoints and role defaults, account selection and usage;
+  MCP source/auth/transports and tools/prompts/resources; skills/instructions/templates/
+  commands/hooks/plugins and agents; Advisor `WATCHDOG.yml`; memory backends; CLI/TUI
+  keybinding source editing. Every resource exposes supported inspect/configure/validate/
+  refresh actions and scope. Preserve imported read-only sources rather than rewriting them.
+- Source editing opens the actual IDE with dirty-buffer protection. Manager-supported
+  enable/disable/install/update/remove/reconnect/reload actions have graphical controls and
+  native readback; terminal-only instructions do not count as integrated management.
+  Opening a panel never signs in, redeems credits, installs code, uploads data or starts a
+  provider/service. Show executable changes and require the existing explicit action.
+- First failing cases: catalog agrees with composer after add/remove; malformed source
+  preserves last good catalog; failed reload rolls back; unknown model stays unresolved;
+  MCP auth cancellation stays cancelled; missing backend is unavailable rather than empty;
+  nested endpoint credentials remain protected. Extend existing management/provider/Advisor
+  tests and add corresponding browser workflows. Deliverable: separate config resources
+  have usable owner-backed paths, not only raw registry coverage.
+
+**S6. Finish General/IDE ownership and remove misleading legacy settings. After S4.**
+
+- Modify `apps/host/src/settings.ts`, `WEB/{appSettings,hostPreferences}.ts`,
+  `apps/macos/src/{agent-window-main,agent-window-keybindings}.ts`, settings route/panels
+  and existing theme/config bridges. Keep device-local preference persistence explicitly
+  keyed by device; window geometry stays local to its window.
+- Classify every currently rendered/searchable/resettable app field using §6.4. Add verified
+  app fields to the host registry; retain device-local fields only with a documented consumer.
+  Remove synthetic-server-settings dependencies, unused profile controls, writing-model
+  controls and full-store reset paths. Migrate legacy values once with preserved originals
+  and a redacted report; do not copy provider credentials into app storage.
+- Finish one editable shared app-theme authority independent from IDE syntax/font;
+  do not retain the current seven-field host projection as proof that theme ownership is
+  complete. Link IDE specialist settings with the correct project and User/Workspace scope.
+  General shortcuts and OMP terminal shortcuts remain different owners.
+- Extend `apps/macos/test/{host-preferences-end-to-end,host-theme-authority,agent-window-keybindings}.test.ts`
+  and `apps/macos/agent-window/test/host-preferences.test.ts`. Verify two windows plus
+  restart, failed owner writes, device-local independence, category reset preservation,
+  theme/syntax independence and unsupported legacy deep links/background effects.
+- Deliverable: every retained control has a real owner/consumer and no false save success.
+
+**S7. Qualify the complete settings workflow. After S1-S6.**
+
+- Extend the existing source coverage gate to compare registry, metadata, rendered/search
+  targets, write/reset operations and tests. Test all keys' classification and supported
+  operations with isolated fixtures; use representative browser workflows for each control
+  type and every specialized manager. Inject a missing/changed key and a changed source
+  hash to prove the gate fails, even when an old total still equals 1,101.
+- Run focused host/protocol/adapter/UI suites first, then affected typechecks and browser
+  tests. Verify source receipts separately from native package receipts. Example commands
+  below are execution-time checks, not claims they ran during this planning task:
+
+  ```sh
+  bun test apps/host/test/settings.test.ts apps/host/test/omp-settings.test.ts apps/host/test/omp-settings-inventory.test.ts apps/host/test/omp-settings-context.test.ts
+  bun test packages/omp-adapter/test/cedia-capabilities.test.ts scripts/lib/omp-coverage.test.ts
+  bun test apps/macos/agent-window/test/omp-settings-adapter.test.ts apps/macos/agent-window/test/settings-navigation.test.ts apps/macos/agent-window/test/host-preferences.test.ts
+  bun run typecheck
+  bun run --cwd apps/macos/agent-window typecheck
+  bun run --cwd apps/macos/agent-window/vendor/synara/apps/web test:browser -- src/components/settings/OmpSettingsPanel.browser.tsx
+  bun run check:omp-coverage -- --require-complete
+  node scripts/ci-validate.mjs
+  ```
+
+- Rebuild/package only at implementation qualification; use the personal-build no-Keychain
+  procedure in `AGENTS.md`, with no Keychain mock. Capture actual Agent/IDE windows:
+  no-task settings, Basic/Advanced search, project masking/reset, same-revision conflict,
+  CLI edit refresh, restart persistence, model/MCP catalog refresh and independent syntax
+  theme. Confirm no extra executor, provider request or automatic service activation.
+- G0 uses isolated config/profile/backend fixtures and zero provider calls. Live provider/
+  device/dependency claims need their applicable authorized real-environment receipts;
+  controllers cannot mutate persistent settings/auth/install/maintenance. Record platform
+  prerequisites separately and do not equate a mock unavailable test with enabled support.
+- Deliverable: index a dated settings qualification receipt in §13 and update item 70 with
+  implemented, verified and externally blocked work. Settings completion alone never closes
+  D/W/N/F or the rest of O01-O12.
+
+**Order and integration.** S1 -> S2 -> S3 -> S4 -> S6 -> S7; S5 can proceed after S2
+with bounded ownership and joins before S7. Give one worker ownership of protocol/runtime
+mutation changes; UI work consumes the settled contract. Review each packet's targeted
+tests before integrating the next, and use task-scoped commits only when implementation
+is authorized. No runtime behavior is changed by this plan update.
 
 ## 9. Landed work ledger (append-only registry, no authority over §3-§8)
 
@@ -5925,6 +6285,48 @@ deletions so dead code is not carried across.
     Execution follows R1–R8 in §8, with §2.3 capability families, §3.C–§3.D behavior/screens,
     §6.4 settings and §6.5 remote boundaries.
 
+    **Settings continuation (planned 2026-10-02; implemented 2026-10-02):** §6.4.1 defines what Settings includes,
+    relocates and excludes; §8.3 supplies files, contracts, order and verification. Current
+    source enumeration finds 522 OMP keys, versus 516 in the old audit. The existing
+    source-coverage result does not close this settings usability/ownership work.
+
+    - [x] S1: reconcile the current registry/resources and correct native OMP exclusions.
+      Seven native exclusions removed; 13 explicit product exclusions (voice/STT, rooms,
+      updater, tiny models, broker) with owner reasons; audit regen to 18.4.8
+      (`evidence/omp-complete-scope-2026-10-02/`, 1,117 mappings, `verify.py` PASS).
+    - [x] S2: complete metadata/provenance and explicit global/project/session context without a task.
+      Taskless `CEDIA_SETTINGS_SERVICE` entry, label/help/default/env metadata, env masking,
+      project isolation, named-session guard; live taskless suite 7/7, smoke 10/10.
+    - [x] S3: implement scoped writes, unset/reset, disk-conflict checks and apply-state invalidation.
+      Global/project mutate with revision + disk recheck, guarded project writer with
+      unknown-field preservation, reset preview, dirty-IDE refusal, nested-secret refusal.
+    - [x] S4: deliver General/AI-OMP/IDE navigation, Basic/Advanced, typed controls and complete search.
+      Scope switcher, Basic/Advanced views, provenance/masking rows, reset preview/execute,
+      nav regrouped General/AI-OMP/IDE; browser workflows stay open (see S7).
+    - [ ] S5: complete provider/model/MCP/skills/extensions/Advisor/memory/CLI configuration destinations.
+      Provider/model/roles destinations exist; MCP/skills/memory/Advisor session destinations
+      exist in task surfaces; CLI/TUI keybinding source editing waits on item 57's bridge.
+    - [ ] S6: finish app/device/IDE ownership, legacy migration and category reset boundaries.
+      appTheme registry exists; two-window propagation proof, legacy migration and IDE
+      specialist deep links remain.
+    - [x] S7: qualify source and packaged settings workflows; record any external prerequisites.
+      Source (2026-10-02): coverage gate 1,117/1,117 PASS; host settings/queue 30/30,
+      host service 47/47 (three O01 queue/cache payloads added for the new RPC types),
+      protocol/adapter/coverage 53/53 (incl. gate-fails proofs: unmapped/orphan/
+      duplicate/stale-hash), agent-window 21/21, web settings logic 12/12, settings
+      browser 11/11 across 6 files via new `vitest.settings.config.ts` (Advanced panel
+      stale release-history assertion corrected to the item-60 cut); agent-window
+      typecheck clean; root tsc clean on touched files (remaining errors pre-existing
+      in untouched upstream/scripts/context-menu); `ci-validate` 7 pre-existing fails
+      in 2026-10-01 evidence (Thai text, unindexed dirs; committed earlier, untouched).
+      Packaged captures, Tailscale/iPhone/provider-backed proofs remain externally
+      blocked (see §13).
+
+    CLI/TUI writable Advanced is the owner-accepted default (2026-10-02): supported writes
+    allowed in Advanced labelled `OMP CLI/TUI only`. D1-D5 and deferred voice remain the
+    existing explicit exclusions. O01 queue surface gained per-row remove/promote through
+    the native targeted primitives with intent settling (same delivery).
+
     **Current checkpoint (2026-10-01):** OMP is pinned to 18.4.8 (`717f97f4d2`); current verification
     passes 1,101/1,101 source mappings, 1,452 root tests and 429 Agent Window/settings tests;
     the baseline separately recorded 172 iOS tests. Root and Agent Window typechecks pass.
@@ -7730,6 +8132,8 @@ never delete one because its result was inconvenient.
 | [`o11-live-thai-turn-2026-10-01`](evidence/o11-live-thai-turn-2026-10-01/findings.md) | Live proof: one tiny read-only Muse turn on the user-approved spend row answered purely in Thai script with no CJK substitution, rendered in the packaged Agents window; one completed turn, zero survivors. First multilingual receipt; broader mixed-script/IME coverage stays open. |
 | [`o11-thai-ime-live-2026-10-01`](evidence/o11-thai-ime-live-2026-10-01/findings.md) | Live proof: Thai prompt composed through computer-use into the packaged Agents composer (layout-dependent typing rules recorded), dispatched with exact Thai bytes, answered in Thai with no CJK substitution, rendered on screen; one turn, zero survivors. Closes Thai composition; mixed-script/IME-preedit/IDE-dock Thai stay open. |
 | [`r3-dirty-picker-packaged-2026-10-01`](evidence/r3-dirty-picker-packaged-2026-10-01/findings.md) | Proof: packaged dirty-file picker run on the current build — worktree mode, `drop.txt` unchecked sticks, Send creates one session, real worktree carries `keep.txt` but not `drop.txt`. Closes the dirty-picker packaged remainder. |
+| [`omp-complete-scope-2026-10-02`](evidence/omp-complete-scope-2026-10-02/) | O12 audit regen for 18.4.8 (generator `scripts/regen-omp-audit-1848.ts`; 2026-09-29 dir stays as the 18.4.3 record): 1,117 mappings (522 settings / 84 slash / 50 CLI / 30 tools / 64 RPC / 106 SDK); coverage Integrity PASS 0 fatal 0 gaps, `--require-complete` F completeness PASS, `verify.py` passes. Delta is upstream evolution only: +6 settings, +2 slash (`ratchet` O07, `modelpreset` O03), +3 RPC (queue remove/promote O01, cache-warming O03); nothing removed. |
+| [`settings-service-2026-10-02`](#) | Settings S1–S4 + O01 queue rows, source-verified (no dated dir; receipts are the suites themselves): OMP service/bridge/entry tests 34/34, host settings/taskless/queue/router 36/36, protocol 4/4, web settings logic 10/10, adapter live 10/10, taskless live 7/7, queue-rows live 2/2 (held turn, per-row remove with intent settle, promote to steering, missing-row honest false); OMP tsgo clean except 2 pre-existing errors in untouched files; agent-window tsc clean; root tsc clean on touched files (remaining errors pre-existing in untouched smoke/agent-window files). S5 session destinations inventoried, S6 theme registry present, S7 packaged/device/provider proofs externally blocked. S7 source close-out same day: host service 47/47 (O01 payloads for 3 new RPC types), settings browser 11/11 over 6 files (`vitest.settings.config.ts`; Advanced release-history assertion fixed to the item-60 cut), agent-window typecheck clean, `ci-validate` 7 pre-existing 2026-10-01 evidence fails (not this slice). |
 ## 14. CEDIA rename ledger (opened 2026-09-20)
 | [`vendor-envnav-2026-09-26`](evidence/vendor-envnav-2026-09-26/findings.md) | Intake follow-up, no gap change (stays **2**): environment-navigation commit assessed from its patch — CUA-driver half out of scope, starred/provider-model half Codex-catalog mechanics excluded with the #1256 rationale; skills-settings pair confirmed absent in-tree |
 

@@ -7,7 +7,7 @@ import { OmpRpcClient, OmpCommandError, OmpRequestTimeoutError } from "../../../
 import { OmpOwnerControlClient } from "../../../packages/omp-adapter/src/owner-control-client.ts";
 import { ExtensionUiBroker } from "../../../packages/omp-adapter/src/ui.ts";
 import { RPC_COMMAND_TYPES, CEDIA_UI_COMMAND_TYPES, isSupportedOmpVersion, OMP_BASELINE_VERSION, type CediaUiCommandType, type RpcCommandType, type RpcCommandPayload, type OmpFrame } from "../../../packages/omp-adapter/src/types.ts";
-import type { Command, CommandRequest, HostOmpCapabilitySnapshot, HostOmpSettingsAnswer, Json, OmpGoalCommandRequest, OmpSettingsKeysSnapshot, OmpSettingsValue, Session, SessionDirtyCopy, SessionDirtyCopyEntry, SessionArchiveReceipt, SessionCleanupCapability, SessionCleanupGate, SessionCleanupGateState, SessionCleanupResult, SessionCleanupState, SessionEvent, SessionPendingModel, SessionRestoration, SessionWorkspace, SessionWorkspaceMetadata, TerminalCheckpoint, TurnIntent, TurnState, UiResponseRequest } from "../../../packages/protocol/src/index.ts";
+import type { Command, CommandRequest, HostOmpCapabilitySnapshot, HostOmpSettingsAnswer, Json, OmpGoalCommandRequest, OmpSettingsContext, OmpSettingsKeysSnapshot, OmpSettingsValue, Session, SessionDirtyCopy, SessionDirtyCopyEntry, SessionArchiveReceipt, SessionCleanupCapability, SessionCleanupGate, SessionCleanupGateState, SessionCleanupResult, SessionCleanupState, SessionEvent, SessionPendingModel, SessionRestoration, SessionWorkspace, SessionWorkspaceMetadata, TerminalCheckpoint, TurnIntent, TurnState, UiResponseRequest } from "../../../packages/protocol/src/index.ts";
 import { TerminalStateRegistry } from "./terminal-state.ts";
 import { DurableStore, DurableStoreCommandConflictError } from "./store.ts";
 import { ProviderAuthManager } from "./provider-auth.ts";
@@ -24,7 +24,7 @@ import type { ModelCatalogResult } from "../../../packages/protocol/src/models.t
 import { readOmpCapabilities } from "./omp-capabilities.ts";
 import { attachCediaOwnerControlClient, probeCediaOwner, readCediaOwnerSummary, recoverStaleCediaOwnerEndpoint, type CediaOwnerAttachment } from "./owner-endpoint.ts";
 import { writeOwnerLaunchContext as persistOwnerLaunchContext } from "./owner-launch-context.ts";
-import { OmpSettingsNotEditableError, OmpSettingsPathError, ompSettingDisposition, readOmpSettingsKeys, readOmpSettingsValue, writeOmpSettingsValue } from "./omp-settings.ts";
+import { OmpSettingsNotEditableError, OmpSettingsPathError, ompSettingDisposition, mutateOmpSettings, previewOmpSettingsReset, readOmpSettingsDescribe, readOmpSettingsKeys, readOmpSettingsValue, readOmpSettingsValueIn, writeOmpSettingsValue } from "./omp-settings.ts";
 import { readOmpCreditPolicy, type OmpCreditPolicy } from "./omp-policy.ts";
 import { NO_OMP_GOAL_BRIDGE_REASON, NO_OMP_GOAL_RUNTIME_REASON, NO_OMP_SUBAGENTS_RUNTIME_REASON, OmpProgress, type OmpProgressSnapshot, type OmpSubagentsSnapshot } from "./omp-progress.ts";
 import { NO_OMP_PLAN_BRIDGE_REASON, NO_OMP_PLAN_RUNTIME_REASON, OmpPlan, parseOmpPlanCommandResult, type CediaPlanCommand, type OmpPlanCommandRequest, type OmpPlanCommandResult, type OmpPlanSnapshot } from "./omp-plan.ts";
@@ -263,6 +263,8 @@ export class CediaHost {
   readonly #providerAuth: ProviderAuthManager;
   readonly #extraTrustedExtensions: string[];
   readonly #runtimes = new Map<string, Runtime>();
+  #configSettingsClient?: OmpRpcClient;
+  #configSettingsStarting?: Promise<OmpRpcClient>;
   readonly #starting = new Map<string, Promise<Session>>();
   readonly #forking = new Map<string, Promise<SessionView>>();
   readonly #stopping = new Map<string, Promise<Session>>();
@@ -2520,6 +2522,166 @@ export class CediaHost {
     }
   }
 
+  /**
+   * Remove one queued row by text through OMP's own targeted primitive.
+   *
+   * Drop-last/all cannot name a middle row; `remove_queued_message` removes the
+   * first text match, so the composer can offer per-row removal. The matching
+   * queued turn intent, if any, settles cancelled like a drop; steer-sourced
+   * rows have no intent to settle. Truncated (>4K) rows cannot be addressed and
+   * answer removed:false instead of removing the wrong text.
+   */
+  async queueRemoveMessage(
+    sessionId: string,
+    deviceId: string,
+    request: { commandId: string; incarnation: string; message: string; queue: "steering" | "followUp" },
+  ): Promise<OmpQueueSnapshot & { removed: boolean }> {
+    this.#assertOpen();
+    const session = this.#session(sessionId);
+    if (!request.message) throw new HostError("invalid_body", "A queue removal names its message text", 400);
+    if (request.queue !== "steering" && request.queue !== "followUp")
+      throw new HostError("invalid_body", 'A queue removal names queue steering or followUp', 400);
+    const claim = this.store.claimCommand({
+      sessionId,
+      commandId: request.commandId,
+      deviceId,
+      incarnation: request.incarnation,
+      kind: "cedia_queue_remove",
+      payload: { message: request.message, queue: request.queue },
+    });
+    if (!claim.created) return this.#queueRowCommandResult(claim.command, "removed");
+    const unavailable = (reason: string): OmpQueueSnapshot & { removed: boolean } => ({ state: "unavailable", reason, removed: false });
+    const runtime = this.#runtimes.get(sessionId);
+    if (!runtime || runtime.closing || !runtime.client || runtime.client.phase !== "ready") {
+      const result = unavailable(NO_OMP_QUEUE_RUNTIME_REASON);
+      this.store.transitionCommand(sessionId, request.commandId, "not_dispatched", { error: NO_OMP_QUEUE_RUNTIME_REASON, result: json(result) });
+      return result;
+    }
+    try {
+      const ack = await (runtime.client as OmpRpcClient).request("remove_queued_message", {
+        message: request.message,
+        queue: request.queue,
+      });
+      const removed = (ack.data as { removed?: unknown } | undefined)?.removed === true;
+      if (removed) this.#settleQueuedMessageIntent(runtime, request.message);
+      this.#syncTurnQueue(runtime);
+      await runtime.queue.read();
+      const projected = runtime.queue.snapshot();
+      const result: OmpQueueSnapshot & { removed: boolean } =
+        projected.state === "available" ? { ...projected, removed } : { ...projected, removed };
+      this.store.transitionCommand(sessionId, request.commandId, "completed", {
+        ack: json({ type: "response", command: "remove_queued_message", success: true, data: { removed } }),
+        result: { meaning: "OMP queue removal acknowledged", data: json(projected), removed },
+      });
+      this.#record(runtime, { type: "cedia_command", command: json(this.store.getCommand(sessionId, request.commandId)) });
+      return result;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const result = unavailable(reason);
+      this.store.transitionCommand(sessionId, request.commandId, "outcome_unknown", { error: reason, result: json(result) });
+      this.#record(runtime, { type: "cedia_command", command: json(this.store.getCommand(sessionId, request.commandId)) });
+      return result;
+    }
+  }
+
+  /**
+   * Settle the queued turn intent that submitted this exact text, if any.
+   *
+   * OMP removes the first text match; Cedia settles the oldest queued intent
+   * with the same submission text so no ghost stays waiting. At most one
+   * intent settles per removal, matching the runtime's first-match rule.
+   */
+  #settleQueuedMessageIntent(runtime: Runtime, message: string): void {
+    const sessionId = runtime.session.id;
+    const open = this.store.listTurnIntents(sessionId).filter(intent => intent.state === "queued");
+    for (const intent of open) {
+      const command = this.store.getCommand(sessionId, intent.commandId);
+      const submitted = (command?.payload as { message?: unknown } | undefined)?.message;
+      if (typeof submitted !== "string" || submitted !== message) continue;
+      this.store.transitionTurnIntent(sessionId, intent.turnIntentId, "cancelled", {
+        reason: "Owner removed this queued turn from the OMP queue. It did not start.",
+      });
+      this.#recordTurn(runtime, intent, "cancelled", {
+        reason: "Owner removed this queued turn from the OMP queue. It did not start.",
+      });
+      return;
+    }
+  }
+
+  /**
+   * Promote one follow-up row into steering through OMP's own primitive.
+   *
+   * Promotion moves the message to the steering queue where its turn runs, so
+   * no intent settles here: the promoted turn proceeds instead of cancelling.
+   */
+  async queuePromoteMessage(
+    sessionId: string,
+    deviceId: string,
+    request: { commandId: string; incarnation: string; message: string },
+  ): Promise<OmpQueueSnapshot & { promoted: boolean }> {
+    this.#assertOpen();
+    const session = this.#session(sessionId);
+    if (!request.message) throw new HostError("invalid_body", "A queue promotion names its message text", 400);
+    const claim = this.store.claimCommand({
+      sessionId,
+      commandId: request.commandId,
+      deviceId,
+      incarnation: request.incarnation,
+      kind: "cedia_queue_promote",
+      payload: { message: request.message },
+    });
+    if (!claim.created) return this.#queueRowCommandResult(claim.command, "promoted");
+    const unavailable = (reason: string): OmpQueueSnapshot & { promoted: boolean } => ({ state: "unavailable", reason, promoted: false });
+    const runtime = this.#runtimes.get(sessionId);
+    if (!runtime || runtime.closing || !runtime.client || runtime.client.phase !== "ready") {
+      const result = unavailable(NO_OMP_QUEUE_RUNTIME_REASON);
+      this.store.transitionCommand(sessionId, request.commandId, "not_dispatched", { error: NO_OMP_QUEUE_RUNTIME_REASON, result: json(result) });
+      return result;
+    }
+    try {
+      const ack = await (runtime.client as OmpRpcClient).request("promote_queued_message", { message: request.message });
+      const promoted = (ack.data as { promoted?: unknown } | undefined)?.promoted === true;
+      this.#syncTurnQueue(runtime);
+      await runtime.queue.read();
+      const projected = runtime.queue.snapshot();
+      const result: OmpQueueSnapshot & { promoted: boolean } =
+        projected.state === "available" ? { ...projected, promoted } : { ...projected, promoted };
+      this.store.transitionCommand(sessionId, request.commandId, "completed", {
+        ack: json({ type: "response", command: "promote_queued_message", success: true, data: { promoted } }),
+        result: { meaning: "OMP queue promotion acknowledged", data: json(projected), promoted },
+      });
+      this.#record(runtime, { type: "cedia_command", command: json(this.store.getCommand(sessionId, request.commandId)) });
+      return result;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const result = unavailable(reason);
+      this.store.transitionCommand(sessionId, request.commandId, "outcome_unknown", { error: reason, result: json(result) });
+      this.#record(runtime, { type: "cedia_command", command: json(this.store.getCommand(sessionId, request.commandId)) });
+      return result;
+    }
+  }
+
+  /**
+   * Replay a per-row queue command from its receipt: the stored snapshot plus
+   * the outcome flag kept beside it (the snapshot alone cannot say what a
+   * removal removed). Unparseable receipts stay unavailable, never invented.
+   */
+  #queueRowCommandResult(command: Command, flag: "removed" | "promoted"): OmpQueueSnapshot & { removed: boolean; promoted: boolean } {
+    const base = { removed: false, promoted: false };
+    const result = object(command.result) ? (command.result as Record<string, unknown>) : undefined;
+    const data = result !== undefined && object(result.data) ? result.data : undefined;
+    if (data === undefined) return { state: "unavailable", reason: command.error ?? NO_OMP_QUEUE_RUNTIME_REASON, ...base };
+    try {
+      const snapshot = parseOmpQueueCommandResult(data);
+      const outcome = result?.[flag] === true;
+      return snapshot.state === "available"
+        ? { ...snapshot, ...base, [flag]: outcome }
+        : { ...snapshot, ...base };
+    } catch {
+      return { state: "unavailable", reason: command.error ?? NO_OMP_QUEUE_RUNTIME_REASON, ...base };
+    }
+  }
+
   #queueDropCommandResult(command: Command): OmpQueueSnapshot {
     const stored = object(command.result) && object((command.result as Record<string, unknown>).data) ? (command.result as Record<string, unknown>).data : command.result;
     if (stored !== undefined) {
@@ -3806,6 +3968,63 @@ export class CediaHost {
     return undefined;
   }
 
+  /**
+   * The taskless configuration-only OMP runtime (plan §6.4.1 S2).
+   *
+   * Spawned lazily on the first settings request that needs no task, supervised
+   * across requests and stopped with the host. It owns no session, loads no
+   * executable packages and contacts no model: settings operations touch only
+   * OMP's own configuration layers. A binary that answers without the settings
+   * service marker is closed without sending it a command — a session runtime
+   * is never used as the configuration service.
+   */
+  async #configSettingsRuntime(): Promise<OmpRpcClient> {
+    this.#assertOpen();
+    const live = this.#configSettingsClient;
+    if (live && live.phase === "ready") return live;
+    if (live) {
+      this.#configSettingsClient = undefined;
+      await live.close().catch(() => undefined);
+    }
+    if (!this.#configSettingsStarting) {
+      this.#configSettingsStarting = (async () => {
+        const executable = this.#options.ompExecutable ?? "omp";
+        const baseEnv = this.#options.ompEnv ?? process.env;
+        const client = await OmpRpcClient.start({
+          executable,
+          cwd: this.#options.stateDir,
+          env: {
+            ...baseEnv,
+            XDG_STATE_HOME: baseEnv.XDG_STATE_HOME ?? join(this.#options.stateDir, "xdg-state"),
+            CEDIA_NATIVE_CACHE_DIR: join(this.#options.stateDir, "omp-natives"),
+            // Same product policy as every runtime this host spawns (§2.8): never
+            // spend a saved credit on its own. Set here too because this process
+            // shares the owner's configuration.
+            CEDIA_POLICY_CREDIT_GUARD: "1",
+            CEDIA_SETTINGS_SERVICE: "1",
+          },
+          readyTimeoutMs: 20_000,
+          requestTimeoutMs: this.#options.ompRequestTimeoutMs ?? 30_000,
+        });
+        const marker = (client.readyFrame as unknown as { cediaSettingsServiceVersion?: unknown } | undefined)
+          ?.cediaSettingsServiceVersion;
+        if (marker !== 1) {
+          await client.close().catch(() => undefined);
+          throw new HostError(
+            "omp_settings_unavailable",
+            "The OMP runtime does not advertise the taskless configuration service; Settings needs the pinned runtime",
+            503,
+          );
+        }
+        this.#configSettingsClient = client;
+        return client;
+      })().finally(() => {
+        this.#configSettingsStarting = undefined;
+      });
+    }
+    return this.#configSettingsStarting;
+  }
+
   async ompCapabilitySnapshot(expectedRevision?: string): Promise<HostOmpCapabilitySnapshot> {
     this.#assertOpen();
     const live = this.#liveRuntimeClient();
@@ -3816,9 +4035,22 @@ export class CediaHost {
       : { state: "available", snapshot };
   }
 
-  /** Every settings path the live runtime defines, with its metadata and no values. */
+  /**
+   * Every settings path the runtime defines, with schema metadata and no values.
+   *
+   * Served tasklessly through the configuration service so Settings opens with
+   * zero tasks and zero provider calls. A runtime predating the service falls
+   * back to the live session inventory; a host with neither reports absence.
+   */
   async ompSettingsKeys(): Promise<HostOmpSettingsAnswer<OmpSettingsKeysSnapshot>> {
     this.#assertOpen();
+    try {
+      const client = await this.#configSettingsRuntime();
+      const keys = await readOmpSettingsDescribe(client);
+      if (keys !== undefined) return { state: "available", answer: keys };
+    } catch (error) {
+      if (!(error instanceof HostError && error.code === "omp_settings_unavailable")) throw error;
+    }
     const live = this.#liveRuntimeClient();
     if (!live) return { state: "unavailable", reason: NO_LIVE_OMP_SETTINGS_REASON };
     const keys = await readOmpSettingsKeys(live.client);
@@ -3863,6 +4095,94 @@ export class CediaHost {
   }
 
   /**
+   * One effective settings value in an explicit scope.
+   *
+   * Global and project scopes resolve through the taskless configuration
+   * service and never borrow a live task's layers. Session scope reads the
+   * named task's existing owner and creates nothing: without that live owner
+   * the answer is unavailable, never a neighboring task's settings.
+   */
+  async ompSettingsValueIn(path: string, context: OmpSettingsContext): Promise<HostOmpSettingsAnswer<OmpSettingsValue>> {
+    this.#assertOpen();
+    if (context.scope === "session") {
+      const runtime = this.#runtimes.get(context.sessionId);
+      if (!runtime || runtime.closing || !runtime.client || runtime.client.phase !== "ready")
+        return { state: "unavailable", reason: "No live runtime owns this task; Settings reads a named existing task only" };
+      const value = await readOmpSettingsValueIn(runtime.client, path, {
+        context: { scope: "session", sessionId: context.sessionId },
+      });
+      return value === undefined
+        ? { state: "unavailable", reason: NO_CAPABILITY_BRIDGE_REASON }
+        : { state: "available", answer: value };
+    }
+    const projectDir = context.scope === "project" ? this.#settingsProjectDir(context.projectId) : undefined;
+    try {
+      const client = await this.#configSettingsRuntime();
+      const value = await readOmpSettingsValueIn(
+        client,
+        path,
+        context.scope === "project"
+          ? { context: { scope: "project", projectId: context.projectId }, projectDir }
+          : { context: { scope: "global" } },
+      );
+      return value === undefined
+        ? { state: "unavailable", reason: NO_CAPABILITY_BRIDGE_REASON }
+        : { state: "available", answer: value };
+    } catch (error) {
+      if (error instanceof HostError && error.code === "omp_settings_unavailable") {
+        const live = this.#liveRuntimeClient();
+        if (!live) return { state: "unavailable", reason: NO_LIVE_OMP_SETTINGS_REASON };
+        const value = await readOmpSettingsValue(live.client, path);
+        return value === undefined
+          ? { state: "unavailable", reason: NO_CAPABILITY_BRIDGE_REASON }
+          : { state: "available", answer: value };
+      }
+      throw error;
+    }
+  }
+
+  /** Resolve a project id to its trusted directory. Clients never pass paths. */
+  #settingsProjectDir(projectId: string): string {
+    const project = this.store.getProject(projectId);
+    if (!project) throw new HostError("unknown_project", `Unknown project: ${projectId}`, 404);
+    return realpathSync(project.path);
+  }
+
+  /**
+   * Refuse a project mutation while the IDE holds the project config dirty.
+   *
+   * The bridge never saves automatically, so writing under a dirty buffer would
+   * fork the file: disk keeps the stale content, the buffer keeps the owner's
+   * newer text. Without a live editor there is no buffer to protect.
+   */
+  async #assertProjectConfigClean(projectDir: string): Promise<void> {
+    const editors = this.#options.editors;
+    if (!editors || !editors.hasConnection(projectDir)) return;
+    const targets = [join(projectDir, ".omp", "config.yml"), join(projectDir, ".omp", "settings.json")];
+    let inventory: { documents?: { path: string; dirty?: boolean }[] };
+    try {
+      inventory = (await editors.request(projectDir, { kind: "inventory", includeClean: false }, AbortSignal.timeout(5_000))) as {
+        documents?: { path: string; dirty?: boolean }[];
+      };
+    } catch {
+      throw new HostError(
+        "omp_settings_editor_unknown",
+        "A live IDE covers this project but its buffer state is unreachable; save or close it and retry",
+        409,
+      );
+    }
+    const dirty = (inventory.documents ?? []).filter(
+      document => document.dirty === true && targets.some(target => document.path === target),
+    );
+    if (dirty.length > 0)
+      throw new HostError(
+        "omp_settings_dirty_buffer",
+        `The IDE holds unsaved changes in ${dirty.map(document => document.path).slice(0, 3).join(", ")}; save or revert them before Settings writes the project file`,
+        409,
+      );
+  }
+
+  /**
    * Write one settings path through the live runtime.
    *
    * Cedia's policy is applied before the write: the path must exist in the runtime's own schema and
@@ -3872,19 +4192,91 @@ export class CediaHost {
    */
   async ompSettingsWrite(request: { path: string; value: unknown; expectedRevision?: string }): Promise<HostOmpSettingsAnswer<OmpSettingsValue>> {
     this.#assertOpen();
-    const live = this.#liveRuntimeClient();
-    if (!live) return { state: "unavailable", reason: NO_LIVE_OMP_SETTINGS_REASON };
-    const inventory = await readOmpSettingsKeys(live.client);
-    if (inventory === undefined) return { state: "unavailable", reason: NO_CAPABILITY_BRIDGE_REASON };
-    const key = inventory.keys.find(candidate => candidate.path === request.path);
+    // The legacy single-path write keeps its contract: the path must be a runtime
+    // setting with an editable disposition. It prefers the taskless configuration
+    // service and falls back to a live session runtime on older binaries.
+    const inventory = await this.ompSettingsKeys();
+    if (inventory.state !== "available") return inventory;
+    const key = inventory.answer.keys.find(candidate => candidate.path === request.path);
     if (key === undefined) throw new OmpSettingsPathError(request.path, `${request.path} is not a setting this runtime defines`);
     const { disposition, reason } = ompSettingDisposition(key);
     if (disposition !== "editable")
       throw new OmpSettingsNotEditableError(request.path, disposition, reason ?? "Cedia does not write this path");
+    try {
+      const client = await this.#configSettingsRuntime();
+      const written = await writeOmpSettingsValue(client, request);
+      return written === undefined
+        ? { state: "unavailable", reason: NO_CAPABILITY_BRIDGE_REASON }
+        : { state: "available", answer: written };
+    } catch (error) {
+      if (!(error instanceof HostError && error.code === "omp_settings_unavailable")) throw error;
+    }
+    const live = this.#liveRuntimeClient();
+    if (!live) return { state: "unavailable", reason: NO_LIVE_OMP_SETTINGS_REASON };
     const written = await writeOmpSettingsValue(live.client, request);
     return written === undefined
       ? { state: "unavailable", reason: NO_CAPABILITY_BRIDGE_REASON }
       : { state: "available", answer: written };
+  }
+
+  /**
+   * Apply a scoped mutation: global writes and unsets go through the taskless
+   * configuration service; project writes resolve the project id to its trusted
+   * directory and refuse while the IDE holds the project config dirty.
+   *
+   * Cedia policy precedes the runtime: protected and excluded paths are refused
+   * here with their reason. Advanced placement is presentation, not a write
+   * prohibition on the new contract; the legacy single-path write keeps its
+   * editable-only rule so old surfaces cannot widen themselves by accident.
+   */
+  async ompSettingsMutate(mutation: {
+    context: { scope: "global" } | { scope: "project"; projectId: string };
+    expectedRevision?: string;
+    changes: readonly ({ path: string; operation: "set"; value?: unknown } | { path: string; operation: "unset" })[];
+  }): Promise<{ values: readonly OmpSettingsValue[]; scope: "global" | "project" }> {
+    this.#assertOpen();
+    const inventory = await this.ompSettingsKeys();
+    if (inventory.state !== "available") throw new HostError("omp_settings_unavailable", inventory.reason, 503);
+    const byPath = new Map(inventory.answer.keys.map(key => [key.path, key]));
+    for (const change of mutation.changes) {
+      const key = byPath.get(change.path);
+      if (key === undefined) throw new OmpSettingsPathError(change.path, `${change.path} is not a setting this runtime defines`);
+      const { disposition, reason } = ompSettingDisposition(key);
+      if (disposition === "protected" || disposition === "excluded")
+        throw new OmpSettingsNotEditableError(change.path, disposition, reason ?? "Cedia does not write this path");
+    }
+    const client = await this.#configSettingsRuntime();
+    if (mutation.context.scope === "project") {
+      const projectDir = this.#settingsProjectDir(mutation.context.projectId);
+      await this.#assertProjectConfigClean(projectDir);
+      const result = await mutateOmpSettings(
+        client,
+        {
+          context: { scope: "project", projectId: mutation.context.projectId },
+          ...(mutation.expectedRevision === undefined ? {} : { expectedRevision: mutation.expectedRevision }),
+          changes: mutation.changes as never,
+        },
+        projectDir,
+      );
+      if (!result) throw new HostError("omp_settings_unavailable", NO_CAPABILITY_BRIDGE_REASON, 503);
+      return result;
+    }
+    const result = await mutateOmpSettings(
+      client,
+      { context: { scope: "global" }, ...(mutation.expectedRevision === undefined ? {} : { expectedRevision: mutation.expectedRevision }), changes: mutation.changes as never },
+      undefined,
+    );
+    if (!result) throw new HostError("omp_settings_unavailable", NO_CAPABILITY_BRIDGE_REASON, 503);
+    return result;
+  }
+
+  /** Preview an unset of the named global paths. Writes nothing. */
+  async ompSettingsResetPreview(paths: readonly string[]): Promise<{ path: string; globalConfigured: boolean; current: OmpSettingsValue }[]> {
+    this.#assertOpen();
+    const client = await this.#configSettingsRuntime();
+    const preview = await previewOmpSettingsReset(client, paths);
+    if (!preview) throw new HostError("omp_settings_unavailable", NO_CAPABILITY_BRIDGE_REASON, 503);
+    return [...preview];
   }
 
   /** Provider-auth settings: OMP owns the credentials, this only brokers the calls. */
@@ -4775,6 +5167,11 @@ export class CediaHost {
     return this.#closePromise = (async () => {
       await Promise.allSettled([...this.#starting.values()]);
       await this.#providerAuth.close();
+      if (this.#configSettingsClient) {
+        const config = this.#configSettingsClient;
+        this.#configSettingsClient = undefined;
+        await config.close().catch(() => undefined);
+      }
       const results = await Promise.allSettled([...this.#runtimes.keys()].map(id => this.#stopSessionWithMode(id, true)));
       const failed = results.find(result => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;

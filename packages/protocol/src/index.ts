@@ -1112,6 +1112,37 @@ export function isOmpCapabilitySnapshot(value: unknown): value is OmpCapabilityS
  * treats it as a credential, whether it has a settings-UI row, and whether it is
  * the one path OMP can write into a project layer. It never carries a value.
  */
+export type OmpSettingsScope = "global" | "project" | "session";
+
+export interface OmpSettingsContextGlobal {
+  readonly scope: "global";
+}
+export interface OmpSettingsContextProject {
+  readonly scope: "project";
+  readonly projectId: string;
+}
+export interface OmpSettingsContextSession {
+  readonly scope: "session";
+  readonly sessionId: string;
+}
+/**
+ * Which configuration a settings request resolves in. Global is the shared OMP
+ * configuration the terminal also uses. Project is one explicitly selected
+ * project the host resolves to a trusted directory. Session is an inspect-only
+ * effective view tied to a named existing task.
+ */
+export type OmpSettingsContext = OmpSettingsContextGlobal | OmpSettingsContextProject | OmpSettingsContextSession;
+
+export type OmpSettingsMutationChange =
+  | { readonly path: string; readonly operation: "set"; readonly value: unknown }
+  | { readonly path: string; readonly operation: "unset" };
+
+export interface OmpSettingsMutation {
+  readonly context: Exclude<OmpSettingsContext, OmpSettingsContextSession>;
+  readonly expectedRevision?: string;
+  readonly changes: readonly OmpSettingsMutationChange[];
+}
+
 export interface OmpSettingsKey {
   readonly path: string;
   readonly type: string;
@@ -1119,6 +1150,14 @@ export interface OmpSettingsKey {
   readonly ui: boolean;
   readonly tab?: string;
   readonly projectWritable: boolean;
+  /** The TUI label, group and help text OMP declares, when it declares them. */
+  readonly label?: string;
+  readonly description?: string;
+  readonly group?: string;
+  /** The static schema default, identical for every user; never a configured value. */
+  readonly defaultJson?: unknown;
+  /** The environment variable that overrides this path, when one exists. */
+  readonly envVar?: string;
   /**
    * The values an `enum` path accepts, published by the schema that validates a write.
    * Present only when the runtime declares them, so a control renders the real choices and
@@ -1167,6 +1206,18 @@ export interface OmpSettingsValue {
   readonly bytes?: number;
   /** Identifies the effective settings this value was read at; a write may name it. */
   readonly settingsRevision: string;
+  /**
+   * Which configuration this answer was resolved in. Absent on answers from a
+   * runtime predating scopes: every legacy read went through a live session
+   * runtime, so the parser reports those as session scope.
+   */
+  readonly scope: OmpSettingsScope;
+  /** The layer supplying the effective value, in merge precedence order. */
+  readonly provenance?: "env" | "runtime" | "overlay" | "project" | "global" | "default";
+  /** The saved global-layer value when one exists, so masking is visible. Absent under redaction rules. */
+  readonly storedGlobal?: unknown;
+  /** The static schema default, identical for every user. */
+  readonly defaultJson?: unknown;
 }
 
 /** The host's explicit answer about whether a live runtime answered a settings read. */
@@ -1182,9 +1233,9 @@ export class OmpSettingsValidationError extends TypeError {
   }
 }
 
-const OMP_SETTINGS_KEY_FIELDS = new Set(["path", "type", "credential", "ui", "tab", "projectWritable", "values", "apply"]);
+const OMP_SETTINGS_KEY_FIELDS = new Set(["path", "type", "credential", "ui", "tab", "projectWritable", "values", "apply", "label", "description", "group", "defaultJson", "envVar"]);
 const OMP_SETTINGS_INVENTORY_FIELDS = new Set(["keys", "settingsRevision"]);
-const OMP_SETTINGS_VALUE_FIELDS = new Set(["path", "credential", "redacted", "configured", "value", "tooLarge", "bytes", "settingsRevision"]);
+const OMP_SETTINGS_VALUE_FIELDS = new Set(["path", "credential", "redacted", "configured", "value", "tooLarge", "bytes", "settingsRevision", "scope", "provenance", "storedGlobal", "defaultJson"]);
 
 function ompSettingsRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new OmpSettingsValidationError(`${label} must be an object`);
@@ -1217,7 +1268,11 @@ export function parseOmpSettingsKey(value: unknown): OmpSettingsKey {
   const projectWritable = ompSettingsFlag(record.projectWritable, "OMP settings project-writable marker");
   const values = record.values === undefined ? undefined : ompSettingsEnumValues(record.values);
   const apply = record.apply === undefined ? undefined : ompSettingsApply(record.apply);
-  return { path, type, credential, ui, ...(tab === undefined ? {} : { tab }), projectWritable, ...(values === undefined ? {} : { values }), ...(apply === undefined ? {} : { apply }) };
+  const label = record.label === undefined ? undefined : ompSettingsText(record.label, "OMP settings label");
+  const description = record.description === undefined ? undefined : ompSettingsText(record.description, "OMP settings description");
+  const group = record.group === undefined ? undefined : ompSettingsText(record.group, "OMP settings group");
+  const envVar = record.envVar === undefined ? undefined : ompSettingsText(record.envVar, "OMP settings env marker");
+  return { path, type, credential, ui, ...(tab === undefined ? {} : { tab }), projectWritable, ...(values === undefined ? {} : { values }), ...(apply === undefined ? {} : { apply }), ...(label === undefined ? {} : { label }), ...(description === undefined ? {} : { description }), ...(group === undefined ? {} : { group }), ...(Object.hasOwn(record, "defaultJson") ? { defaultJson: record.defaultJson } : {}), ...(envVar === undefined ? {} : { envVar }) };
 }
 
 /** An unknown timing is refused: a client must not render a timing the runtime never claimed. */
@@ -1282,16 +1337,89 @@ export function parseOmpSettingsValue(value: unknown): OmpSettingsValue {
   if (!redacted && tooLarge !== true && !carriesValue) throw new OmpSettingsValidationError("a settings answer must carry a value unless it is redacted or oversized");
   if (tooLarge === true && bytes === undefined) throw new OmpSettingsValidationError("an oversized settings answer must report its size");
   if (credential && !redacted) throw new OmpSettingsValidationError("a credential path must be answered redacted");
+  // Answers from a runtime predating scopes were all read through a live session
+  // runtime, so the parser reports those as session scope instead of guessing global.
+  const scope = record.scope === undefined ? "session" : ompSettingsScope(record.scope);
+  const provenance = record.provenance === undefined ? undefined : ompSettingsProvenance(record.provenance);
+  const carriesStored = Object.hasOwn(record, "storedGlobal");
+  if (redacted && carriesStored) throw new OmpSettingsValidationError("a redacted settings answer must not carry a stored layer");
+  if (tooLarge === true && carriesStored) throw new OmpSettingsValidationError("an oversized settings answer must not carry a stored layer");
   return {
     path,
     credential,
     redacted,
     configured,
     settingsRevision,
+    scope,
     ...(carriesValue ? { value: record.value } : {}),
     ...(tooLarge === true ? { tooLarge: true as const } : {}),
     ...(bytes === undefined ? {} : { bytes: bytes as number }),
+    ...(provenance === undefined ? {} : { provenance }),
+    ...(carriesStored ? { storedGlobal: record.storedGlobal } : {}),
+    ...(Object.hasOwn(record, "defaultJson") ? { defaultJson: record.defaultJson } : {}),
   };
+}
+
+function ompSettingsScope(value: unknown): OmpSettingsScope {
+  if (value === "global" || value === "project" || value === "session") return value;
+  throw new OmpSettingsValidationError("OMP settings scope must be global, project or session");
+}
+
+function ompSettingsProvenance(value: unknown): NonNullable<OmpSettingsValue["provenance"]> {
+  if (value === "env" || value === "runtime" || value === "overlay" || value === "project" || value === "global" || value === "default") return value;
+  throw new OmpSettingsValidationError("OMP settings provenance must be a layer the runtime reads");
+}
+
+/**
+ * Parse an untrusted settings context from a client. Session scope names its
+ * task; project scope names a project id the host resolves to a trusted
+ * directory. Clients never pass filesystem paths.
+ */
+export function parseOmpSettingsContext(value: unknown): OmpSettingsContext {
+  const record = ompSettingsRecord(value, "OMP settings context");
+  if (record.scope === "global") {
+    ompSettingsExactKeys(record, new Set(["scope"]), "OMP settings context");
+    return { scope: "global" };
+  }
+  if (record.scope === "project") {
+    ompSettingsExactKeys(record, new Set(["scope", "projectId"]), "OMP settings context");
+    return { scope: "project", projectId: ompSettingsText(record.projectId, "OMP project id") };
+  }
+  if (record.scope === "session") {
+    ompSettingsExactKeys(record, new Set(["scope", "sessionId"]), "OMP settings context");
+    return { scope: "session", sessionId: ompSettingsText(record.sessionId, "OMP session id") };
+  }
+  throw new OmpSettingsValidationError("OMP settings scope must be global, project or session");
+}
+
+/**
+ * Parse an untrusted scoped mutation from the owner. Shape only: the runtime
+ * validates paths, values and the revision before anything is written, and a
+ * session context is refused here because task controls are not preferences.
+ */
+export function parseOmpSettingsMutation(value: unknown): OmpSettingsMutation {
+  const record = ompSettingsRecord(value, "OMP settings mutation");
+  ompSettingsExactKeys(record, new Set(["context", "expectedRevision", "changes"]), "OMP settings mutation");
+  const context = parseOmpSettingsContext(record.context);
+  if (context.scope === "session") throw new OmpSettingsValidationError("a settings mutation never targets a session");
+  const expectedRevision = record.expectedRevision === undefined ? undefined : ompSettingsText(record.expectedRevision, "OMP settings revision");
+  if (!Array.isArray(record.changes) || record.changes.length === 0 || record.changes.length > 256)
+    throw new OmpSettingsValidationError("OMP settings changes must be a non-empty bounded array");
+  const changes = record.changes.map(entry => {
+    const change = ompSettingsRecord(entry, "OMP settings change");
+    const path = ompSettingsText(change.path, "OMP settings path");
+    if (change.operation === "unset") {
+      ompSettingsExactKeys(change, new Set(["path", "operation"]), "OMP settings change");
+      return { path, operation: "unset" as const };
+    }
+    if (change.operation === "set") {
+      ompSettingsExactKeys(change, new Set(["path", "operation", "value"]), "OMP settings change");
+      if (!Object.hasOwn(change, "value")) throw new OmpSettingsValidationError("OMP settings set needs a value");
+      return { path, operation: "set" as const, value: change.value };
+    }
+    throw new OmpSettingsValidationError("OMP settings changes are set with a value, or unset");
+  });
+  return { context, ...(expectedRevision === undefined ? {} : { expectedRevision }), changes };
 }
 
 /** Explicit validation aliases for callers that prefer an assert-like name. */

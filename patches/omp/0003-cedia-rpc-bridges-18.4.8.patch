@@ -1443,6 +1443,447 @@ index 27d0be79ca..6058adbf75 100644
  type AdvisorYamlEntry = typeof advisorEntrySchema.infer;
  
  /**
+diff --git a/packages/coding-agent/src/config/cedia-settings-service.ts b/packages/coding-agent/src/config/cedia-settings-service.ts
+new file mode 100644
+index 0000000000..34213fee63
+--- /dev/null
++++ b/packages/coding-agent/src/config/cedia-settings-service.ts
+@@ -0,0 +1,435 @@
++/**
++ * UI-neutral settings service behind OMP's Cedia settings bridge (plan §6.4.1 S2).
++ *
++ * One owner for settings inventory, reads, mutations and reset previews over a
++ * Settings instance. The RPC bridge (cedia-capability-bridge) and the RPC mode
++ * handlers both delegate here, so the session runtime and the taskless
++ * configuration-only entry answer from the same code. This module never starts an
++ * execution session, loads executable packages or contacts a model: every path
++ * below touches only the settings registry, the configuration layers and the
++ * config files OMP itself owns.
++ */
++import { createHash } from "node:crypto";
++import * as path from "node:path";
++import { orderedSettings } from "./all-settings";
++import { lookup, type AnySetting } from "./registry";
++import { Settings } from "./settings";
++import { getSettingApplyTiming } from "./settings-apply-timing";
++import type {
++	RpcCediaSettingsKey,
++	RpcCediaSettingsMutatePayload,
++	RpcCediaSettingsScope,
++	RpcCediaSettingsValue,
++} from "../modes/rpc/rpc-types";
++
++/**
++ * The one settings path OMP can write into a project layer.
++ *
++ * `Settings` writes the global layer for every path; `setModelRole` is the
++ * documented exception and writes `modelRoles` into the project's config when
++ * `modelRoleStorage` is `project`. Everything else Cedia reads here is a
++ * global-layer value, so this table is the whole exception rather than a
++ * guess about each key. A guarded OMP-owned project writer for other
++ * supported project settings lands in S3; until then they stay read-only.
++ */
++export const PROJECT_WRITABLE_SETTING_PATHS: ReadonlySet<string> = new Set(["modelRoles"]);
++
++/** Largest settings value handed to a client; larger answers report their size. */
++export const CEDIA_SETTINGS_VALUE_MAX_BYTES = 8_192;
++
++/** Key names inside a set value that must never travel through generic settings. */
++const NESTED_SECRET_KEY_PATTERN = /token|secret|passwd|password|apikey|api_key|privatekey|clientsecret/i;
++
++/** Refusal codes the bridge maps to wire errors without inventing new vocabulary. */
++export const SETTINGS_UNKNOWN_PATH = "cedia_settings_unknown_path";
++export const SETTINGS_STALE_REVISION = "cedia_settings_stale_revision";
++export const SETTINGS_REJECTED = "cedia_settings_rejected";
++export const SETTINGS_CREDENTIAL_WRITE = "cedia_settings_credential_write";
++
++export class CediaSettingsError extends Error {
++	readonly code: string;
++	constructor(code: string, message: string) {
++		super(message);
++		this.name = "CediaSettingsError";
++		this.code = code;
++	}
++}
++
++/** Monotonic revision of the effective settings: sha256 of configured path/value pairs. */
++export function settingsRevisionOfInstance(settings: Settings): string {
++	const configured = orderedSettings()
++		.filter(handle => settings.isConfigured(handle))
++		.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
++		.map(handle => [handle.id, handle.layered(settings)]);
++	return createHash("sha256").update(JSON.stringify(configured)).digest("hex").slice(0, 32);
++}
++
++/** JSON-safe copy for the wire; unserializable statics are omitted, never sent raw. */
++function jsonSafe(value: unknown): { ok: true; value: unknown } | { ok: false } {
++	try {
++		return { ok: true, value: value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as unknown) };
++	} catch {
++		return { ok: false };
++	}
++}
++
++function definitionDefault(handle: AnySetting): unknown {
++	const definition = (handle as { definition?: { default?: unknown } }).definition;
++	return definition?.default;
++}
++
++/** Every settings path the schema defines, with the metadata a control needs. */
++export function buildSettingsInventory(): RpcCediaSettingsKey[] {
++	return orderedSettings()
++		.map(handle => {
++			const ui = handle.ui as { tab?: unknown; group?: unknown; label?: unknown; description?: unknown } | undefined;
++			const values = handle.type === "enum" ? (handle as { enumValues?: readonly string[] }).enumValues : undefined;
++			const safeDefault = handle.isCredential ? undefined : jsonSafe(definitionDefault(handle));
++			const row: RpcCediaSettingsKey = {
++				path: handle.id,
++				type: handle.type,
++				credential: handle.isCredential,
++				ui: ui !== undefined,
++				...(typeof ui?.tab === "string" ? { tab: ui.tab } : {}),
++				projectWritable: PROJECT_WRITABLE_SETTING_PATHS.has(handle.id),
++				...(values === undefined ? {} : { values: [...values] }),
++				apply: getSettingApplyTiming(handle.id),
++				...(typeof ui?.label === "string" && ui.label.length > 0 ? { label: ui.label } : {}),
++				...(typeof ui?.description === "string" && ui.description.length > 0
++					? { description: ui.description }
++					: {}),
++				...(typeof ui?.group === "string" && ui.group.length > 0 ? { group: ui.group } : {}),
++				...(safeDefault === undefined || !safeDefault.ok || safeDefault.value === undefined
++					? {}
++					: { defaultJson: safeDefault.value }),
++				...(typeof handle.envName === "string" && handle.envName.length > 0 ? { envVar: handle.envName } : {}),
++			};
++			return row;
++		})
++		.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
++}
++
++function walkSegments(root: unknown, segments: readonly string[]): unknown {
++	let current = root;
++	for (const segment of segments) {
++		if (current === null || typeof current !== "object" || Array.isArray(current)) return undefined;
++		current = (current as Record<string, unknown>)[segment];
++		if (current === undefined) return undefined;
++	}
++	return current;
++}
++
++/**
++ * One effective settings value with provenance and stored-versus-effective state.
++ *
++ * Credential paths answer redacted with no value, exactly like native config
++ * listing; oversized values report their size. `storedGlobal` is the saved
++ * global-layer value when one exists, so a client can show when it is masked
++ * by a stronger layer; it is omitted under the same redaction rules as `value`.
++ */
++export function readSettingsValue(
++	settings: Settings,
++	path: string,
++	scope: RpcCediaSettingsScope,
++): RpcCediaSettingsValue {
++	const handle = lookup(path);
++	if (handle === undefined)
++		throw new CediaSettingsError(SETTINGS_UNKNOWN_PATH, `${path} is not a setting this runtime defines`);
++	const configured = settings.isConfigured(handle);
++	// OMP's own getProvenance never reports env: an env-sourced value reads as
++	// default (or its masked layer) there. The layers-only value differs from the
++	// effective value only when the environment supplies it — envFallback yields
++	// otherwise — so that difference is the env signal, whatever it masks.
++	let provenance = settings.getProvenance(handle);
++	if (!handle.isCredential) {
++		try {
++			const layeredSerialized = JSON.stringify(handle.layered(settings));
++			const effectiveSerialized = JSON.stringify(handle.get(settings));
++			if (layeredSerialized !== effectiveSerialized) provenance = "env";
++		} catch {
++			// Unserializable statics keep the runtime's own answer.
++		}
++	}
++	const revision = settingsRevisionOfInstance(settings);
++	const safeDefault = handle.isCredential ? undefined : jsonSafe(definitionDefault(handle));
++	const base = {
++		path,
++		credential: handle.isCredential,
++		configured,
++		settingsRevision: revision,
++		scope,
++		provenance,
++		...(!safeDefault?.ok || safeDefault.value === undefined ? {} : { defaultJson: safeDefault.value }),
++	} as const;
++	if (handle.isCredential) return { ...base, credential: true, redacted: true };
++	const value = handle.get(settings);
++	const serialized = JSON.stringify(value);
++	const storedRaw = walkSegments(settings.getGlobalSettings(), handle.segments);
++	const safeStored = storedRaw === undefined ? undefined : jsonSafe(storedRaw);
++	const stored =
++		safeStored?.ok &&
++		safeStored.value !== undefined &&
++		JSON.stringify(safeStored.value) !== undefined &&
++		(JSON.stringify(safeStored.value) ?? "").length <= CEDIA_SETTINGS_VALUE_MAX_BYTES
++			? { storedGlobal: safeStored.value }
++			: {};
++	if (serialized !== undefined && serialized.length > CEDIA_SETTINGS_VALUE_MAX_BYTES)
++		return {
++			...base,
++			credential: false,
++			redacted: false,
++			tooLarge: true as const,
++			bytes: serialized.length,
++			...stored,
++		};
++	const safe = jsonSafe(value);
++	if (!safe.ok)
++		return {
++			...base,
++			credential: false,
++			redacted: false,
++			tooLarge: true as const,
++			bytes: serialized?.length ?? 0,
++			...stored,
++		};
++	return { ...base, credential: false, redacted: false, value: safe.value, ...stored };
++}
++
++function assertNoNestedSecrets(value: unknown, path: string): void {
++	const seen: string[] = [];
++	const visit = (node: unknown): void => {
++		if (Array.isArray(node)) {
++			for (const entry of node) visit(entry);
++			return;
++		}
++		if (node !== null && typeof node === "object") {
++			for (const [key, entry] of Object.entries(node)) {
++				if (NESTED_SECRET_KEY_PATTERN.test(key)) seen.push(key);
++				visit(entry);
++			}
++		}
++	};
++	visit(value);
++	if (seen.length > 0)
++		throw new CediaSettingsError(
++			SETTINGS_CREDENTIAL_WRITE,
++			`${path} carries nested secret fields (${[...new Set(seen)].slice(0, 4).join(", ")}): credentials use the provider-auth owner, never generic settings`,
++		);
++}
++
++export interface PreparedChange {
++	handle: AnySetting;
++	operation: "set" | "unset";
++	value?: unknown;
++}
++
++/**
++ * Validate every change before any of them is written; throws on the first refusal.
++ *
++ * Shared by the bridge validator (which reports the message before dispatch)
++ * and the mutation itself (which re-validates after loading, so a change the
++ * validator never saw cannot slip through a reordered call).
++ */
++export function prevalidateChanges(changes: RpcCediaSettingsMutatePayload["changes"]): PreparedChange[] {
++	if (!Array.isArray(changes) || changes.length === 0 || changes.length > 256)
++		throw new CediaSettingsError(SETTINGS_REJECTED, "A mutation carries 1-256 changes");
++	return changes.map(change => {
++		if (change === null || typeof change !== "object")
++			throw new CediaSettingsError(SETTINGS_REJECTED, "A mutation change must be an object");
++		const handle = lookup(change.path);
++		if (handle === undefined)
++			throw new CediaSettingsError(
++				SETTINGS_UNKNOWN_PATH,
++				`${String((change as { path?: unknown }).path)} is not a setting this runtime defines`,
++			);
++		if (handle.isCredential)
++			throw new CediaSettingsError(
++				SETTINGS_CREDENTIAL_WRITE,
++				`${handle.id} is a credential path: the provider-auth surface owns it, and a settings control never reads or writes it`,
++			);
++		if (change.operation === "unset") return { handle, operation: "unset" as const };
++		if (change.operation !== "set" || !Object.hasOwn(change, "value"))
++			throw new CediaSettingsError(SETTINGS_REJECTED, `${handle.id} needs operation set with a value, or unset`);
++		assertNoNestedSecrets((change as { value: unknown }).value, handle.id);
++		try {
++			handle.assertWritable((change as { value: unknown }).value as never);
++		} catch (error) {
++			throw new CediaSettingsError(
++				SETTINGS_REJECTED,
++				error instanceof Error ? error.message : `${handle.id} rejects this value`,
++			);
++		}
++		return { handle, operation: "set" as const, value: (change as { value: unknown }).value };
++	});
++}
++
++const mutationChains = new Map<string, Promise<unknown>>();
++
++/** Serialize mutations per configuration source so two writers cannot interleave one file. */
++function serializeMutation<T>(key: string, work: () => Promise<T>): Promise<T> {
++	const prior = mutationChains.get(key) ?? Promise.resolve();
++	const next = prior.then(work, work);
++	mutationChains.set(
++		key,
++		next.catch(() => undefined),
++	);
++	return next;
++}
++
++/**
++ * Apply a validated global mutation atomically in memory, flush once, read back.
++ *
++ * The expected revision is compared after loading and before committing, so a
++ * disk change through OMP's own config CLI — or a second writer — fails this
++ * transaction instead of silently overwriting it. A failed flush never reports saved.
++ */
++export async function mutateGlobalSettings(
++	settings: Settings,
++	payload: RpcCediaSettingsMutatePayload,
++	scope: RpcCediaSettingsScope,
++): Promise<RpcCediaSettingsValue[]> {
++	if (payload.context.scope !== "global")
++		throw new CediaSettingsError(
++			SETTINGS_REJECTED,
++			"This writer serves the global scope; project writes use the guarded project writer",
++		);
++	const prepared = prevalidateChanges(payload.changes);
++	return serializeMutation("global", async () => {
++		// Re-read persisted layers first: a change made through OMP's own config
++		// CLI (or a second writer) after the caller's read fails this transaction
++		// instead of silently overwriting it. Malformed config throws here with
++		// nothing staged, so data and drafts are preserved.
++		await settings.reloadFromDisk();
++		if (typeof payload.expectedRevision === "string") {
++			const current = settingsRevisionOfInstance(settings);
++			if (payload.expectedRevision !== current)
++				throw new CediaSettingsError(
++					SETTINGS_STALE_REVISION,
++					`The effective settings are at revision ${current}, not ${payload.expectedRevision}`,
++				);
++		}
++		for (const change of prepared) {
++			if (change.operation === "unset") change.handle.unset(settings);
++			else change.handle.set(settings, change.value as never);
++		}
++		await settings.flush();
++		return prepared.map(change => readSettingsValue(settings, change.handle.id, scope));
++	});
++}
++
++/** Remove one persisted global override; returns the newly effective value. */
++export async function unsetGlobalSetting(
++	settings: Settings,
++	path: string,
++	expectedRevision: string | undefined,
++	scope: RpcCediaSettingsScope,
++): Promise<RpcCediaSettingsValue> {
++	const [readback] = await mutateGlobalSettings(
++		settings,
++		{
++			context: { scope: "global" },
++			...(expectedRevision === undefined ? {} : { expectedRevision }),
++			changes: [{ path, operation: "unset" }],
++		},
++		scope,
++	);
++	if (readback === undefined)
++		throw new CediaSettingsError(SETTINGS_UNKNOWN_PATH, `${path} is not a setting this runtime defines`);
++	return readback;
++}
++
++export interface ResetPreviewEntry {
++	/** The path that would be unset. */
++	path: string;
++	/** Whether the global layer saves an override for this path. */
++	globalConfigured: boolean;
++	/** The current effective answer, redacted under the same rules as a read. */
++	current: RpcCediaSettingsValue;
++}
++
++/**
++ * Preview an unset of the named paths: which global overrides exist, what is
++ * effective now, and the schema default each unset would reveal. Executing the
++ * unset reads back the newly effective values; the preview itself writes nothing.
++ */
++export function previewGlobalReset(
++	settings: Settings,
++	paths: readonly string[],
++	scope: RpcCediaSettingsScope,
++): ResetPreviewEntry[] {
++	if (!Array.isArray(paths) || paths.length === 0 || paths.length > 512)
++		throw new CediaSettingsError(SETTINGS_REJECTED, "A reset preview names 1-512 paths");
++	return paths.map(path => {
++		const current = readSettingsValue(settings, path, scope);
++		const handle = lookup(path);
++		const storedRaw = handle === undefined ? undefined : walkSegments(settings.getGlobalSettings(), handle.segments);
++		return { path, globalConfigured: storedRaw !== undefined && storedRaw !== null, current };
++	});
++}
++
++/** Resolve and validate a project directory the host already trusted. */
++export function assertTrustedProjectDir(projectDir: string): string {
++	if (typeof projectDir !== "string" || projectDir.length === 0)
++		throw new CediaSettingsError(SETTINGS_REJECTED, "A project mutation names its trusted directory");
++	const normalized = path.normalize(projectDir);
++	if (!path.isAbsolute(normalized))
++		throw new CediaSettingsError(SETTINGS_REJECTED, "A project directory must be absolute");
++	return normalized;
++}
++
++/** Load an isolated project Settings for reads; never the caller's live instance. */
++export async function loadProjectSettingsForRead(projectDir: string, agentDir?: string): Promise<Settings> {
++	return Settings.loadReadOnly({
++		cwd: assertTrustedProjectDir(projectDir),
++		...(agentDir === undefined ? {} : { agentDir }),
++	});
++}
++
++export interface ProjectMutationResult {
++	/** Values read back from the project scope after the flush. */
++	values: RpcCediaSettingsValue[];
++}
++
++/**
++ * Apply a validated project mutation through the guarded OMP-owned project writer.
++ *
++ * Each instance is loaded fresh for its trusted directory, checked against the
++ * expected revision, written through writeProjectValue/unsetProjectValue (which
++ * merge only the changed paths into the re-read project file, preserving
++ * unknown fields), flushed, read back from the project scope and discarded via
++ * cancelPendingSaves. Imported/overlay/environment sources stay read-only:
++ * only the project file is ever written.
++ */
++export async function mutateProjectSettings(
++	projectDir: string,
++	changes: RpcCediaSettingsMutatePayload["changes"],
++	expectedRevision: string | undefined,
++	agentDir?: string,
++): Promise<ProjectMutationResult> {
++	const dir = assertTrustedProjectDir(projectDir);
++	const prepared = prevalidateChanges(changes);
++	return serializeMutation(`project:${dir}`, async () => {
++		// loadIsolated, never init: init is the process-global singleton and a second
++		// call would return the entry's own instance with the wrong cwd and layers.
++		const settings = await Settings.loadIsolated({ cwd: dir, ...(agentDir === undefined ? {} : { agentDir }) });
++		try {
++			await settings.reloadFromDisk();
++			if (typeof expectedRevision === "string") {
++				const current = settingsRevisionOfInstance(settings);
++				if (expectedRevision !== current)
++					throw new CediaSettingsError(
++						SETTINGS_STALE_REVISION,
++						`The project settings are at revision ${current}, not ${expectedRevision}`,
++					);
++			}
++			for (const change of prepared) {
++				if (change.operation === "unset") settings.unsetProjectValue(change.handle);
++				else settings.writeProjectValue(change.handle, change.value);
++			}
++			await settings.flush();
++			return { values: prepared.map(change => readSettingsValue(settings, change.handle.id, "project")) };
++		} finally {
++			settings.cancelPendingSaves();
++		}
++	});
++}
 diff --git a/packages/coding-agent/src/config/model-registry.ts b/packages/coding-agent/src/config/model-registry.ts
 index 64072c922d..2fff819b32 100644
 --- a/packages/coding-agent/src/config/model-registry.ts
@@ -6928,10 +7369,109 @@ index 0000000000..f42e5893c9
 +for (const path of schemaPaths()) settingApplyCounts[getSettingApplyTiming(path)] += 1;
 +export const SETTING_APPLY_COUNTS: Readonly<Record<SettingApplyTiming, number>> = settingApplyCounts;
 diff --git a/packages/coding-agent/src/config/settings.ts b/packages/coding-agent/src/config/settings.ts
-index 416dae3377..3cd6b25e61 100644
+index 416dae3377..74c4464b91 100644
 --- a/packages/coding-agent/src/config/settings.ts
 +++ b/packages/coding-agent/src/config/settings.ts
-@@ -3820,6 +3820,47 @@ export function withActiveSettings<T>(instance: Settings | undefined, fn: () =>
+@@ -615,6 +615,7 @@ export class Settings {
+ 	#modified = new Map<string, readonly string[]>();
+ 	/** Individual project model roles modified during this session */
+ 	#modifiedProjectModelRoles = new Set<string>();
++	#modifiedProjectPaths = new Set<string>();
+ 	/** Individual global model roles modified during this session (for partial save) */
+ 	#modifiedGlobalModelRoles = new Set<string>();
+ 	/** On-disk generations and prior values observed before each pending global mutation, keyed like {@link #modified}. */
+@@ -1201,7 +1202,7 @@ export class Settings {
+ 		if (this.#modified.size > 0 || this.#modifiedGlobalModelRoles.size > 0) {
+ 			await this.#chainSave();
+ 		}
+-		if (this.#modifiedProjectModelRoles.size > 0) {
++		if (this.#modifiedProjectModelRoles.size > 0 || this.#modifiedProjectPaths.size > 0) {
+ 			await this.#saveProjectNow();
+ 		}
+ 	}
+@@ -1705,6 +1706,42 @@ export class Settings {
+ 		this.#captureRuntimeModelRoleOverride(role);
+ 		this.#updateRuntimeModelRoleOverride(role, undefined);
+ 	}
++	/**
++	 * Persist `value` for `setting` into the current project's configuration file.
++	 *
++	 * Staged in memory and saved through the same project save path model roles
++	 * use: the save merges only the changed paths into the re-read file, so
++	 * unknown fields and concurrent external edits to other paths survive. Use
++	 * {@link unsetProjectValue} to remove a key; `undefined` is refused here.
++	 *
++	 * @throws Error when the value does not fit the definition.
++	 */
++	writeProjectValue(setting: AnySetting, value: unknown): void {
++		if (value === undefined)
++			throw new Error(`Setting ${setting.id} needs a value; use unsetProjectValue to remove it`);
++		setting.assertWritable(value);
++		const normalized = setting.definition.normalize ? setting.definition.normalize(value) : value;
++		const prev = setting.get(this);
++		setByPath(this.#project, setting.segments, normalized);
++		this.#modifiedProjectPaths.add(JSON.stringify(setting.segments));
++		this.#persistedMutationGeneration++;
++		this.#rebuildMerged();
++		this.#fireIfChanged(setting, prev);
++		this.#queueProjectSave();
++	}
++	/**
++	 * Remove `setting` from the current project's configuration file, so the
++	 * remaining layers — or else the default — supply the value.
++	 */
++	unsetProjectValue(setting: AnySetting): void {
++		const prev = setting.get(this);
++		deleteByPath(this.#project, setting.segments);
++		this.#modifiedProjectPaths.add(JSON.stringify(setting.segments));
++		this.#persistedMutationGeneration++;
++		this.#rebuildMerged();
++		this.#fireIfChanged(setting, prev);
++		this.#queueProjectSave();
++	}
+ 
+ 	/**
+ 	 * Get a model role (helper for modelRoles record).
+@@ -3691,11 +3728,14 @@ export class Settings {
+ 	}
+ 
+ 	async #saveProjectNow(): Promise<void> {
+-		if (this.#savesCancelled || !this.#persist || this.#modifiedProjectModelRoles.size === 0) return;
++		if (this.#savesCancelled || !this.#persist) return;
++		if (this.#modifiedProjectModelRoles.size === 0 && this.#modifiedProjectPaths.size === 0) return;
+ 
+ 		const projectConfigPath = path.join(getProjectAgentDir(this.#cwd), "config.yml");
+ 		const modifiedModelRoles = [...this.#modifiedProjectModelRoles];
+ 		this.#modifiedProjectModelRoles.clear();
++		const modifiedPaths = [...this.#modifiedProjectPaths];
++		this.#modifiedProjectPaths.clear();
+ 
+ 		try {
+ 			await fs.promises.mkdir(path.dirname(projectConfigPath), { recursive: true });
+@@ -3710,6 +3750,12 @@ export class Settings {
+ 					const value = isRecord(projectRoles) ? projectRoles[role] : undefined;
+ 					setByPath(projectSettings, ["modelRoles", role], value);
+ 				}
++				for (const key of modifiedPaths) {
++					const segments = JSON.parse(key) as string[];
++					const value = getByPath(this.#project, segments);
++					if (value === undefined) deleteByPath(projectSettings, segments);
++					else setByPath(projectSettings, segments, value);
++				}
+ 
+ 				await this.#writeYamlAtomically(writePath, projectSettings);
+ 				this.#projectFileSettings = structuredClone(projectSettings);
+@@ -3720,6 +3766,9 @@ export class Settings {
+ 			for (const role of modifiedModelRoles) {
+ 				this.#modifiedProjectModelRoles.add(role);
+ 			}
++			for (const key of modifiedPaths) {
++				this.#modifiedProjectPaths.add(key);
++			}
+ 			throw error;
+ 		}
+ 
+@@ -3820,6 +3869,47 @@ export function withActiveSettings<T>(instance: Settings | undefined, fn: () =>
  	return instance ? activeSettingsScope.run(instance, fn) : fn();
  }
  
@@ -7999,7 +8539,7 @@ index d926189690..8ce2c99473 100644
  			if (!handlers || handlers.length === 0) continue;
  
 diff --git a/packages/coding-agent/src/main.ts b/packages/coding-agent/src/main.ts
-index 170b45e45b..e072508999 100644
+index 170b45e45b..f032a10f80 100644
 --- a/packages/coding-agent/src/main.ts
 +++ b/packages/coding-agent/src/main.ts
 @@ -6,6 +6,7 @@
@@ -8139,7 +8679,24 @@ index 170b45e45b..e072508999 100644
  	createForeignSessionStore?: (source: ForeignSessionSource) => ForeignSessionStore;
  	settings?: Settings;
  	forceSetupWizard?: boolean;
-@@ -1836,7 +1945,9 @@ export async function runRootCommand(
+@@ -1728,6 +1837,16 @@ export async function runRootCommand(
+ 		// RPC owns stdin. Claim its singleton stream before plugin/extension discovery can load an in-process consumer.
+ 		const rpcInput = mode === "rpc" || mode === "rpc-ui" ? claimRpcInput() : undefined;
+ 
++		// Taskless configuration-only entry (CEDIA_SETTINGS_SERVICE=1): serve OMP's
++		// settings operations over the RPC transport with no execution session, no
++		// loaded executable packages and no model contact. Branching here skips
++		// plugin preload, auth discovery, the model registry and session boot, so
++		// opening Settings can never start an executor or spend provider credit.
++		if ((mode === "rpc" || mode === "rpc-ui") && process.env.CEDIA_SETTINGS_SERVICE === "1") {
++			const { runCediaSettingsService } = await import("./modes/rpc/cedia-settings-entry");
++			await runCediaSettingsService(rpcInput ?? claimRpcInput());
++		}
++
+ 		// Kick off plugin-root preload in parallel with the remaining startup work.
+ 		// Awaited later (before extension/skill discovery in createAgentSession needs it).
+ 		const home = os.homedir();
+@@ -1836,7 +1955,9 @@ export async function runRootCommand(
  			"modelRegistry:init",
  			() => new ModelRegistry(authStorage, undefined, { settings: settingsInstance }),
  		);
@@ -8150,7 +8707,7 @@ index 170b45e45b..e072508999 100644
  			Bun.env.PI_NO_PTY = "1";
  		}
  		if (
-@@ -2179,13 +2290,22 @@ export async function runRootCommand(
+@@ -2179,13 +2300,22 @@ export async function runRootCommand(
  		}
  
  		const createAgentSessionImpl = deps.createAgentSession ?? createAgentSession;
@@ -8174,7 +8731,7 @@ index 170b45e45b..e072508999 100644
  			return result;
  		};
  
-@@ -2422,7 +2542,10 @@ export async function runRootCommand(
+@@ -2422,7 +2552,10 @@ export async function runRootCommand(
  				notifs.push({ kind: "error", message: modelRegistryError.message });
  			}
  
@@ -8186,7 +8743,7 @@ index 170b45e45b..e072508999 100644
  				if (modelRegistryError) {
  					process.stderr.write(`${chalk.red(modelRegistryError.message)}\n\n`);
  				}
-@@ -2455,6 +2578,16 @@ export async function runRootCommand(
+@@ -2455,6 +2588,16 @@ export async function runRootCommand(
  				process.exit(1);
  			}
  
@@ -8203,7 +8760,7 @@ index 170b45e45b..e072508999 100644
  			if (mode === "rpc" || mode === "rpc-ui" || isInteractive) {
  				// Long-lived hosts apply on-disk config edits (config.yml, project
  				// settings, `--config` overlays) live. No-op unless this is the
-@@ -2465,13 +2598,17 @@ export async function runRootCommand(
+@@ -2465,13 +2608,17 @@ export async function runRootCommand(
  
  			if (mode === "rpc" || mode === "rpc-ui") {
  				// Branch-only protocol runner: keep RPC host code out of normal interactive startup.
@@ -8222,7 +8779,7 @@ index 170b45e45b..e072508999 100644
  				});
  			} else if (isInteractive) {
  				const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
-@@ -2526,6 +2663,7 @@ export async function runRootCommand(
+@@ -2526,6 +2673,7 @@ export async function runRootCommand(
  					);
  				} finally {
  					startupLease?.dispose();
@@ -9480,10 +10037,10 @@ index 0000000000..c779054abd
 +}
 diff --git a/packages/coding-agent/src/modes/rpc/cedia-capability-bridge.ts b/packages/coding-agent/src/modes/rpc/cedia-capability-bridge.ts
 new file mode 100644
-index 0000000000..d657697f9f
+index 0000000000..777ce4a88c
 --- /dev/null
 +++ b/packages/coding-agent/src/modes/rpc/cedia-capability-bridge.ts
-@@ -0,0 +1,3305 @@
+@@ -0,0 +1,3561 @@
 +/**
 + * Cedia's capability contract for OMP RPC mode (plan §8.2 O04).
 + *
@@ -9516,8 +10073,8 @@ index 0000000000..d657697f9f
 +import type { Settings } from "../../config/settings";
 +import { orderedSettings } from "../../config/all-settings";
 +import { lookup } from "../../config/registry";
++import { buildSettingsInventory, prevalidateChanges } from "../../config/cedia-settings-service";
 +import { validateProviderMaxInFlightRequests } from "../../session/settings";
-+import { getSettingApplyTiming } from "../../config/settings-apply-timing";
 +import type { AgentSession } from "../../session/agent-session";
 +import { CEDIA_ADVISOR_CONFIG_MAX_CHARS } from "./cedia-advisor-config-bridge";
 +import { CEDIA_PYTHON_MAX_CHARS } from "./cedia-python-bridge";
@@ -9531,6 +10088,8 @@ index 0000000000..d657697f9f
 +	RpcCediaControlRequest,
 +	RpcCediaSettingsKey,
 +	RpcCediaSettingsKeysData,
++	RpcCediaSettingsMutatePayload,
++	RpcCediaSettingsScope,
 +} from "./rpc-types";
 +import { CEDIA_TOOL_CATALOG_SET_MAX_NAMES } from "./cedia-tools-bridge";
 +const CEDIA_TREE_MAX_NODES = 500;
@@ -10021,11 +10580,17 @@ index 0000000000..d657697f9f
 +	/** Ask the session to cancel running Python execution; the answer confirms delivery. */
 +	readonly "python.abort": () => unknown | Promise<unknown>;
 +	/** Read one settings path. The bridge has already checked that the path exists. */
-+	readonly "settings.get": (path: string) => unknown;
++	readonly "settings.get": (path: string, scope?: RpcCediaSettingsScope, projectDir?: string) => unknown;
 +	/** The revision that identifies the current effective settings. */
 +	readonly "settings.revision": () => string;
 +	/** Write one settings path. The bridge has already checked the path, the value and the revision. */
-+	readonly "settings.set": (path: string, value: unknown) => unknown;
++	readonly "settings.set": (path: string, value: unknown) => unknown | Promise<unknown>;
++	/** Remove one persisted global override. The service checks the revision it was given. */
++	readonly "settings.unset"?: (path: string, expectedRevision?: string) => unknown | Promise<unknown>;
++	/** Apply a validated scoped mutation. The service validates every change before any is written. */
++	readonly "settings.mutate"?: (payload: RpcCediaSettingsMutatePayload) => unknown | Promise<unknown>;
++	/** Preview an unset of the named paths. Writes nothing. */
++	readonly "settings.reset.preview"?: (paths: string[]) => unknown;
 +	/** OMP's own goal mode for this session, as one snapshot (§8.2 O07). */
 +	readonly "goal.get": () => unknown;
 +	/** One goal transition. The bridge has already checked the operation and its fields. */
@@ -10117,6 +10682,13 @@ index 0000000000..d657697f9f
 +export interface CediaCapabilityBridgeOptions {
 +	readonly ompRevision: string;
 +	readonly handlers: CediaCapabilityHandlers;
++	/**
++	 * Restrict the advertised and runnable operations to these ids. The
++	 * taskless configuration-only entry serves settings operations through the
++	 * same bridge without advertising session behaviour it cannot run. Omitted
++	 * means the full table, exactly as before.
++	 */
++	readonly operations?: readonly string[];
 +}
 +
 +export interface CediaCapabilityBridge {
@@ -10195,8 +10767,7 @@ index 0000000000..d657697f9f
 + * paused a run it merely misspelled.
 + */
 +const pauseSetPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
-+	if (payload === undefined || Object.keys(payload).length === 0)
-+		return "pause.set needs paused as a boolean";
++	if (payload === undefined || Object.keys(payload).length === 0) return "pause.set needs paused as a boolean";
 +	const unknown = Object.keys(payload).filter(key => key !== "paused");
 +	if (unknown.length > 0) return `pause.set takes only paused, received ${unknown.slice(0, 8).join(", ")}`;
 +	if (typeof payload.paused !== "boolean") return "pause.set needs paused as a boolean";
@@ -10212,7 +10783,8 @@ index 0000000000..d657697f9f
 +		return "python.exec needs code as a non-empty string";
 +	const unknown = Object.keys(payload).filter(key => key !== "code");
 +	if (unknown.length > 0) return `python.exec takes only code, received ${unknown.slice(0, 8).join(", ")}`;
-+	if (typeof payload.code !== "string" || payload.code.trim().length === 0) return "python.exec needs code as a non-empty string";
++	if (typeof payload.code !== "string" || payload.code.trim().length === 0)
++		return "python.exec needs code as a non-empty string";
 +	if (payload.code.length > CEDIA_PYTHON_MAX_CHARS)
 +		return `python.exec code exceeds ${CEDIA_PYTHON_MAX_CHARS} characters`;
 +	return undefined;
@@ -10232,51 +10804,47 @@ index 0000000000..d657697f9f
 +	return undefined;
 +};
 +/**
-+ * The one settings path OMP can write into a project layer.
-+ *
-+ * `Settings.set` writes the global layer for every path; `setModelRole` is the
-+ * documented exception and writes `modelRoles` into the project's `.omp/config.yml`
-+ * when `modelRoleStorage` is `project` (settings.ts). Everything else Cedia may
-+ * read here is a global-layer value, so this table is the whole exception rather
-+ * than a guess about each key.
++ * The project-writable exception table lives in the settings service, next to the
++ * writer that enforces it. Re-exported here so existing importers keep working.
 + */
-+const PROJECT_WRITABLE_SETTING_PATHS: ReadonlySet<string> = new Set(["modelRoles"]);
++export { PROJECT_WRITABLE_SETTING_PATHS } from "../../config/cedia-settings-service";
 +
 +/** Every settings path OMP's own registry defines, with the metadata a control needs. */
 +function settingsKeys(): RpcCediaSettingsKey[] {
-+	return orderedSettings()
-+		.map(handle => {
-+			const ui = handle.ui;
-+			// An enum path's allowed values come from the same handle that refuses a bad write,
-+			// so the inventory and the validator can never disagree about what is acceptable.
-+			const values = handle.type === "enum" ? handle.enumValues : undefined;
-+			return {
-+				path: handle.id,
-+				type: handle.type,
-+				credential: handle.isCredential,
-+				ui: ui !== undefined,
-+				...(ui?.tab === undefined ? {} : { tab: String(ui.tab) }),
-+				projectWritable: PROJECT_WRITABLE_SETTING_PATHS.has(handle.id),
-+				...(values === undefined ? {} : { values: [...values] }),
-+				// The apply timing is derived from OMP's reader lifecycle registry. Hook paths are
-+				// still exactly immediate; every other schema path carries a checked classification.
-+				apply: getSettingApplyTiming(handle.id),
-+			};
-+		})
-+		.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
++	return buildSettingsInventory();
 +}
 +
 +/** Read one settings path, refusing a path the registry does not define. */
 +const settingsGet = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0)
 +		return "settings.get needs the settings path to read";
-+	const unknown = Object.keys(payload).filter(key => key !== "path");
-+	if (unknown.length > 0) return `settings.get takes only a path, received ${unknown.slice(0, 8).join(", ")}`;
++	const unknown = Object.keys(payload).filter(key => key !== "path" && key !== "scope" && key !== "projectDir");
++	if (unknown.length > 0)
++		return `settings.get takes only a path, scope and projectDir, received ${unknown.slice(0, 8).join(", ")}`;
 +	const path = payload.path;
 +	if (typeof path !== "string" || path.length === 0) return "settings.get needs a settings path as a string";
 +	if (!lookup(path)) return `${path} is not a setting this runtime defines`;
++	if (
++		payload.scope !== undefined &&
++		payload.scope !== "global" &&
++		payload.scope !== "project" &&
++		payload.scope !== "session"
++	)
++		return "settings.get scope must be global, project or session";
++	if (payload.scope === "project") {
++		if (typeof payload.projectDir !== "string" || payload.projectDir.length === 0)
++			return "settings.get with project scope names its trusted project directory";
++	} else if (payload.projectDir !== undefined) return "settings.get projectDir needs project scope";
 +	return undefined;
 +};
++
++/** Parse the validated scope triple for a settings read. Absent scope stays legacy. */
++function settingsReadScope(payload: Record<string, unknown>): { scope?: RpcCediaSettingsScope; projectDir?: string } {
++	if (payload.scope === "project") return { scope: "project", projectDir: String(payload.projectDir) };
++	if (payload.scope === "session") return { scope: "session" };
++	if (payload.scope === "global") return { scope: "global" };
++	return {};
++}
 +
 +/** `model.roles.set` names the role and the model it resolves to; `null` clears the assignment. */
 +const modelRoleSetPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
@@ -10294,9 +10862,9 @@ index 0000000000..d657697f9f
 +const modelRoleApplyPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return "model.roles.apply needs a role";
 +	const unknown = Object.keys(payload).filter(key => key !== "role");
-+	if (unknown.length > 0)
-+		return `model.roles.apply takes only a role, received ${unknown.slice(0, 8).join(", ")}`;
-+	if (typeof payload.role !== "string" || payload.role.trim().length === 0) return "model.roles.apply needs a role name";
++	if (unknown.length > 0) return `model.roles.apply takes only a role, received ${unknown.slice(0, 8).join(", ")}`;
++	if (typeof payload.role !== "string" || payload.role.trim().length === 0)
++		return "model.roles.apply needs a role name";
 +	return undefined;
 +};
 +
@@ -10316,8 +10884,7 @@ index 0000000000..d657697f9f
 +const agentsKillPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return "agents.kill needs an agent id";
 +	const unknown = Object.keys(payload).filter(key => key !== "id");
-+	if (unknown.length > 0)
-+		return `agents.kill takes only an id, received ${unknown.slice(0, 8).join(", ")}`;
++	if (unknown.length > 0) return `agents.kill takes only an id, received ${unknown.slice(0, 8).join(", ")}`;
 +	if (typeof payload.id !== "string" || payload.id.trim().length === 0) return "agents.kill needs an agent id";
 +	return undefined;
 +};
@@ -10326,8 +10893,7 @@ index 0000000000..d657697f9f
 +const agentsRevivePayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return "agents.revive needs an agent id";
 +	const unknown = Object.keys(payload).filter(key => key !== "id");
-+	if (unknown.length > 0)
-+		return `agents.revive takes only an id, received ${unknown.slice(0, 8).join(", ")}`;
++	if (unknown.length > 0) return `agents.revive takes only an id, received ${unknown.slice(0, 8).join(", ")}`;
 +	if (typeof payload.id !== "string" || payload.id.trim().length === 0) return "agents.revive needs an agent id";
 +	return undefined;
 +};
@@ -10342,15 +10908,22 @@ index 0000000000..d657697f9f
 +/** `agents.config.set` names the agent plus at least one config field; answers the effective config. */
 +const agentsConfigSetPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return "agents.config.set needs an agent name";
-+	const unknown = Object.keys(payload).filter(key => key !== "agent" && key !== "enabled" && key !== "model" && key !== "prewalk" && key !== "advisor");
++	const unknown = Object.keys(payload).filter(
++		key => key !== "agent" && key !== "enabled" && key !== "model" && key !== "prewalk" && key !== "advisor",
++	);
 +	if (unknown.length > 0)
 +		return `agents.config.set takes only an agent, enabled, model, prewalk and advisor, received ${unknown.slice(0, 8).join(", ")}`;
-+	if (typeof payload.agent !== "string" || payload.agent.trim().length === 0) return "agents.config.set needs an agent name";
-+	if (payload.enabled !== undefined && typeof payload.enabled !== "boolean") return "agents.config.set enabled must be a boolean";
++	if (typeof payload.agent !== "string" || payload.agent.trim().length === 0)
++		return "agents.config.set needs an agent name";
++	if (payload.enabled !== undefined && typeof payload.enabled !== "boolean")
++		return "agents.config.set enabled must be a boolean";
 +	for (const field of ["model", "prewalk", "advisor"] as const) {
-+		if (payload[field] !== undefined && typeof payload[field] !== "string") return `agents.config.set ${field} must be a string`;
++		if (payload[field] !== undefined && typeof payload[field] !== "string")
++			return `agents.config.set ${field} must be a string`;
 +	}
-+	const fields = [payload.enabled, payload.model, payload.prewalk, payload.advisor].filter(value => value !== undefined);
++	const fields = [payload.enabled, payload.model, payload.prewalk, payload.advisor].filter(
++		value => value !== undefined,
++	);
 +	if (fields.length === 0) return "agents.config.set needs at least one of enabled, model, prewalk or advisor";
 +	return undefined;
 +};
@@ -10362,41 +10935,55 @@ index 0000000000..d657697f9f
 +	const unknown = Object.keys(payload).filter(key => key !== "complaint" && key !== "feedback");
 +	if (unknown.length > 0)
 +		return `omfg.draft takes only a complaint and feedback, received ${unknown.slice(0, 8).join(", ")}`;
-+	if (typeof payload.complaint !== "string" || payload.complaint.trim().length === 0) return "omfg.draft needs a complaint";
-+	if (payload.feedback !== undefined && (typeof payload.feedback !== "string" || payload.feedback.trim().length === 0)) return "omfg.draft feedback must be a non-empty string";
++	if (typeof payload.complaint !== "string" || payload.complaint.trim().length === 0)
++		return "omfg.draft needs a complaint";
++	if (payload.feedback !== undefined && (typeof payload.feedback !== "string" || payload.feedback.trim().length === 0))
++		return "omfg.draft feedback must be a non-empty string";
 +	return undefined;
 +};
 +
 +/** `omfg.save` names the scope; both guards default to refusal, like the confirms. */
 +const omfgSavePayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return "omfg.save needs a scope";
-+	const unknown = Object.keys(payload).filter(key => key !== "scope" && key !== "overwrite" && key !== "allowUnvalidated");
++	const unknown = Object.keys(payload).filter(
++		key => key !== "scope" && key !== "overwrite" && key !== "allowUnvalidated",
++	);
 +	if (unknown.length > 0)
 +		return `omfg.save takes only a scope, overwrite and allowUnvalidated, received ${unknown.slice(0, 8).join(", ")}`;
-+	if (payload.scope !== "project" && payload.scope !== "global") return 'omfg.save scope must be "project" or "global"';
-+	if (payload.overwrite !== undefined && typeof payload.overwrite !== "boolean") return "omfg.save overwrite must be a boolean";
-+	if (payload.allowUnvalidated !== undefined && typeof payload.allowUnvalidated !== "boolean") return "omfg.save allowUnvalidated must be a boolean";
++	if (payload.scope !== "project" && payload.scope !== "global")
++		return 'omfg.save scope must be "project" or "global"';
++	if (payload.overwrite !== undefined && typeof payload.overwrite !== "boolean")
++		return "omfg.save overwrite must be a boolean";
++	if (payload.allowUnvalidated !== undefined && typeof payload.allowUnvalidated !== "boolean")
++		return "omfg.save allowUnvalidated must be a boolean";
 +	return undefined;
 +};
 +
 +const cleanseRunPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return undefined;
-+	const unknown = Object.keys(payload).filter(key => key !== "request" && key !== "all" && key !== "includeTests" && key !== "maxAgents" && key !== "model");
-+	if (unknown.length > 0)
-+		return `cleanse.run takes only a target, received ${unknown.slice(0, 8).join(", ")}`;
-+	if (payload.request !== undefined && (typeof payload.request !== "string" || payload.request.trim().length === 0)) return "cleanse.run request must be a non-empty string";
++	const unknown = Object.keys(payload).filter(
++		key => key !== "request" && key !== "all" && key !== "includeTests" && key !== "maxAgents" && key !== "model",
++	);
++	if (unknown.length > 0) return `cleanse.run takes only a target, received ${unknown.slice(0, 8).join(", ")}`;
++	if (payload.request !== undefined && (typeof payload.request !== "string" || payload.request.trim().length === 0))
++		return "cleanse.run request must be a non-empty string";
 +	if (payload.all !== undefined && typeof payload.all !== "boolean") return "cleanse.run all must be a boolean";
-+	if (payload.includeTests !== undefined && typeof payload.includeTests !== "boolean") return "cleanse.run includeTests must be a boolean";
-+	if (payload.maxAgents !== undefined && (typeof payload.maxAgents !== "number" || !Number.isInteger(payload.maxAgents) || payload.maxAgents <= 0)) return "cleanse.run maxAgents must be a positive integer";
-+	if (payload.model !== undefined && (typeof payload.model !== "string" || payload.model.trim().length === 0)) return "cleanse.run model must be a non-empty string";
++	if (payload.includeTests !== undefined && typeof payload.includeTests !== "boolean")
++		return "cleanse.run includeTests must be a boolean";
++	if (
++		payload.maxAgents !== undefined &&
++		(typeof payload.maxAgents !== "number" || !Number.isInteger(payload.maxAgents) || payload.maxAgents <= 0)
++	)
++		return "cleanse.run maxAgents must be a positive integer";
++	if (payload.model !== undefined && (typeof payload.model !== "string" || payload.model.trim().length === 0))
++		return "cleanse.run model must be a non-empty string";
 +	return undefined;
 +};
 +
 +const btwAskPayload = (payload: Record<string, unknown> | undefined): string | undefined => {
 +	if (payload === undefined || Object.keys(payload).length === 0) return "btw.ask needs a question";
 +	const unknown = Object.keys(payload).filter(key => key !== "question");
-+	if (unknown.length > 0)
-+		return `btw.ask takes only a question, received ${unknown.slice(0, 8).join(", ")}`;
++	if (unknown.length > 0) return `btw.ask takes only a question, received ${unknown.slice(0, 8).join(", ")}`;
 +	if (typeof payload.question !== "string" || payload.question.trim().length === 0) return "btw.ask needs a question";
 +	return undefined;
 +};
@@ -10549,13 +11136,96 @@ index 0000000000..d657697f9f
 +	const path = payload.path;
 +	if (typeof path !== "string" || path.length === 0) return "settings.set needs a settings path as a string";
 +	if (!Object.hasOwn(payload, "value")) return `settings.set needs a value for ${path}`;
-+	if (!lookup(path)) return `${path} is not a setting this runtime defines`;
++	const handle = lookup(path);
++	if (handle === undefined) return `${path} is not a setting this runtime defines`;
++	if (handle.isCredential) return `settings.set never writes credentials: ${path} is owned by provider-auth`;
 +	if (
 +		payload.expectedRevision !== undefined &&
 +		(typeof payload.expectedRevision !== "string" || payload.expectedRevision.length === 0)
 +	)
 +		return "settings.set expects expectedRevision to be a revision string";
 +	return validateSettingValue(path, payload.value);
++};
++
++/** Validate one global-override removal. The service compares the revision it was given. */
++const settingsUnset = (payload: Record<string, unknown> | undefined): string | undefined => {
++	if (payload === undefined) return "settings.unset needs a path";
++	const unknown = Object.keys(payload).filter(key => key !== "path" && key !== "expectedRevision");
++	if (unknown.length > 0) return `settings.unset received unknown fields ${unknown.slice(0, 8).join(", ")}`;
++	const path = payload.path;
++	if (typeof path !== "string" || path.length === 0) return "settings.unset needs a settings path as a string";
++	if (!lookup(path)) return `${path} is not a setting this runtime defines`;
++	if (
++		payload.expectedRevision !== undefined &&
++		(typeof payload.expectedRevision !== "string" || payload.expectedRevision.length === 0)
++	)
++		return "settings.unset expects expectedRevision to be a revision string";
++	return undefined;
++};
++
++/** Validate one scoped mutation. Values are validated by the service before anything is written. */
++const settingsMutate = (payload: Record<string, unknown> | undefined): string | undefined => {
++	if (payload === undefined) return "settings.mutate needs a context and changes";
++	const unknown = Object.keys(payload).filter(
++		key => key !== "context" && key !== "expectedRevision" && key !== "changes",
++	);
++	if (unknown.length > 0) return `settings.mutate received unknown fields ${unknown.slice(0, 8).join(", ")}`;
++	const context = payload.context;
++	if (context === null || typeof context !== "object" || Array.isArray(context))
++		return "settings.mutate context names scope global, or scope project with its trusted directory";
++	const scope = (context as Record<string, unknown>).scope;
++	if (scope !== "global" && scope !== "project") return "settings.mutate context scope must be global or project";
++	if (scope === "project") {
++		const projectDir = (context as Record<string, unknown>).projectDir;
++		if (typeof projectDir !== "string" || projectDir.length === 0)
++			return "settings.mutate with project scope names its trusted project directory";
++	} else if ((context as Record<string, unknown>).projectDir !== undefined)
++		return "settings.mutate projectDir needs project scope";
++	if (
++		payload.expectedRevision !== undefined &&
++		(typeof payload.expectedRevision !== "string" || payload.expectedRevision.length === 0)
++	)
++		return "settings.mutate expects expectedRevision to be a revision string";
++	const changes = payload.changes;
++	if (!Array.isArray(changes) || changes.length === 0 || changes.length > 256)
++		return "settings.mutate carries 1-256 changes";
++	for (const change of changes) {
++		if (change === null || typeof change !== "object" || Array.isArray(change))
++			return "settings.mutate changes must be objects";
++		const entry = change as Record<string, unknown>;
++		if (typeof entry.path !== "string" || entry.path.length === 0)
++			return "settings.mutate changes name a settings path";
++		if (entry.operation !== "set" && entry.operation !== "unset")
++			return `settings.mutate changes are set with a value, or unset: ${entry.path}`;
++		if (entry.operation === "set" && !Object.hasOwn(entry, "value"))
++			return `settings.mutate needs a value for ${entry.path}`;
++		if (entry.operation === "unset" && Object.hasOwn(entry, "value"))
++			return `settings.mutate unset carries no value: ${entry.path}`;
++	}
++	// Every change is validated against the schema before any of them is written,
++	// through the same service the mutation itself re-checks after loading.
++	try {
++		prevalidateChanges(changes as RpcCediaSettingsMutatePayload["changes"]);
++	} catch (error) {
++		return error instanceof Error ? error.message : "settings.mutate changes failed validation";
++	}
++	return undefined;
++};
++
++/** Validate one reset preview. The preview names keys; it writes nothing. */
++const settingsResetPreview = (payload: Record<string, unknown> | undefined): string | undefined => {
++	if (payload === undefined) return "settings.reset.preview needs paths";
++	const unknown = Object.keys(payload).filter(key => key !== "paths");
++	if (unknown.length > 0) return `settings.reset.preview received unknown fields ${unknown.slice(0, 8).join(", ")}`;
++	const paths = payload.paths;
++	if (!Array.isArray(paths) || paths.length === 0 || paths.length > 512)
++		return "settings.reset.preview names 1-512 paths";
++	for (const path of paths) {
++		if (typeof path !== "string" || path.length === 0)
++			return "settings.reset.preview paths must be non-empty strings";
++		if (!lookup(path)) return `${path} is not a setting this runtime defines`;
++	}
++	return undefined;
 +};
 +
 +/** The goal transitions a client may ask for; every one of them mirrors a `/goal` subcommand. */
@@ -10692,10 +11362,10 @@ index 0000000000..d657697f9f
 + * writes it. Oversized or non-string text refuses before the YAML parser ever runs.
 + */
 +const advisorConfigSet = (payload: Record<string, unknown> | undefined): string | undefined => {
-+	if (payload === undefined || Object.keys(payload).length === 0)
-+		return "advisor.config.set needs scope and text";
++	if (payload === undefined || Object.keys(payload).length === 0) return "advisor.config.set needs scope and text";
 +	const unknown = Object.keys(payload).filter(key => key !== "scope" && key !== "text");
-+	if (unknown.length > 0) return `advisor.config.set takes only scope and text, received ${unknown.slice(0, 8).join(", ")}`;
++	if (unknown.length > 0)
++		return `advisor.config.set takes only scope and text, received ${unknown.slice(0, 8).join(", ")}`;
 +	if (payload.scope !== "project" && payload.scope !== "user") return "advisor.config.set needs scope project or user";
 +	if (typeof payload.text !== "string") return "advisor.config.set needs text as a string";
 +	if (payload.text.length > CEDIA_ADVISOR_CONFIG_MAX_CHARS)
@@ -10719,8 +11389,7 @@ index 0000000000..d657697f9f
 +function toolsActiveSetPayload(payload: Record<string, unknown> | undefined): string | undefined {
 +	if (payload === undefined) return "tools.active.set needs toolNames as an array of strings";
 +	const unknown = Object.keys(payload).filter(key => key !== "toolNames");
-+	if (unknown.length > 0)
-+		return `tools.active.set takes only toolNames, received ${unknown.slice(0, 8).join(", ")}`;
++	if (unknown.length > 0) return `tools.active.set takes only toolNames, received ${unknown.slice(0, 8).join(", ")}`;
 +	if (!Array.isArray(payload.toolNames)) return "tools.active.set needs toolNames as an array of strings";
 +	if (payload.toolNames.length > CEDIA_TOOL_CATALOG_SET_MAX_NAMES)
 +		return `tools.active.set takes at most ${CEDIA_TOOL_CATALOG_SET_MAX_NAMES} tool names`;
@@ -11747,7 +12416,64 @@ index 0000000000..d657697f9f
 +	 * table where an advertised operation has no handler.
 +	 */
 +	const declared: RpcCediaCapabilityDescriptor[] = [];
-+	return [...registered, ...declared].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
++	const settingsExtendedDescriptors: RpcCediaCapabilityDescriptor[] =
++		options.handlers["settings.unset"] !== undefined &&
++		options.handlers["settings.mutate"] !== undefined &&
++		options.handlers["settings.reset.preview"] !== undefined
++			? [
++					{
++						...base,
++						id: "settings.keys.describe",
++						family: "O04",
++						state: "available",
++						scope: "global",
++						apply: "immediate",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++					{
++						...base,
++						id: "settings.unset",
++						family: "O04",
++						state: "available",
++						scope: "global",
++						apply: "reload",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++					{
++						...base,
++						id: "settings.mutate",
++						family: "O04",
++						state: "available",
++						scope: "global",
++						apply: "reload",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++					{
++						...base,
++						id: "settings.reset.preview",
++						family: "O04",
++						state: "available",
++						scope: "global",
++						apply: "immediate",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++				]
++			: [];
++	return [...registered, ...settingsExtendedDescriptors, ...declared].sort((left, right) =>
++		left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
++	);
 +}
 +
 +/**
@@ -11763,7 +12489,10 @@ index 0000000000..d657697f9f
 +}
 +
 +export function createCediaCapabilityBridge(options: CediaCapabilityBridgeOptions): CediaCapabilityBridge {
-+	const table = descriptors(options);
++	const fullTable = descriptors(options);
++	const onlyTableOperations = options.operations;
++	const table =
++		onlyTableOperations === undefined ? fullTable : fullTable.filter(entry => onlyTableOperations.includes(entry.id));
 +	const revision = revisionOf(table);
 +	/**
 +	 * The one snapshot this bridge answers with. `capabilities.get` reads this
@@ -11883,7 +12612,7 @@ index 0000000000..d657697f9f
 +					{
 +						id: "extensions.list",
 +						family: "O06",
-+					scope: "session",
++						scope: "session",
 +						apply: "immediate",
 +						surfaces: ["agent", "ide", "web", "iphone"],
 +						principal: "controller",
@@ -11906,7 +12635,7 @@ index 0000000000..d657697f9f
 +						principal: "owner",
 +						source: "packages/coding-agent/src/modes/rpc/rpc-mode.ts",
 +						validate: extensionsSetPayload,
-+						run: (payload) => extensionsSet(payload),
++						run: payload => extensionsSet(payload),
 +					},
 +				]
 +			: [];
@@ -11923,7 +12652,7 @@ index 0000000000..d657697f9f
 +						principal: "owner",
 +						source: "packages/coding-agent/src/modes/rpc/rpc-mode.ts",
 +						validate: agentsKillPayload,
-+						run: (payload) => agentsKill(payload),
++						run: payload => agentsKill(payload),
 +					},
 +				]
 +			: [];
@@ -11940,7 +12669,7 @@ index 0000000000..d657697f9f
 +						principal: "owner",
 +						source: "packages/coding-agent/src/modes/rpc/rpc-mode.ts",
 +						validate: agentsRevivePayload,
-+						run: (payload) => agentsRevive(payload),
++						run: payload => agentsRevive(payload),
 +					},
 +				]
 +			: [];
@@ -11974,7 +12703,78 @@ index 0000000000..d657697f9f
 +						principal: "owner",
 +						source: "packages/coding-agent/src/modes/rpc/rpc-mode.ts",
 +						validate: agentsConfigSetPayload,
-+						run: (payload) => agentsConfigSet(payload),
++						run: payload => agentsConfigSet(payload),
++					},
++				]
++			: [];
++	const settingsUnsetHandler = options.handlers["settings.unset"];
++	const settingsMutateHandler = options.handlers["settings.mutate"];
++	const settingsResetPreviewHandler = options.handlers["settings.reset.preview"];
++	const settingsExtendedOperations: CediaRegisteredOperation[] =
++		settingsUnsetHandler !== undefined &&
++		settingsMutateHandler !== undefined &&
++		settingsResetPreviewHandler !== undefined
++			? [
++					{
++						id: "settings.keys.describe",
++						family: "O04",
++						scope: "global",
++						apply: "immediate",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						validate: noPayload("settings.keys.describe"),
++						run: (): unknown => ({
++							keys: buildSettingsInventory(),
++							settingsRevision: options.handlers["settings.revision"](),
++						}),
++
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++					{
++						id: "settings.unset",
++						family: "O04",
++						scope: "global",
++						apply: "reload",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						validate: settingsUnset,
++						run: (payload): unknown =>
++							settingsUnsetHandler(
++								String(payload.path),
++								typeof payload.expectedRevision === "string" ? payload.expectedRevision : undefined,
++							),
++
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++					{
++						id: "settings.mutate",
++						family: "O04",
++						scope: "global",
++						apply: "reload",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						validate: settingsMutate,
++						run: (payload: Record<string, unknown>): unknown =>
++							options.handlers["settings.mutate"]!(payload as unknown as RpcCediaSettingsMutatePayload),
++
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
++					},
++					{
++						id: "settings.reset.preview",
++						family: "O04",
++						scope: "global",
++						apply: "immediate",
++						surfaces: ["agent", "ide"],
++						principal: "owner",
++						source: "packages/coding-agent/src/config/cedia-settings-service.ts",
++						validate: settingsResetPreview,
++						run: (payload): unknown =>
++							settingsResetPreviewHandler((payload.paths as unknown[]).map(entry => String(entry))),
++
++						receipt: "packages/coding-agent/test/cedia-settings-service.test.ts",
 +					},
 +				]
 +			: [];
@@ -12157,8 +12957,7 @@ index 0000000000..d657697f9f
 +			principal: "owner",
 +			source: "packages/coding-agent/src/modes/rpc/cedia-btw-bridge.ts",
 +			validate: btwAskPayload,
-+			run: (payload): unknown | Promise<unknown> =>
-+				options.handlers["btw.ask"]({ question: payload.question }),
++			run: (payload): unknown | Promise<unknown> => options.handlers["btw.ask"]({ question: payload.question }),
 +		},
 +		{
 +			id: "btw.branch",
@@ -12329,7 +13128,10 @@ index 0000000000..d657697f9f
 +			principal: "owner",
 +			source: "packages/coding-agent/src/config/settings.ts",
 +			validate: settingsGet,
-+			run: (payload): unknown => options.handlers["settings.get"](String(payload.path)),
++			run: (payload): unknown => {
++				const read = settingsReadScope(payload);
++				return options.handlers["settings.get"](String(payload.path), read.scope, read.projectDir);
++			},
 +		},
 +		{
 +			id: "settings.set",
@@ -12568,8 +13370,7 @@ index 0000000000..d657697f9f
 +			principal: "owner",
 +			source: "packages/coding-agent/src/modes/rpc/cedia-model-roles-bridge.ts",
 +			validate: modelRoleApplyPayload,
-+			run: (payload): unknown | Promise<unknown> =>
-+				options.handlers["model.roles.apply"]({ role: payload.role }),
++			run: (payload): unknown | Promise<unknown> => options.handlers["model.roles.apply"]({ role: payload.role }),
 +		},
 +		{
 +			id: "auth.api-key.set",
@@ -12706,6 +13507,7 @@ index 0000000000..d657697f9f
 +			validate: noPayload("session.fresh"),
 +			run: () => options.handlers["session.fresh"](),
 +		},
++		...settingsExtendedOperations,
 +		...treeOperations,
 +		...toolsCatalogOperations,
 +		...extensionsListOperations,
@@ -12721,7 +13523,10 @@ index 0000000000..d657697f9f
 +	// A descriptor that claims `available` without a handler is the one failure
 +	// that must not be reachable by accident: the table is the same list the
 +	// dispatcher uses, and this check makes the invariant explicit for tests.
-+	const handled = new Set(registered.map(operation => operation.id));
++	const onlyOperations = options.operations;
++	const runnable =
++		onlyOperations === undefined ? registered : registered.filter(operation => onlyOperations.includes(operation.id));
++	const handled = new Set(runnable.map(operation => operation.id));
 +	for (const descriptor of table) {
 +		if (descriptor.state === "available" && !handled.has(descriptor.id))
 +			throw new Error(`Cedia capability ${descriptor.id} is advertised without a handler`);
@@ -12737,7 +13542,7 @@ index 0000000000..d657697f9f
 +					code: "cedia_control_unknown_operation",
 +					error: "A capability operation id is required",
 +				};
-+			const operation = registered.find(candidate => candidate.id === operationId);
++			const operation = runnable.find(candidate => candidate.id === operationId);
 +			if (!operation) {
 +				const declaredEntry = table.find(candidate => candidate.id === operationId);
 +				return {
@@ -12768,7 +13573,15 @@ index 0000000000..d657697f9f
 +			// A settings write is the one operation whose effect depends on what the runtime holds
 +			// right now, so a caller that named the settings revision it read is refused when that
 +			// revision moved - including a change made through OMP's own `config` CLI.
-+			if (operation.id === "settings.set") {
++			// Unset and global-scope mutations share the same global revision; a project-scope
++			// mutation is checked inside the service against its own project revision.
++			const globalWrite =
++				operation.id === "settings.set" ||
++				operation.id === "settings.unset" ||
++				(operation.id === "settings.mutate" &&
++					isRecord((payload as Record<string, unknown>).context) &&
++					((payload as Record<string, unknown>).context as Record<string, unknown>).scope === "global");
++			if (globalWrite) {
 +				const expected = (payload as Record<string, unknown>).expectedRevision;
 +				if (typeof expected === "string") {
 +					const current = options.handlers["settings.revision"]();
@@ -15443,6 +16256,232 @@ index 0000000000..6d53e3d215
 +		droppedIntentIds: popped?.cediaIntentId === undefined ? [] : [popped.cediaIntentId],
 +	};
 +}
+diff --git a/packages/coding-agent/src/modes/rpc/cedia-settings-entry.ts b/packages/coding-agent/src/modes/rpc/cedia-settings-entry.ts
+new file mode 100644
+index 0000000000..3b94d90466
+--- /dev/null
++++ b/packages/coding-agent/src/modes/rpc/cedia-settings-entry.ts
+@@ -0,0 +1,220 @@
++/**
++ * Taskless configuration-only entry point (plan §6.4.1 S2).
++ *
++ * Serves OMP's settings operations over the existing RPC transport with no
++ * execution session, no loaded executable packages and no model contact: the
++ * process boots Settings, claims the RPC input and answers the settings slice
++ * of the Cedia capability bridge. Reads use Settings.loadReadOnly semantics
++ * where possible; mutations use the writable lifecycle with flush and readback.
++ * A caller that names a session operation gets an explicit refusal, never a
++ * session: opening Settings must not start an executor.
++ */
++import { VERSION } from "@oh-my-pi/pi-utils";
++import { orderedSettings } from "../../config/all-settings";
++import { lookup } from "../../config/registry";
++import { Settings } from "../../config/settings";
++import {
++	CediaSettingsError,
++	SETTINGS_CREDENTIAL_WRITE,
++	SETTINGS_REJECTED,
++	SETTINGS_STALE_REVISION,
++	SETTINGS_UNKNOWN_PATH,
++	loadProjectSettingsForRead,
++	mutateGlobalSettings,
++	mutateProjectSettings,
++	previewGlobalReset,
++	readSettingsValue,
++	settingsRevisionOfInstance,
++	unsetGlobalSetting,
++} from "../../config/cedia-settings-service";
++import { createCediaCapabilityBridge } from "./cedia-capability-bridge";
++import { claimRpcInput, readRpcInputFrames } from "./rpc-input";
++import { MAX_RPC_FRAME_BYTES, MAX_RPC_REASSEMBLED_BYTES, RpcFrameEncoder } from "./rpc-frame";
++import { RpcOutputWriter } from "./rpc-output";
++import type { RpcCediaSettingsMutatePayload } from "./rpc-types";
++
++/** Operations the configuration service answers; everything else is refused. */
++export const CEDIA_SETTINGS_SERVICE_OPERATIONS = [
++	"settings.keys.list",
++	"settings.keys.describe",
++	"settings.get",
++	"settings.set",
++	"settings.unset",
++	"settings.mutate",
++	"settings.reset.preview",
++] as const;
++
++export const CEDIA_SETTINGS_SERVICE_VERSION = 1;
++
++type JsonRecord = Record<string, unknown>;
++
++function isRecord(value: unknown): value is JsonRecord {
++	return !!value && typeof value === "object" && !Array.isArray(value);
++}
++
++/**
++ * Run the configuration service on the RPC transport. Never returns: stdin EOF
++ * (the host closing) flushes and exits, anything else is answered or refused.
++ */
++export async function runCediaSettingsService(input = claimRpcInput()): Promise<never> {
++	process.env.PI_NOTIFICATIONS = "off";
++	const settings = await Settings.init({});
++	const frameEncoder = new RpcFrameEncoder();
++	const output = new RpcOutputWriter(process.stdout, failure => {
++		process.stderr.write(`Cedia settings service output failed: ${String(failure)}\n`);
++		process.exit(1);
++	});
++	const write = (frame: Record<string, unknown>): void => {
++		for (const line of frameEncoder.encodeFrames(frame)) output.write([line]);
++	};
++	const success = (id: string | undefined, command: string, data?: object | null) =>
++		id === undefined
++			? { type: "response", command, success: true }
++			: { type: "response", id, command, success: true, ...(data === undefined ? {} : { data }) };
++	const failure = (id: string | undefined, command: string, message: string, code?: string) => ({
++		type: "response",
++		...(id === undefined ? {} : { id }),
++		command,
++		success: false,
++		error: message,
++		...(code === undefined ? {} : { code }),
++	});
++
++	const bridge = createCediaCapabilityBridge({
++		ompRevision: `omp/${VERSION}`,
++		operations: [...CEDIA_SETTINGS_SERVICE_OPERATIONS],
++		handlers: {
++			"settings.revision": () => settingsRevisionOfInstance(settings),
++			"settings.get": (path: string, scope?: "global" | "project" | "session", projectDir?: string) => {
++				if (scope === undefined || scope === "global") return readSettingsValue(settings, path, "global");
++				if (scope === "session")
++					throw new Error(
++						"settings.get with session scope needs a live task owner; this service owns configuration only",
++					);
++				return loadProjectSettingsForRead(String(projectDir)).then(project =>
++					readSettingsValue(project, path, "project"),
++				);
++			},
++			"settings.set": async (path: string, value: unknown) => {
++				const handle = orderedSettings().find(setting => setting.id === path) ?? lookup(path);
++				if (handle === undefined) throw new Error(`${path} is not a setting this runtime defines`);
++				handle.set(settings, value as never);
++				await settings.flush();
++				return readSettingsValue(settings, path, "global");
++			},
++			"settings.unset": (path: string, expectedRevision?: string) =>
++				unsetGlobalSetting(settings, path, expectedRevision, "global"),
++			"settings.mutate": (payload: RpcCediaSettingsMutatePayload) => {
++				if (payload.context.scope === "project")
++					return mutateProjectSettings(payload.context.projectDir, payload.changes, payload.expectedRevision).then(
++						result => ({ scope: "project", values: result.values }),
++					);
++				return mutateGlobalSettings(settings, payload, "global");
++			},
++			"settings.reset.preview": (paths: string[]) => previewGlobalReset(settings, paths, "global"),
++			// The operations filter above guarantees only settings handlers run; the cast
++			// covers session-only handlers this service never advertises.
++		} as unknown as import("./cedia-capability-bridge").CediaCapabilityHandlers,
++	});
++
++	write({
++		type: "ready",
++		protocolVersion: 1,
++		supportedProtocolVersions: [1, 2],
++		maxFrameBytes: MAX_RPC_FRAME_BYTES,
++		maxReassembledFrameBytes: MAX_RPC_REASSEMBLED_BYTES,
++		cediaCapabilitiesVersion: 1,
++		cediaSettingsServiceVersion: CEDIA_SETTINGS_SERVICE_VERSION,
++	});
++
++	const onFrame = (frame: unknown): void => {
++		void (async () => {
++			if (!isRecord(frame) || typeof frame.type !== "string") return;
++			const id = typeof frame.id === "string" ? frame.id : undefined;
++			if (frame.type === "negotiate_protocol") {
++				if (frame.protocolVersion !== 2) {
++					write(
++						failure(
++							id,
++							"negotiate_protocol",
++							`Unsupported RPC protocol version: ${String(frame.protocolVersion)}`,
++						),
++					);
++					return;
++				}
++				frameEncoder.setProtocolVersion(2);
++				write(success(id, "negotiate_protocol", { protocolVersion: 2 }));
++				return;
++			}
++			if (frame.type === "cedia_get_capabilities") {
++				write(success(id, "cedia_get_capabilities", bridge.table() as unknown as object));
++				return;
++			}
++			if (frame.type === "cedia_control") {
++				const operation = typeof frame.operation === "string" ? frame.operation : "";
++				let outcome: Awaited<ReturnType<typeof bridge.control>>;
++				try {
++					outcome = await bridge.control({
++						operation,
++						...(isRecord(frame.payload) ? { payload: frame.payload } : {}),
++						...(typeof frame.capabilityRevision === "string"
++							? { capabilityRevision: frame.capabilityRevision }
++							: {}),
++					});
++				} catch (error) {
++					// A handler refusal carries its typed code instead of killing the
++					// transport: a stale revision is a retryable conflict, never a crash.
++					if (error instanceof CediaSettingsError) {
++						const code =
++							error.code === SETTINGS_STALE_REVISION
++								? "cedia_control_stale_settings_revision"
++								: error.code === SETTINGS_UNKNOWN_PATH ||
++										error.code === SETTINGS_CREDENTIAL_WRITE ||
++										error.code === SETTINGS_REJECTED
++									? "cedia_control_invalid_payload"
++									: "cedia_control_handler_error";
++						write(failure(id, "cedia_control", error.message, code));
++						return;
++					}
++					throw error;
++				}
++				if (!outcome.ok) {
++					write(failure(id, "cedia_control", outcome.error, outcome.code));
++					return;
++				}
++				write(
++					success(id, "cedia_control", {
++						operation: outcome.operation,
++						capabilityRevision: outcome.capabilityRevision,
++						result: outcome.result as object,
++					}),
++				);
++				return;
++			}
++			write(
++				failure(
++					id,
++					String(frame.type),
++					`The configuration service answers settings operations only: ${String(frame.type)} is refused without starting a session`,
++					"cedia_settings_service_only",
++				),
++			);
++		})();
++	};
++
++	let exited = false;
++	const exit = (code: number): void => {
++		if (exited) return;
++		exited = true;
++		void output.close().finally(() => process.exit(code));
++	};
++	process.on("SIGTERM", () => exit(0));
++	process.on("SIGINT", () => exit(0));
++
++	await readRpcInputFrames(input, onFrame, message => {
++		process.stderr.write(`Cedia settings service input: ${message}\n`);
++	});
++	await settings.flush().catch(() => undefined);
++	exit(0);
++	return new Promise<never>(() => undefined);
++}
 diff --git a/packages/coding-agent/src/modes/rpc/cedia-tools-bridge.ts b/packages/coding-agent/src/modes/rpc/cedia-tools-bridge.ts
 new file mode 100644
 index 0000000000..59a2d32240
@@ -15781,7 +16820,7 @@ index 1fa5a4cda4..a4be790f3e 100644
  
  function isRpcResponse(value: unknown): value is RpcResponse {
 diff --git a/packages/coding-agent/src/modes/rpc/rpc-mode.ts b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
-index 6e8332a55b..b68d2f5f4a 100644
+index 6e8332a55b..7eba68a041 100644
 --- a/packages/coding-agent/src/modes/rpc/rpc-mode.ts
 +++ b/packages/coding-agent/src/modes/rpc/rpc-mode.ts
 @@ -12,10 +12,47 @@
@@ -15880,7 +16919,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  import type {
  	RpcCommand,
  	RpcExtensionUIRequest,
-@@ -74,9 +135,29 @@ import type {
+@@ -74,9 +135,41 @@ import type {
  	RpcHostUriResult,
  	RpcOpenSessionResult,
  	RpcResponse,
@@ -15904,13 +16943,25 @@ index 6e8332a55b..b68d2f5f4a 100644
 +} from "./cedia-capability-bridge";
 +import { orderedSettings } from "../../config/all-settings";
 +import { lookup, type AnySetting } from "../../config/registry";
++import {
++	CediaSettingsError,
++	SETTINGS_CREDENTIAL_WRITE,
++	SETTINGS_REJECTED,
++	SETTINGS_STALE_REVISION,
++	SETTINGS_UNKNOWN_PATH,
++	mutateGlobalSettings,
++	previewGlobalReset,
++	readSettingsValue,
++	unsetGlobalSetting,
++} from "../../config/cedia-settings-service";
 +import { getKnownRoleIds } from "../../config/model-roles";
 +import type { RpcCediaModelRoleEntry } from "./rpc-types";
++import type { RpcCediaSettingsMutatePayload } from "./rpc-types";
 +import { readCediaCodeMode, readCediaToolCatalog, refreshCediaSkills, setCediaActiveTools } from "./cedia-tools-bridge";
  
  // Re-export types for consumers
  export type * from "./rpc-types";
-@@ -86,6 +167,144 @@ export type PendingExtensionRequest = {
+@@ -86,6 +179,144 @@ export type PendingExtensionRequest = {
  	reject: (error: Error) => void;
  };
  
@@ -16055,7 +17106,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  /** Pending extension UI request map that can fail closed when the RPC client disconnects. */
  export class RpcPendingExtensionRequests extends Map<string, PendingExtensionRequest> {
  	#closedError: Error | undefined;
-@@ -98,6 +317,14 @@ export class RpcPendingExtensionRequests extends Map<string, PendingExtensionReq
+@@ -98,6 +329,14 @@ export class RpcPendingExtensionRequests extends Map<string, PendingExtensionReq
  		return super.set(id, request);
  	}
  
@@ -16070,7 +17121,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  	/** Reject every active and future extension UI request. */
  	rejectAll(message: string): void {
  		if (!this.#closedError) this.#closedError = new Error(message);
-@@ -288,25 +515,38 @@ export function dispatchRpcControlFrame(parsed: unknown, deps: RpcInputFrameDeps
+@@ -288,25 +527,38 @@ export function dispatchRpcControlFrame(parsed: unknown, deps: RpcInputFrameDeps
  	return false;
  }
  
@@ -16121,7 +17172,7 @@ index 6e8332a55b..b68d2f5f4a 100644
   */
  export function dispatchRpcInputFrame(parsed: unknown, deps: RpcInputFrameDeps): Promise<void> | undefined {
  	if (dispatchRpcControlFrame(parsed, deps)) return undefined;
-@@ -316,14 +556,11 @@ export function dispatchRpcInputFrame(parsed: unknown, deps: RpcInputFrameDeps):
+@@ -316,14 +568,11 @@ export function dispatchRpcInputFrame(parsed: unknown, deps: RpcInputFrameDeps):
  	// the union here.
  	const command = parsed as RpcCommand;
  
@@ -16141,7 +17192,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		const task = (async () => {
  			try {
  				deps.output(await deps.handleCommand(command));
-@@ -360,18 +597,25 @@ export class RpcInputDispatcher {
+@@ -360,18 +609,25 @@ export class RpcInputDispatcher {
  			if (dispatchRpcControlFrame(parsed, this.#deps)) return;
  
  			const command = parsed as RpcCommand;
@@ -16175,7 +17226,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			this.#tasks.add(task);
  			void task.finally(() => {
  				this.#tasks.delete(task);
-@@ -574,6 +818,117 @@ function shouldEmitRpcTitles(): boolean {
+@@ -574,6 +830,117 @@ function shouldEmitRpcTitles(): boolean {
  	return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
  }
  
@@ -16293,7 +17344,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  function isSubagentSubscriptionLevel(value: unknown): value is RpcSubagentSubscriptionLevel {
  	return value === "off" || value === "progress" || value === "events";
  }
-@@ -779,6 +1134,27 @@ export interface RpcModeOptions {
+@@ -779,6 +1146,27 @@ export interface RpcModeOptions {
  	headless?: boolean;
  	subagentEventBus?: EventBus;
  	input?: ReadableStream<Uint8Array>;
@@ -16321,7 +17372,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  }
  
  /**
-@@ -786,30 +1162,348 @@ export interface RpcModeOptions {
+@@ -786,30 +1174,348 @@ export interface RpcModeOptions {
   * Listens for JSON commands on stdin, outputs events and responses on stdout.
   */
  export async function runRpcMode(session: AgentSession, options: RpcModeOptions = {}): Promise<never> {
@@ -16681,7 +17732,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		if (isRecord(obj) && obj.type === "response" && obj.command === "negotiate_protocol" && obj.success === true)
  			frameEncoder.setProtocolVersion(2);
  	};
-@@ -830,19 +1524,472 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -830,19 +1536,493 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		return { id, type: "response", command, success: false, error: message, ...(code ? { code } : {}) };
  	};
  
@@ -17060,10 +18111,21 @@ index 6e8332a55b..b68d2f5f4a 100644
 +			// credential path answers its state, never its secret. Every answer carries the
 +			// settings revision the read was taken at, which is what a later write names.
 +			"settings.revision": () => settingsRevisionOf(session.settings),
-+			"settings.get": (path: string) => ({
-+				...readSetting(session.settings, path),
-+				settingsRevision: settingsRevisionOf(session.settings),
-+			}),
++			"settings.get": (path: string, scope?: "global" | "project" | "session") => {
++				// No scope is the legacy global read, byte-for-byte the shape old clients parse.
++				if (scope === undefined)
++					return {
++						...readSetting(session.settings, path),
++						settingsRevision: settingsRevisionOf(session.settings),
++					};
++				// A live task never lends its project layers: project scope belongs to the
++				// taskless configuration service, which resolves an explicit trusted directory.
++				if (scope === "project" || scope === "global")
++					throw new Error(
++						`settings.get with ${scope} scope is served by the taskless configuration service (CEDIA_SETTINGS_SERVICE=1), never inferred from a live task`,
++					);
++				return readSettingsValue(session.settings, path, "session");
++			},
 +			"settings.set": async (path: string, value: unknown) => {
 +				// The bridge validated the path, the value and the revision it was given. The write
 +				// goes through OMP's own setter and is flushed, so the answer describes a value that
@@ -17074,6 +18136,16 @@ index 6e8332a55b..b68d2f5f4a 100644
 +				await session.settings.flush();
 +				return { ...readSetting(session.settings, path), settingsRevision: settingsRevisionOf(session.settings) };
 +			},
++			"settings.unset": (path: string, expectedRevision?: string) =>
++				unsetGlobalSetting(session.settings, path, expectedRevision, "session"),
++			"settings.mutate": (payload: RpcCediaSettingsMutatePayload) => {
++				if (payload.context.scope !== "global")
++					throw new Error(
++						"settings.mutate with project scope is served by the taskless configuration service (CEDIA_SETTINGS_SERVICE=1), never inferred from a live task",
++					);
++				return mutateGlobalSettings(session.settings, payload, "session");
++			},
++			"settings.reset.preview": (paths: string[]) => previewGlobalReset(session.settings, paths, "session"),
 +		},
 +	});
 +
@@ -17154,7 +18226,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  	/**
  	 * Extension UI context that uses the RPC protocol.
  	 */
-@@ -893,8 +2040,23 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -893,8 +2073,23 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			);
  		}
  
@@ -17180,7 +18252,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			return () => {};
  		}
  
-@@ -925,6 +2087,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -925,6 +2120,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		setWidget(key: string, content: unknown, options?: ExtensionWidgetOptions): void {
@@ -17188,7 +18260,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			// Only support string arrays in RPC mode - factory functions are ignored
  			if (content === undefined || Array.isArray(content)) {
  				this.output({
-@@ -939,12 +2102,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -939,12 +2135,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			// Component factories are not supported in RPC mode - would need TUI access
  		}
  
@@ -17205,7 +18277,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		}
  
  		setTitle(title: string): void {
-@@ -958,9 +2121,19 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -958,9 +2154,19 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			} as RpcExtensionUIRequest);
  		}
  
@@ -17228,7 +18300,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		}
  
  		pasteToEditor(text: string): void {
-@@ -969,6 +2142,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -969,6 +2175,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		setEditorText(text: string): void {
@@ -17236,7 +18308,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			// Fire and forget - host can implement editor control
  			this.output({
  				type: "extension_ui_request",
-@@ -979,6 +2153,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -979,6 +2186,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		getEditorText(): string {
@@ -17244,7 +18316,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			// Synchronous method can't wait for RPC response
  			// Host should track editor state locally if needed
  			return "";
-@@ -1002,29 +2177,30 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1002,29 +2210,30 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		}
  
  		getAllThemes(): Promise<{ name: string; path: string | undefined }[]> {
@@ -17287,7 +18359,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		}
  	}
  
-@@ -1036,8 +2212,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1036,8 +2245,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	const onPromptError = (id: string | undefined, command: string) => (promptError: Error) =>
  		output(error(id, command, promptError.message));
  
@@ -17302,7 +18374,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		mode: "rpc",
  		reportSendError: (action, err) => {
  			output(error(undefined, action, err.message));
-@@ -1056,7 +2236,33 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1056,7 +2269,33 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	});
  
  	// Output all agent events as JSON; prompt results follow the frame that settled them.
@@ -17336,7 +18408,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		sessionEvents.forward(event);
  		promptResults.observe(event);
  		settleWatcher.observe(event);
-@@ -1115,11 +2321,31 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1115,11 +2354,31 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		process.exit(0);
  	};
  
@@ -17371,7 +18443,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  		await session.refreshSkillsAndCommands();
  		await emitAvailableCommandsUpdate();
  	};
-@@ -1129,11 +2355,43 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1129,11 +2388,43 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	session.subscribeCommandMetadataChanged(() => {
  		void emitAvailableCommandsUpdate();
  	});
@@ -17416,7 +18488,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  
  		switch (command.type) {
  			case "negotiate_protocol": {
-@@ -1142,6 +2400,215 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1142,6 +2433,215 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				return success(id, "negotiate_protocol", { protocolVersion: 2 });
  			}
  
@@ -17632,7 +18704,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			// =================================================================
  			// Prompting
  			// =================================================================
-@@ -1150,6 +2617,98 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1150,6 +2650,98 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				// Taken before any dispatch so a builtin that schedules a turn (e.g. `/retry`)
  				// cannot start its run ahead of the prompt's event-stream position.
  				const ticket = promptResults.begin(id);
@@ -17731,16 +18803,17 @@ index 6e8332a55b..b68d2f5f4a 100644
  				try {
  					const skillResult = await dispatchRpcSkillPrompt({
  						ticket,
-@@ -1228,6 +2787,8 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1228,6 +2820,9 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  								images: command.images,
  								streamingBehavior: command.streamingBehavior,
  								onPromptAdmitted,
 +								cediaIntentId: (command as { cediaIntentId?: string }).cediaIntentId,
-+								cediaSelectedSlashCommand: (command as { cediaSelectedSlashCommand?: string }).cediaSelectedSlashCommand,
++								cediaSelectedSlashCommand: (command as { cediaSelectedSlashCommand?: string })
++									.cediaSelectedSlashCommand,
  							}),
  						results: promptResults,
  						onError: onPromptError(id, "prompt"),
-@@ -1242,12 +2803,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1242,12 +2837,12 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			}
  
  			case "steer": {
@@ -17755,7 +18828,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  				return success(id, "follow_up");
  			}
  
-@@ -1280,7 +2841,8 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1280,7 +2875,8 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				// After the abort so the aborted run's terminal agent_end cannot settle this prompt.
  				watchAndReportPromptResult({
  					ticket: promptResults.begin(id),
@@ -17765,7 +18838,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  					results: promptResults,
  					onError: onPromptError(id, "abort_and_prompt"),
  					extensionUserMessageTracker,
-@@ -1288,6 +2850,50 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1288,6 +2884,50 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				return success(id, "abort_and_prompt");
  			}
  
@@ -17816,7 +18889,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			case "new_session":
  			case "switch_session":
  			case "branch": {
-@@ -1457,7 +3063,11 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1457,7 +3097,11 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  					if (command.fromByte !== undefined && !Number.isFinite(command.fromByte)) {
  						return error(id, "get_subagent_messages", "fromByte must be a finite number");
  					}
@@ -17829,7 +18902,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  					const transcript = await readRpcSubagentTranscript(sessionFile, command.fromByte);
  					return success(id, "get_subagent_messages", transcript);
  				} catch (err) {
-@@ -1504,6 +3114,83 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1504,6 +3148,101 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  				return success(id, "get_available_models", { models });
  			}
  
@@ -17901,7 +18974,25 @@ index 6e8332a55b..b68d2f5f4a 100644
 +						? { capabilityRevision: command.capabilityRevision }
 +						: {}),
 +				};
-+				const outcome = await cediaCapabilities.control(request);
++				let outcome: Awaited<ReturnType<typeof cediaCapabilities.control>>;
++				try {
++					outcome = await cediaCapabilities.control(request);
++				} catch (err: unknown) {
++					// A settings handler refusal carries its typed code instead of a
++					// transport failure: staleness stays a retryable conflict.
++					if (err instanceof CediaSettingsError) {
++						const code =
++							err.code === SETTINGS_STALE_REVISION
++								? "cedia_control_stale_settings_revision"
++								: err.code === SETTINGS_UNKNOWN_PATH ||
++										err.code === SETTINGS_CREDENTIAL_WRITE ||
++										err.code === SETTINGS_REJECTED
++									? "cedia_control_invalid_payload"
++									: "cedia_control_handler_error";
++						return error(id, "cedia_control", err.message, code);
++					}
++					throw err;
++				}
 +				if (!outcome.ok) return error(id, "cedia_control", outcome.error, outcome.code);
 +				return success(id, "cedia_control", {
 +					operation: outcome.operation,
@@ -17913,7 +19004,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			// =================================================================
  			// Thinking
  			// =================================================================
-@@ -1776,6 +3463,14 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1776,6 +3515,14 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  			// the process exits. dispose() also emits `session_shutdown`, so we
  			// must NOT emit it separately here or the event fires twice. Skipping
  			// dispose left OMP-owned Chromium alive after RPC shutdown (#5643).
@@ -17928,7 +19019,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  			await disposeAndExit();
  		},
  	});
-@@ -1795,6 +3490,112 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1795,6 +3542,112 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  		deps: dispatchFrameDeps,
  		afterSerialCommand: () => shutdownCoordinator.checkShutdownRequested(),
  	});
@@ -18041,7 +19132,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  
  	// Keep the stdin reader moving: side-channel frames dispatch immediately,
  	// ordinary commands serialize through inputDispatcher, and bash remains
-@@ -1804,17 +3605,58 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1804,17 +3657,58 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	// the reader and killing the whole process (issue #5194).
  	await readRpcInputFrames(
  		input ?? Bun.stdin.stream(),
@@ -18103,7 +19194,7 @@ index 6e8332a55b..b68d2f5f4a 100644
  	subagentRegistry?.dispose();
  	// Dispose the main session before exiting so the browser reaper and other
  	// bounded teardown run on the stdin-EOF path too (#5643). Idempotent: a
-@@ -1822,5 +3664,6 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
+@@ -1822,5 +3716,6 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions
  	// immediately. Returned rather than awaited: `runRpcMode` is typed
  	// `Promise<never>`, and only returning the `Promise<never>` keeps this end
  	// point unreachable for the compiler.
@@ -18133,10 +19224,10 @@ index 3c0a14b53c..2a59bb794a 100644
  		}
  
 diff --git a/packages/coding-agent/src/modes/rpc/rpc-types.ts b/packages/coding-agent/src/modes/rpc/rpc-types.ts
-index a2b587fdb3..37f235459a 100644
+index a2b587fdb3..1aa1d86faa 100644
 --- a/packages/coding-agent/src/modes/rpc/rpc-types.ts
 +++ b/packages/coding-agent/src/modes/rpc/rpc-types.ts
-@@ -28,15 +28,76 @@ export type RpcMessageUpdates = "full" | "delta";
+@@ -28,15 +28,91 @@ export type RpcMessageUpdates = "full" | "delta";
  export type RpcCommand =
  	// Protocol
  	| { id?: string; type: "negotiate_protocol"; protocolVersion: number }
@@ -18166,7 +19257,15 @@ index a2b587fdb3..37f235459a 100644
 -	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
 -	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
 -	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
-+	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp"; cediaIntentId?: string; cediaSelectedSlashCommand?: string }
++	| {
++			id?: string;
++			type: "prompt";
++			message: string;
++			images?: ImageContent[];
++			streamingBehavior?: "steer" | "followUp";
++			cediaIntentId?: string;
++			cediaSelectedSlashCommand?: string;
++	  }
 +	| { id?: string; type: "steer"; message: string; images?: ImageContent[]; cediaIntentId?: string }
 +	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[]; cediaIntentId?: string }
  	| { id?: string; type: "remove_queued_message"; message: string; queue: "steering" | "followUp" }
@@ -18175,7 +19274,14 @@ index a2b587fdb3..37f235459a 100644
 -	| { id?: string; type: "abort_and_prompt"; message: string; images?: ImageContent[] }
 +	| { id?: string; type: "abort_and_prompt"; message: string; images?: ImageContent[]; cediaIntentId?: string }
 +	| { id?: string; type: "cedia_turn_queue" }
-+	| { id?: string; type: "cedia_pending_model"; revision: number; provider?: string; modelId?: string; thinkingLevel?: string | null }
++	| {
++			id?: string;
++			type: "cedia_pending_model";
++			revision: number;
++			provider?: string;
++			modelId?: string;
++			thinkingLevel?: string | null;
++	  }
 +	/**
 +	 * Cedia's goal-mode bridge (O07). One command with an operation, because every operation
 +	 * answers the same snapshot: what OMP's own goal state is right now. `set`/`replace` mirror
@@ -18217,7 +19323,7 @@ index a2b587fdb3..37f235459a 100644
  	| { id?: string; type: "new_session"; parentSession?: string }
  	| { id?: string; type: "open_session"; sessionDir: string }
  
-@@ -58,6 +119,17 @@ export type RpcCommand =
+@@ -58,6 +134,17 @@ export type RpcCommand =
  	| { id?: string; type: "set_model"; provider: string; modelId: string }
  	| { id?: string; type: "cycle_model" }
  	| { id?: string; type: "get_available_models" }
@@ -18235,7 +19341,7 @@ index a2b587fdb3..37f235459a 100644
  
  	// Thinking
  	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
-@@ -212,6 +284,749 @@ export interface RpcReadyFrame {
+@@ -212,6 +299,848 @@ export interface RpcReadyFrame {
  	supportedProtocolVersions: [1, 2];
  	maxFrameBytes: number;
  	maxReassembledFrameBytes: number;
@@ -18358,6 +19464,31 @@ index a2b587fdb3..37f235459a 100644
 +	tab?: string;
 +	projectWritable: boolean;
 +	/**
++	 * The TUI label OMP itself shows for this path, when the schema declares one.
++	 * Present only when declared, so a client never invents display copy.
++	 */
++	label?: string;
++	/**
++	 * The TUI help text OMP itself shows for this path, when the schema declares one.
++	 */
++	description?: string;
++	/**
++	 * The TUI group OMP files this path under, when the schema declares one.
++	 */
++	group?: string;
++	/**
++	 * The schema default for this path, JSON-safe and identical for every user.
++	 * A static schema fact, never a configured value: the inventory still carries
++	 * no value field, and a credential path never carries this field. Named
++	 * defaultJson (not default) so the no-value inventory invariant stays exact.
++	 */
++	defaultJson?: unknown;
++	/**
++	 * The environment variable that overrides this path, when one exists.
++	 * Names the env layer so a client can explain env-over-global masking.
++	 */
++	envVar?: string;
++	/**
 +	 * The values an `enum` path accepts, taken from the schema that validates a write.
 +	 * Present only when the schema declares them, so a client renders the real choices
 +	 * instead of asking the user to guess a string the runtime would refuse.
@@ -18373,6 +19504,62 @@ index a2b587fdb3..37f235459a 100644
 +	apply?: "immediate" | "turn_boundary" | "reload" | "new_session";
 +}
 +
++/**
++ * The scope a settings answer was resolved in.
++ *
++ * Global is the shared OMP configuration the terminal also uses. Project is
++ * one explicitly selected project and its supported local configuration file.
++ * Session is an inspect-only effective view tied to a named existing task.
++ */
++export type RpcCediaSettingsScope = "global" | "project" | "session";
++
++/**
++ * One effective settings value, with the provenance a row needs to be honest.
++ *
++ * Provenance names the layer that supplies the effective value in merge
++ * precedence order (runtime override, config overlay, project, global, default).
++ * storedGlobal is the global-layer value when one is saved, so a client can show
++ * when a saved global value is masked by a stronger layer. Both are absent on a
++ * redacted or oversized answer, exactly like value itself.
++ */
++export interface RpcCediaSettingsValue {
++	path: string;
++	credential: boolean;
++	redacted: boolean;
++	configured: boolean;
++	value?: unknown;
++	tooLarge?: true;
++	bytes?: number;
++	settingsRevision: string;
++	scope: RpcCediaSettingsScope;
++	provenance?: "env" | "runtime" | "overlay" | "project" | "global" | "default";
++	storedGlobal?: unknown;
++	defaultJson?: unknown;
++}
++
++/**
++ * One change inside a settings.mutate transaction.
++ *
++ * Set writes the value through OMP's own setter and flushes; unset removes
++ * the persisted global override so the next layer or the default supplies it.
++ */
++export type RpcCediaSettingsMutationChange =
++	| { path: string; operation: "set"; value: unknown }
++	| { path: string; operation: "unset" };
++
++/**
++ * A scoped settings mutation. Context names the layer written: the shared
++ * global configuration, or one explicitly selected project directory the host
++ * resolved from a project id (clients never pass arbitrary paths past the host).
++ * expectedRevision refuses the whole transaction when the settings moved.
++ * Every change is validated before any of them is written.
++ */
++export interface RpcCediaSettingsMutatePayload {
++	context: { scope: "global" } | { scope: "project"; projectDir: string };
++	expectedRevision?: string;
++	changes: RpcCediaSettingsMutationChange[];
++}
++
 +export interface RpcCediaSettingsKeysData {
 +	keys: RpcCediaSettingsKey[];
 +	/** Identifies the current effective settings; a write may name it to be refused when it moved. */
@@ -18380,9 +19567,7 @@ index a2b587fdb3..37f235459a 100644
 +}
 +
 +/** The dispatcher's own result: either a result to send, or a typed refusal. */
-+export type RpcCediaControlOutcome =
-+	| ({ ok: true } & RpcCediaControlData)
-+	| { ok: false; code: string; error: string };
++export type RpcCediaControlOutcome = ({ ok: true } & RpcCediaControlData) | { ok: false; code: string; error: string };
 +
 +/**
 + * Cedia's model-role projection. Roles are what OMP resolves through
@@ -18874,9 +20059,23 @@ index a2b587fdb3..37f235459a 100644
 +
 +export interface RpcCediaCleanseReport {
 +	readonly status: "clean" | "unresolved" | "unsupported" | "cancelled";
-+	readonly checks: readonly { readonly id: string; readonly label: string; readonly language: string; readonly exitCode: number | null; readonly diagnostics: number }[];
++	readonly checks: readonly {
++		readonly id: string;
++		readonly label: string;
++		readonly language: string;
++		readonly exitCode: number | null;
++		readonly diagnostics: number;
++	}[];
 +	readonly checksTruncated: boolean;
-+	readonly diagnostics: readonly { readonly checker: string; readonly file?: string; readonly line?: number; readonly column?: number; readonly code?: string; readonly severity: string; readonly message: string }[];
++	readonly diagnostics: readonly {
++		readonly checker: string;
++		readonly file?: string;
++		readonly line?: number;
++		readonly column?: number;
++		readonly code?: string;
++		readonly severity: string;
++		readonly message: string;
++	}[];
 +	readonly diagnosticsTruncated: boolean;
 +	readonly diagnosticsTotal: number;
 +	readonly skipped: readonly { readonly label: string; readonly language: string; readonly reason: string }[];
@@ -18943,7 +20142,13 @@ index a2b587fdb3..37f235459a 100644
 +	/** The model/effort change OMP is holding for the next turn, if any. */
 +	pending?: { revision: number; acceptedAt: string };
 +	/** The latest change OMP committed at a turn boundary, or the reason it could not. */
-+	applied?: { revision: number; model?: { provider: string; id: string; name?: string }; thinkingLevel?: string; appliedAt: string; error?: string };
++	applied?: {
++		revision: number;
++		model?: { provider: string; id: string; name?: string };
++		thinkingLevel?: string;
++		appliedAt: string;
++		error?: string;
++	};
 +}
 +
 +export interface RpcCediaModelRolesData {
@@ -18985,7 +20190,7 @@ index a2b587fdb3..37f235459a 100644
  }
  
  export interface RpcChunkFrame {
-@@ -267,6 +1082,21 @@ export type RpcResponse =
+@@ -267,6 +1196,21 @@ export type RpcResponse =
  			success: true;
  			data: { protocolVersion: 2 };
  	  }
@@ -19007,7 +20212,7 @@ index a2b587fdb3..37f235459a 100644
  
  	// Prompting (async - events follow)
  	| { id?: string; type: "response"; command: "prompt"; success: true; data?: { agentInvoked: boolean } }
-@@ -363,6 +1193,83 @@ export type RpcResponse =
+@@ -363,6 +1307,83 @@ export type RpcResponse =
  			success: true;
  			data: { models: Model[] };
  	  }
@@ -19091,7 +20296,7 @@ index a2b587fdb3..37f235459a 100644
  
  	// Thinking
  	| { id?: string; type: "response"; command: "set_thinking_level"; success: true }
-@@ -490,7 +1397,27 @@ export type RpcAgentSessionEventFrame =
+@@ -490,7 +1511,27 @@ export type RpcAgentSessionEventFrame =
  /** Every session event shape RPC mode can write, including the opt-in `messageUpdates: "delta"` projection. */
  export type RpcProjectedSessionEventFrame = RpcAgentSessionEventFrame | RpcDeltaMessageUpdateFrame;
  
@@ -24552,11 +25757,11 @@ index 0000000000..76136a7dac
 +});
 diff --git a/packages/coding-agent/test/cedia-capability-bridge.test.ts b/packages/coding-agent/test/cedia-capability-bridge.test.ts
 new file mode 100644
-index 0000000000..e0a0f47920
+index 0000000000..a7e4f5b327
 --- /dev/null
 +++ b/packages/coding-agent/test/cedia-capability-bridge.test.ts
-@@ -0,0 +1,849 @@
-+import { describe, expect, it } from "bun:test";
+@@ -0,0 +1,1127 @@
++import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 +import {
 +	CEDIA_CAPABILITY_BRIDGE_VERSION,
 +	CEDIA_CAPABILITY_SCHEMA_VERSION,
@@ -24660,11 +25865,29 @@ index 0000000000..e0a0f47920
 +			},
 +			"btw.state.get": () => {
 +				calls.push("btw.state.get");
-+				return { state: "idle", question: null, questionTruncated: false, answer: null, answerTruncated: false, branchable: false, branchUnavailableReason: "no answered side question", reason: null };
++				return {
++					state: "idle",
++					question: null,
++					questionTruncated: false,
++					answer: null,
++					answerTruncated: false,
++					branchable: false,
++					branchUnavailableReason: "no answered side question",
++					reason: null,
++				};
 +			},
 +			"btw.ask": () => {
 +				calls.push("btw.ask");
-+				return { state: "ready", question: "q", questionTruncated: false, answer: "a", answerTruncated: false, branchable: true, branchUnavailableReason: null, reason: null };
++				return {
++					state: "ready",
++					question: "q",
++					questionTruncated: false,
++					answer: "a",
++					answerTruncated: false,
++					branchable: true,
++					branchUnavailableReason: null,
++					reason: null,
++				};
 +			},
 +			"btw.branch": () => {
 +				calls.push("btw.branch");
@@ -24672,31 +25895,90 @@ index 0000000000..e0a0f47920
 +			},
 +			"cleanse.state.get": () => {
 +				calls.push("cleanse.state.get");
-+				return { state: "idle", request: null, phase: null, checkers: [], agents: [], log: [], report: null, reason: null };
++				return {
++					state: "idle",
++					request: null,
++					phase: null,
++					checkers: [],
++					agents: [],
++					log: [],
++					report: null,
++					reason: null,
++				};
 +			},
 +			"cleanse.run": () => {
 +				calls.push("cleanse.run");
-+				return { state: "running", request: null, phase: null, checkers: [], agents: [], log: [], report: null, reason: null };
++				return {
++					state: "running",
++					request: null,
++					phase: null,
++					checkers: [],
++					agents: [],
++					log: [],
++					report: null,
++					reason: null,
++				};
 +			},
 +			"cleanse.abort": () => {
 +				calls.push("cleanse.abort");
-+				return { state: "idle", request: null, phase: null, checkers: [], agents: [], log: [], report: null, reason: null };
++				return {
++					state: "idle",
++					request: null,
++					phase: null,
++					checkers: [],
++					agents: [],
++					log: [],
++					report: null,
++					reason: null,
++				};
 +			},
 +			"extensions.list": () => {
 +				calls.push("extensions.list");
-+				return { roots: { explicit: [], mode: "merge", configured: [], configuredLevel: "user" }, extensions: [], truncated: false, total: 0 };
++				return {
++					roots: { explicit: [], mode: "merge", configured: [], configuredLevel: "user" },
++					extensions: [],
++					truncated: false,
++					total: 0,
++				};
 +			},
 +			"extensions.set": (payload: Record<string, unknown>) => {
 +				calls.push(`extensions.set:${String(payload.id)}:${String(payload.enabled)}`);
-+				return { roots: { explicit: [], mode: "merge", configured: [], configuredLevel: "user" }, extensions: [], truncated: false, total: 0 };
++				return {
++					roots: { explicit: [], mode: "merge", configured: [], configuredLevel: "user" },
++					extensions: [],
++					truncated: false,
++					total: 0,
++				};
 +			},
 +			"omfg.state.get": () => {
 +				calls.push("omfg.state.get");
-+				return { state: "idle", complaint: null, complaintTruncated: false, draft: null, draftTruncated: false, ruleName: null, validated: false, validationFeedback: null, savedPath: null, reason: null };
++				return {
++					state: "idle",
++					complaint: null,
++					complaintTruncated: false,
++					draft: null,
++					draftTruncated: false,
++					ruleName: null,
++					validated: false,
++					validationFeedback: null,
++					savedPath: null,
++					reason: null,
++				};
 +			},
 +			"omfg.draft": () => {
 +				calls.push("omfg.draft");
-+				return { state: "drafting", complaint: "x", complaintTruncated: false, draft: null, draftTruncated: false, ruleName: null, validated: false, validationFeedback: null, savedPath: null, reason: null };
++				return {
++					state: "drafting",
++					complaint: "x",
++					complaintTruncated: false,
++					draft: null,
++					draftTruncated: false,
++					ruleName: null,
++					validated: false,
++					validationFeedback: null,
++					savedPath: null,
++					reason: null,
++				};
 +			},
 +			"omfg.save": () => {
 +				calls.push("omfg.save");
@@ -24704,7 +25986,18 @@ index 0000000000..e0a0f47920
 +			},
 +			"omfg.abort": () => {
 +				calls.push("omfg.abort");
-+				return { state: "idle", complaint: null, complaintTruncated: false, draft: null, draftTruncated: false, ruleName: null, validated: false, validationFeedback: null, savedPath: null, reason: null };
++				return {
++					state: "idle",
++					complaint: null,
++					complaintTruncated: false,
++					draft: null,
++					draftTruncated: false,
++					ruleName: null,
++					validated: false,
++					validationFeedback: null,
++					savedPath: null,
++					reason: null,
++				};
 +			},
 +			"pause.set": (payload: Record<string, unknown>) => {
 +				calls.push(`pause.set:${String(payload.paused)}`);
@@ -24769,7 +26062,13 @@ index 0000000000..e0a0f47920
 +			},
 +			"advisor.config.set": (payload: Record<string, unknown>) => {
 +				calls.push(`advisor.config.set:${String(payload.scope)}`);
-+				return { scope: payload.scope, path: "/fixture/WATCHDOG.yml", exists: true, text: String(payload.text), advisors: 1 };
++				return {
++					scope: payload.scope,
++					path: "/fixture/WATCHDOG.yml",
++					exists: true,
++					text: String(payload.text),
++					advisors: 1,
++				};
 +			},
 +			"agents.get": () => {
 +				calls.push("agents.get");
@@ -25403,6 +26702,190 @@ index 0000000000..e0a0f47920
 +			capabilityRevision: built.table().capabilityRevision,
 +		});
 +		expect(current.ok).toBe(true);
++	});
++});
++
++describe("Cedia settings mutations", () => {
++	let state: import("./helpers/settings-test-state").SettingsTestState | undefined;
++	let tempDir: import("@oh-my-pi/pi-utils").TempDir;
++	let agentDir: string;
++	let cwd: string;
++
++	beforeEach(async () => {
++		const helpers = await import("./helpers/settings-test-state");
++		state = helpers.beginSettingsTest();
++		const utils = await import("@oh-my-pi/pi-utils");
++		const fs = await import("node:fs");
++		tempDir = utils.TempDir.createSync("@pi-cedia-bridge-settings-");
++		agentDir = tempDir.join("agent");
++		cwd = tempDir.join("project");
++		for (const dir of [agentDir, cwd]) fs.mkdirSync(dir, { recursive: true });
++	});
++
++	afterEach(() => {
++		import("./helpers/settings-test-state").then(helpers => helpers.restoreSettingsTestState(state));
++		state = undefined;
++		Bun.gc(true);
++		tempDir.removeSync();
++	});
++
++	async function settingsBridge() {
++		const { Settings } = await import("@oh-my-pi/pi-coding-agent/config/settings");
++		const service = await import("../src/config/cedia-settings-service");
++		const settings = await Settings.loadIsolated({ agentDir, cwd });
++		const built = createCediaCapabilityBridge({
++			ompRevision: "omp/18.4.8",
++			handlers: {
++				"settings.revision": () => service.settingsRevisionOfInstance(settings),
++				"settings.get": (path: string) => service.readSettingsValue(settings, path, "global"),
++				"settings.set": async (path: string, value: unknown) => {
++					const [readback] = await service.mutateGlobalSettings(
++						settings,
++						{ context: { scope: "global" }, changes: [{ path, operation: "set", value }] },
++						"global",
++					);
++					return readback;
++				},
++				"settings.unset": (path: string, expectedRevision?: string) =>
++					service.unsetGlobalSetting(settings, path, expectedRevision, "global"),
++				"settings.mutate": (payload: import("../src/modes/rpc/rpc-types").RpcCediaSettingsMutatePayload) => {
++					if (payload.context.scope !== "global") throw new Error("fixture serves global scope only");
++					return service.mutateGlobalSettings(settings, payload, "global");
++				},
++				"settings.reset.preview": (paths: string[]) => service.previewGlobalReset(settings, paths, "global"),
++			} as never,
++		});
++		return { built, settings };
++	}
++
++	it("advertises the extended settings operations only with their handlers", async () => {
++		const { built } = await settingsBridge();
++		const ids = built
++			.table()
++			.capabilities.filter(entry => entry.state === "available")
++			.map(entry => entry.id);
++		for (const id of ["settings.keys.describe", "settings.unset", "settings.mutate", "settings.reset.preview"]) {
++			expect(ids).toContain(id);
++		}
++		// The base bridge without settings handlers advertises none of them.
++		const { built: base } = bridge();
++		const baseIds = base.table().capabilities.map(entry => entry.id);
++		for (const id of ["settings.keys.describe", "settings.unset", "settings.mutate", "settings.reset.preview"]) {
++			expect(baseIds).not.toContain(id);
++		}
++		expect(
++			(await base.control({ operation: "settings.mutate", payload: { context: { scope: "global" }, changes: [] } }))
++				.ok,
++		).toBe(false);
++	});
++
++	it("describes schema metadata with label, default and env, and no values", async () => {
++		const { built } = await settingsBridge();
++		const outcome = await built.control({ operation: "settings.keys.describe" });
++		expect(outcome.ok).toBe(true);
++		if (!outcome.ok) return;
++		const result = outcome.result as { keys: Record<string, unknown>[]; settingsRevision: string };
++		expect(result.keys.length).toBeGreaterThan(500);
++		const endpoint = result.keys.find(key => key.path === "searxng.endpoint");
++		expect(endpoint).toMatchObject({ label: "SearXNG Endpoint", envVar: "SEARXNG_ENDPOINT" });
++		expect(typeof endpoint?.description).toBe("string");
++		for (const key of result.keys) {
++			expect(Object.keys(key)).not.toContain("value");
++			expect(Object.keys(key)).not.toContain("default");
++			if (key.credential === true) expect(key.defaultJson).toBeUndefined();
++		}
++		expect(result.settingsRevision).toMatch(/^[0-9a-f]{32}$/);
++	});
++
++	it("refuses credential writes at the bridge, before any handler runs", async () => {
++		const { built } = await settingsBridge();
++		const outcome = await built.control({
++			operation: "settings.set",
++			payload: { path: "auth.broker.token", value: "sk-x" },
++		});
++		expect(outcome).toMatchObject({ ok: false, code: "cedia_control_invalid_payload" });
++		if (!outcome.ok) expect(outcome.error).toContain("credential");
++	});
++
++	it("validates reads by scope, and unsets plus previews through control", async () => {
++		const { built } = await settingsBridge();
++		const badScope = await built.control({
++			operation: "settings.get",
++			payload: { path: "cycleOrder", scope: "zone" },
++		});
++		expect(badScope).toMatchObject({ ok: false, code: "cedia_control_invalid_payload" });
++		const danglingDir = await built.control({
++			operation: "settings.get",
++			payload: { path: "cycleOrder", scope: "project" },
++		});
++		expect(danglingDir).toMatchObject({ ok: false, code: "cedia_control_invalid_payload" });
++
++		const set = await built.control({
++			operation: "settings.mutate",
++			payload: {
++				context: { scope: "global" },
++				changes: [{ path: "cycleOrder", operation: "set", value: ["bridge/pick"] }],
++			},
++		});
++		expect(set.ok).toBe(true);
++		const preview = await built.control({ operation: "settings.reset.preview", payload: { paths: ["cycleOrder"] } });
++		expect(preview.ok).toBe(true);
++		if (preview.ok) {
++			const entries = (preview.result as { entries?: unknown; 0?: unknown }).entries ?? preview.result;
++			const first = (Array.isArray(entries) ? entries[0] : (preview.result as unknown[])[0]) as {
++				path: string;
++				globalConfigured: boolean;
++			};
++			expect(first).toMatchObject({ path: "cycleOrder", globalConfigured: true });
++		}
++		const revision =
++			(set as { result: { settingsRevision: string }[] }).result[0]?.settingsRevision ??
++			(set as { result: { settingsRevision: string } }).result.settingsRevision;
++		const unset = await built.control({
++			operation: "settings.unset",
++			payload: { path: "cycleOrder", expectedRevision: revision },
++		});
++		expect(unset.ok).toBe(true);
++		if (unset.ok) {
++			expect((unset.result as { configured: boolean }).configured).toBe(false);
++		}
++		// A stale revision fails the whole transaction.
++		const stale = await built.control({
++			operation: "settings.unset",
++			payload: { path: "cycleOrder", expectedRevision: "deadbeef" },
++		});
++		expect(stale).toMatchObject({ ok: false, code: "cedia_control_stale_settings_revision" });
++	});
++
++	it("serves only the filtered operations on a settings-only bridge", async () => {
++		const { Settings } = await import("@oh-my-pi/pi-coding-agent/config/settings");
++		const service = await import("../src/config/cedia-settings-service");
++		const { CEDIA_SETTINGS_SERVICE_OPERATIONS } = await import("../src/modes/rpc/cedia-settings-entry");
++		const settings = await Settings.loadIsolated({ agentDir, cwd });
++		const filtered = createCediaCapabilityBridge({
++			ompRevision: "omp/18.4.8",
++			operations: [...CEDIA_SETTINGS_SERVICE_OPERATIONS],
++			handlers: {
++				"settings.revision": () => service.settingsRevisionOfInstance(settings),
++				"settings.get": (path: string) => service.readSettingsValue(settings, path, "global"),
++				"settings.set": async (path: string, value: unknown) => value,
++				"settings.unset": (path: string) => service.unsetGlobalSetting(settings, path, undefined, "global"),
++				"settings.mutate": (payload: import("../src/modes/rpc/rpc-types").RpcCediaSettingsMutatePayload) =>
++					service.mutateGlobalSettings(settings, payload, "global"),
++				"settings.reset.preview": (paths: string[]) => service.previewGlobalReset(settings, paths, "global"),
++			} as never,
++		});
++		const ids = filtered
++			.table()
++			.capabilities.filter(entry => entry.state === "available")
++			.map(entry => entry.id);
++		expect(ids.sort()).toEqual([...CEDIA_SETTINGS_SERVICE_OPERATIONS].sort());
++		expect(
++			await filtered.control({
++				operation: "goal.set",
++				payload: { op: "set", objective: "x" },
++			}),
++		).toMatchObject({ ok: false, code: "cedia_control_unknown_operation" });
 +	});
 +});
 diff --git a/packages/coding-agent/test/cedia-cleanse-bridge.test.ts b/packages/coding-agent/test/cedia-cleanse-bridge.test.ts
@@ -29777,6 +31260,212 @@ index 0000000000..fac19b3542
 +		expect(answer.steering).toEqual([]);
 +		expect(answer.followUp).toEqual([]);
 +		expect(fixture.calls).toEqual(["clearQueue", "getQueuedMessageDetails"]);
++	});
++});
+diff --git a/packages/coding-agent/test/cedia-settings-service.test.ts b/packages/coding-agent/test/cedia-settings-service.test.ts
+new file mode 100644
+index 0000000000..d6816f5eb9
+--- /dev/null
++++ b/packages/coding-agent/test/cedia-settings-service.test.ts
+@@ -0,0 +1,200 @@
++import { afterEach, beforeEach, describe, expect, it } from "bun:test";
++import * as fs from "node:fs";
++import * as path from "node:path";
++import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
++import { lookup } from "@oh-my-pi/pi-coding-agent/config/registry";
++import { TempDir } from "@oh-my-pi/pi-utils";
++import { beginSettingsTest, restoreSettingsTestState, type SettingsTestState } from "./helpers/settings-test-state";
++import {
++	CediaSettingsError,
++	buildSettingsInventory,
++	mutateGlobalSettings,
++	mutateProjectSettings,
++	previewGlobalReset,
++	prevalidateChanges,
++	readSettingsValue,
++	settingsRevisionOfInstance,
++	unsetGlobalSetting,
++} from "../src/config/cedia-settings-service";
++
++/**
++ * The settings service behind the Cedia bridge (plan §6.4.1 S2/S3).
++ *
++ * Inventory carries schema metadata with no configured values; reads report
++ * provenance and stored-versus-effective state; mutations validate every
++ * change before any is written, flush once, and read back from the owner.
++ * Project scope resolves an explicit trusted directory and writes only the
++ * project file, preserving unknown fields.
++ */
++describe("Cedia settings service", () => {
++	let state: SettingsTestState | undefined;
++	let tempDir: TempDir;
++	let agentDir: string;
++	let cwd: string;
++
++	beforeEach(() => {
++		state = beginSettingsTest();
++		tempDir = TempDir.createSync("@pi-cedia-settings-");
++		agentDir = tempDir.join("agent");
++		cwd = tempDir.join("project");
++		for (const dir of [agentDir, cwd]) fs.mkdirSync(dir, { recursive: true });
++	});
++
++	afterEach(() => {
++		restoreSettingsTestState(state);
++		state = undefined;
++		Bun.gc(true);
++		tempDir.removeSync();
++	});
++
++	async function load(): Promise<Settings> {
++		return Settings.loadIsolated({ agentDir, cwd });
++	}
++
++	it("builds an inventory with schema metadata and no configured values", async () => {
++		const settings = await load();
++		const keys = buildSettingsInventory();
++		expect(keys.length).toBeGreaterThan(500);
++		const cycleOrder = keys.find(key => key.path === "cycleOrder");
++		expect(cycleOrder?.type).toBe("array");
++		// TUI metadata comes from the schema, never invented.
++		const endpoint = keys.find(key => key.path === "searxng.endpoint");
++		expect(endpoint?.label).toBe("SearXNG Endpoint");
++		expect(typeof endpoint?.description).toBe("string");
++		expect(endpoint?.envVar).toBe("SEARXNG_ENDPOINT");
++		// Schema defaults are static facts, identical for every user.
++		expect(cycleOrder).toMatchObject({ defaultJson: ["smol", "default", "slow"] });
++		// No row carries a configured value, and credentials carry no default.
++		for (const key of keys) {
++			expect(Object.keys(key)).not.toContain("value");
++			if (key.credential) expect(key.defaultJson).toBeUndefined();
++		}
++		// The revision identifies the effective settings a write may name.
++		expect(settingsRevisionOfInstance(settings)).toMatch(/^[0-9a-f]{32}$/);
++		settings.cancelPendingSaves();
++	});
++
++	it("reads provenance, stored-versus-effective state and scope", async () => {
++		const settings = await load();
++		const fresh = readSettingsValue(settings, "cycleOrder", "global");
++		expect(fresh).toMatchObject({ path: "cycleOrder", configured: false, provenance: "default", scope: "global" });
++		expect(fresh.value).toEqual(["smol", "default", "slow"]);
++		expect(fresh.storedGlobal).toBeUndefined();
++		// A credential answers redacted with no value, default or stored layer.
++		const broker = readSettingsValue(settings, "auth.broker.token", "global");
++		expect(broker).toMatchObject({ credential: true, redacted: true, configured: false });
++		expect(Object.hasOwn(broker, "value")).toBe(false);
++		expect(Object.hasOwn(broker, "storedGlobal")).toBe(false);
++		expect(Object.hasOwn(broker, "defaultJson")).toBe(false);
++		// An unknown path is refused, never answered as redacted.
++		expect(() => readSettingsValue(settings, "not.a.setting", "global")).toThrow(CediaSettingsError);
++		settings.cancelPendingSaves();
++	});
++
++	it("shows a saved global value masked by a stronger layer", async () => {
++		const settings = await load();
++		const handle = lookup("cycleOrder")!;
++		handle.set(settings, ["global/pick"]);
++		await settings.flush();
++		// A runtime override masks the saved global without removing it.
++		handle.override(settings, ["runtime/pick"]);
++		const masked = readSettingsValue(settings, "cycleOrder", "global");
++		expect(masked.provenance).toBe("runtime");
++		expect(masked.value).toEqual(["runtime/pick"]);
++		expect(masked.storedGlobal).toEqual(["global/pick"]);
++		handle.override(settings, undefined);
++		const unmasked = readSettingsValue(settings, "cycleOrder", "global");
++		expect(unmasked.provenance).toBe("global");
++		expect(unmasked.value).toEqual(["global/pick"]);
++		settings.cancelPendingSaves();
++	});
++
++	it("validates every change before any is written", async () => {
++		const settings = await load();
++		const before = settingsRevisionOfInstance(settings);
++		// Unknown paths, credentials, nested secrets and bad values refuse first.
++		expect(() => prevalidateChanges([{ path: "not.a.setting", operation: "set", value: 1 }])).toThrow(
++			/not a setting/,
++		);
++		expect(() => prevalidateChanges([{ path: "auth.broker.token", operation: "set", value: "sk-x" }])).toThrow(
++			/credential/,
++		);
++		expect(() => prevalidateChanges([{ path: "cycleOrder", operation: "set", value: { token: "sk-x" } }])).toThrow(
++			/secret/,
++		);
++		await expect(
++			mutateGlobalSettings(
++				settings,
++				{ context: { scope: "global" }, changes: [{ path: "not.a.setting", operation: "set", value: 1 }] },
++				"global",
++			),
++		).rejects.toThrow(/not a setting/);
++		// Nothing was staged or flushed by the refused transaction.
++		expect(settingsRevisionOfInstance(settings)).toBe(before);
++		settings.cancelPendingSaves();
++	});
++
++	it("writes, unsets and reads back through the owner with revision checks", async () => {
++		const settings = await load();
++		const before = settingsRevisionOfInstance(settings);
++		const [written] = await mutateGlobalSettings(
++			settings,
++			{
++				context: { scope: "global" },
++				expectedRevision: before,
++				changes: [{ path: "cycleOrder", operation: "set", value: ["user/pick"] }],
++			},
++			"global",
++		);
++		expect(written).toMatchObject({ path: "cycleOrder", configured: true, provenance: "global", scope: "global" });
++		expect(written?.value).toEqual(["user/pick"]);
++		expect(written?.storedGlobal).toEqual(["user/pick"]);
++		expect(written?.settingsRevision).not.toBe(before);
++		// A stale revision fails instead of overwriting.
++		await expect(
++			mutateGlobalSettings(
++				settings,
++				{
++					context: { scope: "global" },
++					expectedRevision: before,
++					changes: [{ path: "cycleOrder", operation: "set", value: ["stale"] }],
++				},
++				"global",
++			),
++		).rejects.toThrow(/revision/);
++		expect(readSettingsValue(settings, "cycleOrder", "global").value).toEqual(["user/pick"]);
++		// Unset removes the override and reveals the default again.
++		const preview = previewGlobalReset(settings, ["cycleOrder"], "global");
++		expect(preview[0]?.globalConfigured).toBe(true);
++		const reread = await unsetGlobalSetting(settings, "cycleOrder", written?.settingsRevision, "global");
++		expect(reread).toMatchObject({ configured: false, provenance: "default" });
++		expect(reread.value).toEqual(["smol", "default", "slow"]);
++		settings.cancelPendingSaves();
++	});
++
++	it("writes project scope into the project file, preserving unknown fields", async () => {
++		const projectFile = path.join(cwd, ".omp", "config.yml");
++		fs.mkdirSync(path.dirname(projectFile), { recursive: true });
++		await Bun.write(projectFile, "unrelatedTool:\n  keepMe: true\n");
++		const first = await Settings.loadReadOnly({ cwd, agentDir });
++		const revision = settingsRevisionOfInstance(first);
++		first.cancelPendingSaves();
++		const result = await mutateProjectSettings(
++			cwd,
++			[{ path: "cycleOrder", operation: "set", value: ["project/pick"] }],
++			revision,
++			agentDir,
++		);
++		expect(result.values[0]).toMatchObject({ path: "cycleOrder", scope: "project", provenance: "project" });
++		expect(result.values[0]?.value).toEqual(["project/pick"]);
++		// Unknown project fields survive the structured update.
++		const reread = await Settings.loadReadOnly({ cwd, agentDir });
++		expect(readSettingsValue(reread, "cycleOrder", "project").value).toEqual(["project/pick"]);
++		const raw = await Bun.file(projectFile).text();
++		expect(raw).toContain("keepMe");
++		// A relative directory never resolves past the host.
++		await expect(
++			mutateProjectSettings("../escape", [{ path: "cycleOrder", operation: "unset" }], undefined),
++		).rejects.toThrow(/absolute/);
 +	});
 +});
 diff --git a/packages/coding-agent/test/cedia-tools-catalog-bridge.test.ts b/packages/coding-agent/test/cedia-tools-catalog-bridge.test.ts

@@ -1682,6 +1682,33 @@ class CediaAgentAdapter {
 		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/queue/drop`, requestBody);
 	}
 
+	/** Remove one queued row by text through OMP's targeted primitive. Rows past 4,096 chars use drop last/all. */
+	async removeQueuedMessage(
+		sessionId: string,
+		body: { commandId?: string; incarnation?: string; message: string; queue: "steering" | "followUp" },
+	): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			message: body.message,
+			queue: body.queue,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/queue/remove`, requestBody);
+	}
+
+	/** Promote one follow-up row into steering through OMP's targeted primitive. */
+	async promoteQueuedMessage(
+		sessionId: string,
+		body: { commandId?: string; incarnation?: string; message: string },
+	): Promise<unknown> {
+		const requestBody = {
+			commandId: body.commandId ?? id(),
+			incarnation: body.incarnation ?? (await this.session(sessionId)).incarnation,
+			message: body.message,
+		};
+		return await this.request<unknown>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/queue/promote`, requestBody);
+	}
+
 	/** Run one shell command through the session's own foreground bash. */
 	async execBash(sessionId: string, body: CediaBashExecCommand): Promise<unknown> {
 		if (typeof body.command !== "string" || body.command.trim().length === 0) throw new Error("Shell command must be a non-empty string");
@@ -2123,6 +2150,19 @@ class CediaAgentAdapter {
 		return await this.request<unknown>("GET", "/v1/devices");
 	}
 
+	/** Host projects for the settings project scope. Archived rows stay visible so scope never hides a target. */
+	async listProjects(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/projects");
+	}
+
+	/** Host tasks for the settings session scope. Never starts a task; lists existing ones only. */
+	async listSessions(projectId?: string): Promise<unknown> {
+		return await this.request<unknown>(
+			"GET",
+			`/v1/sessions${projectId === undefined ? "" : `?projectId=${encodeURIComponent(projectId)}`}`,
+		);
+	}
+
 	async revokeDevice(deviceId: string): Promise<unknown> {
 		return await this.request<unknown>("POST", `/v1/devices/${encodeURIComponent(deviceId)}/revoke`, {});
 	}
@@ -2135,6 +2175,38 @@ class CediaAgentAdapter {
 	/** Read one effective OMP setting. The host owns redaction and layer resolution. */
 	async getOmpSettingValue(path: string): Promise<unknown> {
 		return await this.request<unknown>("GET", `/v1/omp/settings/value?path=${encodeURIComponent(path)}`);
+	}
+
+	/** Read one effective OMP setting in an explicit scope. Global and project resolve tasklessly. */
+	async getOmpSettingValueIn(
+		path: string,
+		scope: "global" | "project" | "session",
+		projectId?: string,
+		sessionId?: string,
+	): Promise<unknown> {
+		const query =
+			`?path=${encodeURIComponent(path)}&scope=${encodeURIComponent(scope)}` +
+			(projectId === undefined ? "" : `&projectId=${encodeURIComponent(projectId)}`) +
+			(sessionId === undefined ? "" : `&sessionId=${encodeURIComponent(sessionId)}`);
+		return await this.request<unknown>("GET", `/v1/omp/settings/value${query}`);
+	}
+
+	/** Apply a scoped settings mutation. Advanced placement is not a write prohibition here. */
+	async mutateOmpSettings(mutation: {
+		context: { scope: "global" } | { scope: "project"; projectId: string };
+		expectedRevision?: string;
+		changes: { path: string; operation: "set"; value?: unknown }[] | { path: string; operation: "unset" }[];
+	}): Promise<unknown> {
+		return await this.request<unknown>("PATCH", "/v1/omp/settings", {
+			context: mutation.context,
+			...(mutation.expectedRevision === undefined ? {} : { expectedRevision: mutation.expectedRevision }),
+			changes: mutation.changes,
+		});
+	}
+
+	/** Preview an unset of the named global paths. Writes nothing. */
+	async previewOmpSettingsReset(paths: string[]): Promise<unknown> {
+		return await this.request<unknown>("POST", "/v1/omp/settings/reset-preview", { paths });
 	}
 
 	/** Write one OMP setting with the revision the row was read at. Host errors propagate unchanged. */
@@ -3296,6 +3368,14 @@ export function createCediaNativeApi(options: AdapterOptions = {}): any {
 			getProgress: async (sessionId: string): Promise<unknown> => await adapter.getProgress(sessionId),
 			getQueue: async (sessionId: string): Promise<unknown> => await adapter.getQueue(sessionId),
 			dropQueued: async (sessionId: string, body: CediaQueueDropCommand): Promise<unknown> => await adapter.dropQueued(sessionId, body),
+			removeQueuedMessage: async (
+				sessionId: string,
+				body: { commandId?: string; incarnation?: string; message: string; queue: "steering" | "followUp" },
+			): Promise<unknown> => await adapter.removeQueuedMessage(sessionId, body),
+			promoteQueuedMessage: async (
+				sessionId: string,
+				body: { commandId?: string; incarnation?: string; message: string },
+			): Promise<unknown> => await adapter.promoteQueuedMessage(sessionId, body),
 			getRunPause: async (sessionId: string): Promise<unknown> => await adapter.getRunPause(sessionId),
 			setRunPause: async (sessionId: string, body: CediaRunPauseCommand): Promise<unknown> => await adapter.setRunPaused(sessionId, body),
 			execBash: async (sessionId: string, body: CediaBashExecCommand): Promise<unknown> => await adapter.execBash(sessionId, body),
@@ -3355,10 +3435,20 @@ export function createCediaNativeApi(options: AdapterOptions = {}): any {
 			setAdvisorConfig: async (sessionId: string, body: CediaAdvisorConfigCommand): Promise<unknown> => await adapter.setAdvisorConfig(sessionId, body),
 			getOmpSettingsKeys: async (): Promise<unknown> => await adapter.getOmpSettingsKeys(),
 			getOmpSettingValue: async (path: string): Promise<unknown> => await adapter.getOmpSettingValue(path),
+			getOmpSettingValueIn: async (path: string, scope: "global" | "project" | "session", projectId?: string, sessionId?: string): Promise<unknown> =>
+				await adapter.getOmpSettingValueIn(path, scope, projectId, sessionId),
+			mutateOmpSettings: async (mutation: {
+				context: { scope: "global" } | { scope: "project"; projectId: string };
+				expectedRevision?: string;
+				changes: { path: string; operation: "set"; value?: unknown }[] | { path: string; operation: "unset" }[];
+			}): Promise<unknown> => await adapter.mutateOmpSettings(mutation),
+			previewOmpSettingsReset: async (paths: string[]): Promise<unknown> => await adapter.previewOmpSettingsReset(paths),
 			setOmpSetting: async (input: { path: string; value: unknown; expectedRevision?: string }): Promise<unknown> => await adapter.setOmpSetting(input),
 			getRemoteGatewayState: async (): Promise<unknown> => await adapter.remoteGatewayState(),
 			issueRemoteEnrollment: async (name: string): Promise<unknown> => await adapter.issueRemoteEnrollment(name),
 			listDevices: async (): Promise<unknown> => await adapter.listDevices(),
+			listProjects: async (): Promise<unknown> => await adapter.listProjects(),
+			listSessions: async (projectId?: string): Promise<unknown> => await adapter.listSessions(projectId),
 			revokeDevice: async (deviceId: string): Promise<unknown> => await adapter.revokeDevice(deviceId),
 		},
 	};

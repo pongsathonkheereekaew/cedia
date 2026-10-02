@@ -28,14 +28,29 @@ operations. Both ship unconditionally and stay inert unless a client uses them:
   them is a read that takes none). A caller that names a `capabilityRevision` other than the live
   one is refused rather than silently refreshed.
 
-Two of the registered operations cover OMP's settings schema: `settings.keys.list` answers the
+Settings operations cover OMP's schema: `settings.keys.list` answers the
 schema's own inventory — path, type, credential marker, UI presence and tab, whether a path
 can be written into a project layer (only `modelRoles` can; every other path is a global-layer
-value), and, for an `enum` path, the values that same schema accepts — and never a value; `settings.get` reads one effective value with `configured` saying
-whether a layer set it or the schema default is in effect. A path the schema does not define is
-refused before any handler runs, and a path the runtime marks as a credential answers its state
-with `redacted: true` and no value, the same rule native `omp config` listing follows. A value too
-large to hand a client is refused with `tooLarge` rather than sent truncated.
+value), and, for an `enum` path, the values that same schema accepts — and never a value.
+`settings.keys.describe` adds the schema-declared label, help, group, static default and env
+name for the same inventory. `settings.get` reads one effective value with `configured` saying
+whether a layer set it or the schema default is in effect; a scoped read adds the resolved
+scope, the supplying layer (`env` included: the runtime's own provenance never reports the
+environment, so the service derives it from the effective-versus-layered difference), the
+saved global value when one is masked, and the schema default. `settings.set` writes one
+global path; `settings.unset` removes one global override; `settings.mutate` validates every
+change (unknown paths, credentials, nested secret fields, schema shape) before any is
+written, checks the named revision against a disk re-read, flushes once and reads back;
+`settings.reset.preview` names what an unset would reveal without writing. A path the schema
+does not define is refused before any handler runs, and a path the runtime marks as a
+credential answers its state with `redacted: true` and no value, the same rule native
+`omp config` listing follows. A value too large to hand a client is refused with `tooLarge`
+rather than sent truncated. Project writes go through the guarded OMP-owned project writer,
+which merges only changed paths into the re-read project file.
+
+The same settings slice is served tasklessly by the configuration-only entry
+(`CEDIA_SETTINGS_SERVICE=1`): no execution session, no loaded executable packages, no model
+contact. Any other operation name is refused without starting a session.
 
 The registered operations delegate to the same projections the direct `cedia_*` commands answer
 with, and the table cannot advertise an operation that has no handler: the ready check and the

@@ -35,7 +35,7 @@ const keys: OmpSettingsKeysSnapshot = {
     },
     { path: "auth.broker.token", type: "string", credential: true, ui: false, projectWritable: false, apply: "reload" },
     { path: "modelRoles", type: "record", credential: false, ui: false, projectWritable: true, apply: "new_session" },
-    { path: "enabledProviders", type: "array", credential: false, ui: true, projectWritable: false, apply: "reload" },
+    { path: "enabledProviders", type: "array", credential: false, ui: false, projectWritable: false, apply: "reload" },
   ],
   settingsRevision: "fixture-revision",
 };
@@ -47,6 +47,7 @@ const value: OmpSettingsValue = {
   configured: true,
   value: ["default", "smol"],
   settingsRevision: "fixture-revision",
+  scope: "session",
 };
 
 function response(data: unknown): RpcAck {
@@ -111,6 +112,7 @@ describe("OMP settings readback", () => {
       redacted: true,
       configured: false,
       settingsRevision: "fixture-revision",
+      scope: "session",
     };
     expect((await readOmpSettingsValue(fixtureClient(redacted), "auth.broker.token"))?.redacted).toBe(true);
 
@@ -250,7 +252,7 @@ describe("OMP settings route", () => {
     expect(ompSettingDisposition(byPath.get("cycleOrder")!)).toEqual({ disposition: "editable" });
     expect(ompSettingDisposition(byPath.get("auth.broker.token")!).disposition).toBe("protected");
     expect(ompSettingDisposition(byPath.get("modelRoles")!).disposition).toBe("advanced");
-    expect(ompSettingDisposition(byPath.get("enabledProviders")!).disposition).toBe("excluded");
+    expect(ompSettingDisposition(byPath.get("enabledProviders")!).disposition).toBe("advanced");
     // Every non-editable disposition explains itself, which is what a settings row shows in place
     // of a control it must not offer.
     for (const key of keys.keys) {
@@ -291,7 +293,7 @@ describe("OMP settings route", () => {
       expect(written.body).toMatchObject({ state: "available", path: "cycleOrder", settingsRevision: "fixture-revision-2" });
       expect(writes).toEqual([{ path: "cycleOrder", value: ["default"], expectedRevision: "fixture-revision" }]);
 
-      // A credential path and a plan-excluded path are refused by Cedia's own policy, with 403.
+      // A credential path and a not-yet-writable Advanced path are refused by Cedia's own policy, with 403 (S1a; scoped writes land in S3).
       for (const path of ["auth.broker.token", "enabledProviders"]) {
         const refused = await router({ method: "PATCH", path: "/v1/omp/settings", token: auth.ownerToken, body: { path, value: ["x"] } });
         expect(refused).toMatchObject({ status: 403, body: { error: { code: "omp_settings_not_editable" } } });
@@ -382,6 +384,114 @@ describe("OMP settings route", () => {
     try {
       const answer = await router({ method: "GET", path: "/v1/omp/settings/keys", token: auth.ownerToken });
       expect(answer).toMatchObject({ status: 503, body: { error: { code: "omp_settings_unavailable" } } });
+    } finally {
+      await host.close();
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("OMP scoped settings routes", () => {
+  function fixture() {
+    const directory = mkdtempSync(join(tmpdir(), "cedia-omp-settings-scoped-"));
+    const stateDir = join(directory, "state");
+    mkdirSync(stateDir, { recursive: true });
+    const store = DurableStore.open({ stateDir, recover: false });
+    const auth = new DeviceAuth(join(directory, "devices"));
+    const host = new CediaHost({ store, stateDir });
+    const seen: { context?: unknown; mutation?: unknown; preview?: unknown } = {};
+    const router = createRouter(host, auth, {
+      ompSettingsKeys: async () => ({ state: "available", answer: keys }),
+      ompSettingsValue: async () => ({ state: "available", answer: value }),
+      ompSettingsValueIn: async (path: string, context) => {
+        seen.context = context;
+        if (context.scope === "session" && (context as { sessionId?: string }).sessionId !== "task-1")
+          return { state: "unavailable", reason: "No live runtime owns this task" };
+        return { state: "available", answer: { ...value, path, scope: context.scope } };
+      },
+      ompSettingsMutate: async mutation => {
+        seen.mutation = mutation;
+        return { values: [{ ...value, settingsRevision: "fixture-revision-2" }], scope: "global" as const };
+      },
+      ompSettingsResetPreview: async paths => {
+        seen.preview = paths;
+        return [{ path: "cycleOrder", globalConfigured: true, current: value }];
+      },
+    });
+    return { directory, store, auth, host, router, seen };
+  }
+
+  it("reads global, project and session scopes, and guards unknown tasks", async () => {
+    const { directory, store, auth, host, router, seen } = fixture();
+    try {
+      const global = await router({ method: "GET", path: "/v1/omp/settings/value?path=cycleOrder&scope=global", token: auth.ownerToken });
+      expect(global.status).toBe(200);
+      expect(seen.context).toEqual({ scope: "global" });
+      expect((global.body as { scope: string }).scope).toBe("global");
+      const project = await router({
+        method: "GET",
+        path: "/v1/omp/settings/value?path=cycleOrder&scope=project&projectId=p1",
+        token: auth.ownerToken,
+      });
+      expect(project.status).toBe(200);
+      expect(seen.context).toEqual({ scope: "project", projectId: "p1" });
+      const named = await router({
+        method: "GET",
+        path: "/v1/omp/settings/value?path=cycleOrder&scope=session&sessionId=task-1",
+        token: auth.ownerToken,
+      });
+      expect(named.status).toBe(200);
+      const unknown = await router({
+        method: "GET",
+        path: "/v1/omp/settings/value?path=cycleOrder&scope=session&sessionId=nope",
+        token: auth.ownerToken,
+      });
+      expect(unknown.body).toMatchObject({ state: "unavailable" });
+      const badScope = await router({ method: "GET", path: "/v1/omp/settings/value?path=cycleOrder&scope=zone", token: auth.ownerToken });
+      expect(badScope).toMatchObject({ status: 400 });
+      const dangling = await router({ method: "GET", path: "/v1/omp/settings/value?path=cycleOrder&scope=project", token: auth.ownerToken });
+      expect(dangling).toMatchObject({ status: 400 });
+      // No scope stays on the legacy route, which preserves the runtime answer shape.
+      const legacy = await router({ method: "GET", path: "/v1/omp/settings/value?path=cycleOrder", token: auth.ownerToken });
+      expect(legacy.status).toBe(200);
+      expect((legacy.body as { scope?: string }).scope).toBe("session");
+    } finally {
+      await host.close();
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("applies scoped mutations and previews resets without writing", async () => {
+    const { directory, store, auth, host, router, seen } = fixture();
+    try {
+      const mutated = await router({
+        method: "PATCH",
+        path: "/v1/omp/settings",
+        token: auth.ownerToken,
+        body: { context: { scope: "global" }, expectedRevision: "fixture-revision", changes: [{ path: "cycleOrder", operation: "set", value: ["x"] }] },
+      });
+      expect(mutated.status).toBe(200);
+      expect(seen.mutation).toMatchObject({ context: { scope: "global" } });
+      const badShape = await router({
+        method: "PATCH",
+        path: "/v1/omp/settings",
+        token: auth.ownerToken,
+        body: { context: { scope: "session", sessionId: "task-1" }, changes: [{ path: "cycleOrder", operation: "unset" }] },
+      });
+      expect(badShape).toMatchObject({ status: 400 });
+      const preview = await router({
+        method: "POST",
+        path: "/v1/omp/settings/reset-preview",
+        token: auth.ownerToken,
+        body: { paths: ["cycleOrder"] },
+      });
+      expect(preview.status).toBe(200);
+      expect(seen.preview).toEqual(["cycleOrder"]);
+      expect((preview.body as { entries: { path: string }[] }).entries.map(entry => entry.path)).toEqual(["cycleOrder"]);
+      const emptyPreview = await router({ method: "POST", path: "/v1/omp/settings/reset-preview", token: auth.ownerToken, body: { paths: [] } });
+      expect(emptyPreview).toMatchObject({ status: 400 });
     } finally {
       await host.close();
       store.close();

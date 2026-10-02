@@ -53,11 +53,8 @@ describe("AdvancedSettingsPanel", () => {
     document.body.innerHTML = "";
   });
 
-  it("owns recovery eligibility, shared disclosure motion, and the release-history handoff", async () => {
-    const onOpenReleaseHistory = vi.fn();
-    await render(
-      <AdvancedSettingsPanel active onOpenReleaseHistory={onOpenReleaseHistory} resetEpoch={0} />,
-    );
+  it("owns recovery eligibility, shared disclosure motion, and the release-history cut", async () => {
+    await render(<AdvancedSettingsPanel active resetEpoch={0} />);
 
     const repairButton = page.getByRole("button", { name: "Repair state" });
     expect((repairButton.element() as HTMLButtonElement).disabled).toBe(false);
@@ -72,7 +69,11 @@ describe("AdvancedSettingsPanel", () => {
       expect(disclosureButton.element().getAttribute("aria-expanded")).toBe("true"),
     );
 
-    await page.getByRole("button", { name: "View release history" }).click();
-    expect(onOpenReleaseHistory).toHaveBeenCalledOnce();
+    // Cedia plan item 60 cut the release-history row until a Cedia changelog exists:
+    // the About section keeps Version with no release-history entry point.
+    expect(document.body.textContent).toContain("Version");
+    expect(
+      page.getByRole("button", { name: "View release history" }).elements(),
+    ).toHaveLength(0);
   });
 });

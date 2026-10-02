@@ -150,8 +150,12 @@ describe.skipIf(!available)("Cedia capability bridge on the prepared runtime", (
 				"queue.get",
 				"session.fresh",
 				"settings.get",
+				"settings.keys.describe",
 				"settings.keys.list",
+				"settings.mutate",
+				"settings.reset.preview",
 				"settings.set",
+				"settings.unset",
 				"tools.active.set",
 				"tools.catalog.get",
 				"tools.codemode.get",
@@ -174,6 +178,11 @@ describe.skipIf(!available)("Cedia capability bridge on the prepared runtime", (
 			const sample: Record<string, Record<string, unknown>> = {
 				"settings.get": { path: "cycleOrder" },
 				"settings.set": { path: "cycleOrder", value: [] },
+				// Unset and mutate probes name an unconfigured key, so they reach the
+				// handler and answer without staging anything in the fixture profile.
+				"settings.unset": { path: "cycleOrder" },
+				"settings.mutate": { context: { scope: "global" }, changes: [{ path: "cycleOrder", operation: "unset" }] },
+				"settings.reset.preview": { paths: ["cycleOrder"] },
 				// Goal mode is this session's own state, so the probe names the smallest operation
 				// that exists without one: `pause` reaches the runtime and answers about real state.
 				"goal.set": { op: "pause" },
@@ -292,7 +301,7 @@ describe.skipIf(!available)("Cedia capability bridge on the prepared runtime", (
 			// Comparing live against it is what turns "the inventory exists" into "the inventory
 			// classifies every audited key", and it fails loudly if either side drifts.
 			const audited = JSON.parse(
-				readFileSync(join(import.meta.dir, "../../../docs/maintenance/evidence/omp-complete-scope-2026-09-29/config-cli.json"), "utf8"),
+				readFileSync(join(import.meta.dir, "../../../docs/maintenance/evidence/omp-complete-scope-2026-10-02/config-cli.json"), "utf8"),
 			) as { settings: { path: string }[] };
 			const live = keys.map(key => key.path).sort();
 			const auditedPaths = audited.settings.map(row => row.path).sort();

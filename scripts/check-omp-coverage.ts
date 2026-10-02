@@ -53,7 +53,7 @@ import {
 } from "./lib/omp-coverage.ts";
 
 const root = resolve(import.meta.dir, "..");
-const auditDir = join(root, "docs", "maintenance", "evidence", "omp-complete-scope-2026-09-29");
+const auditDir = join(root, "docs", "maintenance", "evidence", "omp-complete-scope-2026-10-02");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -400,6 +400,7 @@ const entries: OmpCediaEntry[] = [];
 // the transcript/state resync, open_session rides session open, the event filter rides
 // the subscription command, and the thinking-level catalog rides the effort picker.
 const NEW_RPC_OTHER_PATHS = [
+	{ name: "set_cache_warming", via: "setting", value: "providers.cacheWarming", reason: "The session consumes the audited `providers.cacheWarming` setting live; Cedia's settings destination writes its persistent form while the RPC verb remains the transient session override." },
 	{ name: "get_entries", via: "command", value: "get_messages", reason: "Cedia resyncs the transcript through the audited `get_messages` command, which is where entries come from." },
 	{ name: "get_tree", via: "command", value: "get_state", reason: "Cedia reads session state through the audited `get_state` command, which carries the tree projection." },
 	{ name: "open_session", via: "command", value: "get_state", reason: "Cedia opens sessions through the audited session-state path." },
