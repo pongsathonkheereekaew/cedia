@@ -91,8 +91,6 @@ const EXCLUDED_SETTINGS_PATHS: ReadonlyMap<string, string> = new Map([
   ["enabledProviders", "§6.4 excludes provider enabled/hidden fields from the settings surface."],
   ["disabledProviders", "§6.4 excludes provider enabled/hidden fields from the settings surface."],
   ["modelProviderOrder", "§6.4 excludes provider ordering from the settings surface."],
-  ["providers.webSearchOrder", "§6.4 excludes provider ordering from the settings surface."],
-  ["providers.imageOrder", "§6.4 excludes provider ordering from the settings surface."],
   ["providers.antigravityEndpoint", "§6.4 excludes provider endpoint settings from the settings surface."],
   ["searxng.endpoint", "§6.4 excludes endpoint settings from the settings surface."],
   ["compaction.remoteEndpoint", "§6.4 excludes endpoint settings from the settings surface."],

@@ -3,8 +3,6 @@
 // Layer: Route screen
 // Exports: Settings route component for `/settings`
 
-import { PROVIDER_DISPLAY_NAMES, type ProviderKind } from "@synara/contracts";
-import { PROVIDER_DESCRIPTORS } from "@synara/shared/providerMetadata";
 import { sameAppSnapShortcut } from "@synara/shared/appSnapShortcut";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -34,11 +32,11 @@ import {
   isProviderInstallSettingsDirty,
   ProvidersSettingsPanel,
 } from "~/components/settings/ProvidersSettingsPanel";
-import { ProviderOptionLabel } from "../components/ProviderIcon";
 import { ProfileSettingsPanel } from "../components/settings/ProfileSettingsPanel";
 import { KeyboardShortcutsSettingsPanel } from "../components/settings/KeyboardShortcutsSettingsPanel";
 import { CapabilityStatusPanel } from "../components/CapabilityStatusPanel";
 import { OmpSettingsPanel } from "../components/settings/OmpSettingsPanel";
+import { OmpSettingsSubset } from "../components/settings/OmpSettingsPanel";
 import { RemoteDevicesPanel } from "../components/settings/RemoteDevicesPanel";
 import {
   SettingResetButton,
@@ -135,7 +133,6 @@ const CHAT_WIDTH_OPTIONS = [
   description: string;
 }>;
 
-const PROVIDER_SELECT_OPTIONS = PROVIDER_DESCRIPTORS.map((descriptor) => descriptor.kind);
 
 const TIMESTAMP_FORMAT_LABELS = {
   locale: "System default",
@@ -163,9 +160,6 @@ const FOLLOW_UP_BEHAVIOR_OPTIONS = [
 
 // Shared settings controls live in ~/components/settings/SettingControls.
 
-function isProviderSelectOption(value: string): value is ProviderKind {
-  return PROVIDER_SELECT_OPTIONS.some((option) => option === value);
-}
 
 // Keys of AppSettings whose value is a plain boolean — the only ones that can be
 // driven by the shared on/off toggle row below.
@@ -357,45 +351,17 @@ function SettingsRouteView() {
 
   const renderGeneralPanel = () => (
     <div className="space-y-6">
-      <SettingsSection title="Core defaults">
-        <SettingsRow
-          title="Default provider"
-          description="Provider used for new chats until you pick a model. New chats then reuse your most recent model and options."
-          resetAction={
-            settings.defaultProvider !== defaults.defaultProvider ? (
-              <SettingResetButton
-                label="default provider"
-                onClick={() => updateSettings({ defaultProvider: defaults.defaultProvider })}
-              />
-            ) : null
-          }
-          control={
-            <SettingsSelectControl
-              value={settings.defaultProvider}
-              onValueChange={(value) => {
-                if (!isProviderSelectOption(value)) return;
-                updateSettings({ defaultProvider: value });
-              }}
-              ariaLabel="Default provider"
-              valueContent={
-                <ProviderOptionLabel
-                  provider={settings.defaultProvider}
-                  label={PROVIDER_DISPLAY_NAMES[settings.defaultProvider]}
-                />
-              }
-            >
-              {PROVIDER_SELECT_OPTIONS.map((provider) => (
-                <SelectItem hideIndicator key={provider} value={provider}>
-                  <ProviderOptionLabel
-                    provider={provider}
-                    label={PROVIDER_DISPLAY_NAMES[provider]}
-                  />
-                </SelectItem>
-              ))}
-            </SettingsSelectControl>
-          }
-        />
+      <SettingsSection title="Permissions">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          What the agent may do without asking. Bound to the live OMP approval settings.
+        </p>
+        <OmpSettingsSubset active paths={["tools.approvalMode", "tools.approval"]} />
+      </SettingsSection>
+      <SettingsSection title="Power">
+        <OmpSettingsSubset active paths={["power.sleepPrevention"]} />
+      </SettingsSection>
 
+      <SettingsSection title="Core defaults">
         <SettingsRow
           title="New threads"
           description="Pick the default workspace mode for newly created draft threads."

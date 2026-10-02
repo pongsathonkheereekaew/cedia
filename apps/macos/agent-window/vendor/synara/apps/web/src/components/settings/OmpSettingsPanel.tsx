@@ -378,6 +378,53 @@ function CediaCreditPolicySurface({ active }: { readonly active: boolean }) {
   );
 }
 
+/**
+ * A curated slice of the live OMP inventory for embedding in another section
+ * (e.g. Permissions in General). Rows reuse the same revision-safe editor as
+ * the full panel; paths the runtime does not publish render as an honest
+ * empty state instead of invented controls.
+ */
+export function OmpSettingsSubset({
+  paths,
+  active = true,
+}: {
+  readonly paths: readonly string[];
+  readonly active?: boolean;
+}) {
+  const keysQuery = useQuery({ ...ompSettingsKeysQueryOptions(), enabled: active });
+  const answer = keysQuery.data?.state === "available" ? keysQuery.data : undefined;
+  const wanted = useMemo(() => {
+    const selected = new Set(paths);
+    return (answer?.keys ?? []).filter((key) => selected.has(key.path));
+  }, [answer?.keys, paths]);
+
+  if (!active) return null;
+  if (keysQuery.isPending)
+    return <SettingsEmptyState layout="status">Reading the live OMP settings…</SettingsEmptyState>;
+  if (keysQuery.isError)
+    return (
+      <SettingsEmptyState layout="status" tone="destructive">
+        Could not read OMP settings: {errorMessage(keysQuery.error)}
+      </SettingsEmptyState>
+    );
+  if (!answer)
+    return <SettingsEmptyState layout="status">No live OMP runtime.</SettingsEmptyState>;
+  if (wanted.length === 0)
+    return (
+      <SettingsEmptyState layout="status">
+        These settings are not published by this runtime.
+      </SettingsEmptyState>
+    );
+  // No card of its own: callers embed this inside their section card.
+  return (
+    <>
+      {wanted.map((setting) => (
+        <OmpSettingRow key={setting.path} setting={setting} active={active} />
+      ))}
+    </>
+  );
+}
+
 export function OmpSettingsPanel({ active = true }: OmpSettingsPanelProps) {
   const keysQuery = useQuery({ ...ompSettingsKeysQueryOptions(), enabled: active });
   const [filter, setFilter] = useState("");

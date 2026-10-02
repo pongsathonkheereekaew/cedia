@@ -53,10 +53,18 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
 
   // ── General ────────────────────────────────────────────────────────────────
   {
-    id: "general:default-provider",
+    id: "general:permissions",
     section: "general",
-    title: "Default provider",
-    keywords: "Choose the provider used for new chats. agent codex claude",
+    title: "Permissions",
+    keywords: "approvals ask for approval full access default permissions tools.approvalMode tools.approval",
+    target: null,
+  },
+  {
+    id: "general:power",
+    section: "general",
+    title: "Power",
+    keywords: "prevent sleep keep awake power.sleepPrevention",
+    target: null,
   },
   {
     id: "general:new-threads",
