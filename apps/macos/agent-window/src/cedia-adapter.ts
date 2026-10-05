@@ -20,6 +20,15 @@ import {
 } from "@synara/contracts";
 import { applyEventPage, applyFrame, createInitialTaskState, type TaskState as CediaTaskState, type TranscriptEntry } from "../../src/state.ts";
 import { parseOmpGoalSnapshot, parseOmpGoalUpdatedEvent, parseOmpSubagentList, type Command, type EventPage, type Json, type OmpGoalSnapshot, type OmpSubagentRow, type Project, type Session, type SessionDirtyCopy, type SessionEvent, type SessionWorkspace } from "../../../../packages/protocol/src/index.ts";
+import type {
+	ForgeReviewInlineComment,
+	ForgeReviewMutationOperation,
+	ForgeReviewMutationRequest,
+	ForgeReviewMutationResult,
+	ForgeReviewWorkflowRequest,
+	ForgeReviewWorkflowResult,
+	ForgeReviewWorkflowSection,
+} from "../../../../packages/protocol/src/forge-review-workflow.ts";
 import { readCediaHostError } from "./host-error-codes.ts";
 import { installCediaProviderAuthApi } from "../vendor/synara/apps/web/src/lib/cediaProviderAuth";
 import { useComposerDraftStore } from "../vendor/synara/apps/web/src/composerDraftStore";
@@ -33,11 +42,143 @@ import { createNativeGitApi } from "./native-git";
 import { createNativeDeviceApi } from "./native-device";
 import { createDesktopZoomController } from "./desktopZoom";
 import { createCediaContextMenuPresenter } from "./cedia-context-menu";
+import {
+	buildForgeReviewContext,
+	buildForgeReviewPrompt,
+	FORGE_REVIEW_ATTACHED_CONTEXT_LIMIT,
+	FORGE_REVIEW_INSTRUCTION_EXAMPLE_LIMIT,
+	FORGE_REVIEW_INSTRUCTION_EXAMPLES_LIMIT,
+	FORGE_REVIEW_INSTRUCTIONS_LIMIT,
+	ForgeReviewContextError,
+	forgeReviewCommandAssociationId,
+	forgeReviewDraftId,
+	forgeReviewInstructionsId,
+	forgeReviewInlineDraftId,
+	forgeReviewTaskAssociationId,
+	normalizeForgeReviewDetail,
+	normalizeForgeReviewDiff,
+	type ForgeProvider,
+	type ForgeReviewAttachedContext,
+	type ForgeReviewContextAnchor,
+	type ForgeReviewDetail,
+	type ForgeReviewDiff,
+	type ForgeReviewInstructions,
+	type ForgeReviewInlineDraftIdentity,
+	type ForgeReviewTaskAssociation,
+	type ForgeReviewTaskAssociationIdentity,
+} from "./forge-review-context.ts";
 
 import { AGENT_WINDOW_CHANNEL as CEDIA_AGENT_CHANNEL } from "../../src/bridge-contract.ts";
 /** UI-only value used until OMP reports a current model. Never sent to OMP. */
 export const OMP_UNRESOLVED_MODEL = "cedia:unresolved";
 
+export interface ForgeReviewListInput {
+	readonly projectId: string;
+	readonly url?: string;
+	readonly provider?: ForgeProvider;
+	readonly state?: "open" | "closed" | "merged" | "all";
+	readonly bucket?: "all" | "authored" | "needs_review" | "team";
+	readonly team?: string;
+	readonly cursor?: string;
+	readonly limit?: number;
+}
+
+export interface ForgeReviewDetailInput {
+	readonly projectId: string;
+	readonly url: string;
+}
+
+export interface ForgeReviewDiffInput extends ForgeReviewDetailInput {
+	readonly headSha?: string;
+	readonly baseSha?: string;
+}
+
+export interface ForgeReviewOmpInput extends ForgeReviewDiffInput {
+	readonly snapshotHash?: string;
+	readonly prompt?: string;
+	readonly reviewInstructions?: string;
+	readonly attachedContext?: readonly ForgeReviewAttachedContext[];
+	readonly threadId?: string;
+	readonly commandId?: string;
+	readonly modelSelection?: unknown;
+}
+
+export interface ForgeReviewOmpResult {
+	readonly threadId: string;
+	readonly commandId: string;
+	readonly mode: "review" | "ask";
+	readonly snapshot: ForgeReviewContextAnchor;
+	readonly taskAssociation?: ForgeReviewTaskAssociation;
+	/** A confirmed OMP dispatch remains usable when local association persistence is unavailable. */
+	readonly associationWarning?: string;
+}
+
+export type ForgeReviewTaskResultStatus =
+	"queued" | "running" | "completed" | "error" | "empty" | "truncated";
+
+/** The latest durable OMP answer that a Code Review surface may copy into its draft. */
+export interface ForgeReviewTaskResult {
+	readonly threadId: string;
+	readonly status: ForgeReviewTaskResultStatus;
+	readonly text: string;
+	readonly updatedAt: string | null;
+	readonly truncated?: boolean;
+	readonly reason?: string;
+}
+
+export interface ForgeReviewDraftReadInput {
+	readonly projectId: string;
+	readonly hostname: string;
+	readonly provider: ForgeProvider;
+	readonly repositoryPath: string;
+	readonly number: number;
+	readonly url?: string;
+	readonly snapshotHash?: string;
+	readonly headSha?: string;
+	readonly baseSha?: string;
+}
+
+export interface ForgeReviewDraftWriteInput extends ForgeReviewDraftReadInput {
+	readonly snapshotHash?: string;
+	readonly headSha?: string;
+	readonly baseSha?: string;
+	readonly url?: string;
+	readonly expectedRevision?: number;
+	readonly text: string;
+}
+
+export type ForgeReviewWorkflowInput = ForgeReviewWorkflowRequest;
+export type ForgeReviewWorkflowOutput = ForgeReviewWorkflowResult;
+export type ForgeReviewMutationInput = ForgeReviewMutationRequest;
+export type ForgeReviewMutationOutput = ForgeReviewMutationResult;
+export type ForgeReviewMutation = ForgeReviewMutationOperation;
+
+export interface ForgeReviewInstructionsWriteInput {
+	readonly projectId: string;
+	readonly text: string;
+	readonly examples?: readonly string[];
+	readonly expectedRevision?: number;
+}
+
+export interface ForgeReviewTaskAssociationWriteInput
+	 extends ForgeReviewTaskAssociationIdentity {
+	readonly threadId: string;
+	readonly commandId?: string;
+	readonly dispatchMode?: "prompt" | "queue" | "steer";
+	readonly expectedRevision?: number;
+}
+
+export interface ForgeReviewInlineDraftWriteInput extends ForgeReviewInlineDraftIdentity {
+	readonly comments: readonly ForgeReviewInlineComment[];
+	readonly expectedRevision?: number;
+}
+
+export interface ForgeReviewInlineDraft {
+	readonly draftId: string;
+	readonly revision: number;
+	readonly comments: readonly ForgeReviewInlineComment[];
+	readonly updatedAt: string | null;
+}
 /** Base64 for OMP's `images[]` — arrayBuffer-based so it works in the renderer and in tests (no FileReader). */
 async function fileToBase64(file: File): Promise<string> {
 	const bytes = new Uint8Array(await file.arrayBuffer());
@@ -586,6 +727,23 @@ function id(): string {
 		// Fall through to the non-cryptographic identity only in an unavailable test runtime.
 	}
 	return `cedia-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * Keep a long review command id idempotent without truncating its identity.
+ * Four independent 32-bit lanes are enough for a task key while preserving the
+ * full command input in the digest (a truncated prefix would alias retries).
+ */
+function reviewCommandDigest(value: string): string {
+	const lanes = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
+	const multipliers = [0x01000193, 0x85ebca6b, 0x27d4eb2d, 0x165667b1];
+	for (let index = 0; index < value.length; index += 1) {
+		const code = value.charCodeAt(index);
+		for (let lane = 0; lane < lanes.length; lane += 1) {
+			lanes[lane] = Math.imul(lanes[lane]! ^ code, multipliers[lane]!) >>> 0;
+		}
+	}
+	return lanes.map((lane) => lane.toString(16).padStart(8, "0")).join("");
 }
 
 function splitIdeTarget(target: string, projects: readonly Project[]): { cwd: string; path?: string; line?: number } {
@@ -2167,6 +2325,1079 @@ class CediaAgentAdapter {
 		return await this.request<unknown>("POST", `/v1/devices/${encodeURIComponent(deviceId)}/revoke`, {});
 	}
 
+	/** Provider capabilities for the dedicated GitHub/GitLab Code Review surface. */
+	async forgeReviewCapabilities(): Promise<unknown> {
+		return await this.request<unknown>("GET", "/v1/forge-review/capabilities");
+	}
+
+	/** List provider reviews through the host's authenticated, project-scoped owner route. */
+	async listForgeReviews(input: ForgeReviewListInput): Promise<unknown> {
+		if (
+			!input ||
+			typeof input.projectId !== "string" ||
+			input.projectId.trim().length === 0
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review needs a selected Cedia project",
+			);
+		if (
+			input.url !== undefined &&
+			(typeof input.url !== "string" || input.url.trim().length === 0)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review URL must be a non-empty string",
+			);
+		if (
+			input.provider !== undefined &&
+			input.provider !== "github" &&
+			input.provider !== "gitlab"
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review provider must be GitHub or GitLab",
+			);
+		if (
+			input.state !== undefined &&
+			!(["open", "closed", "merged", "all"] as const).includes(input.state)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review state is invalid",
+			);
+		if (
+			input.bucket !== undefined &&
+			!( ["all", "authored", "needs_review", "team"] as const).includes(input.bucket)
+		)
+			throw new ForgeReviewContextError("invalid_request", "Code Review bucket is invalid");
+		if (
+			input.team !== undefined &&
+			(typeof input.team !== "string" || input.team.trim().length === 0 || input.team.length > 256)
+		)
+			throw new ForgeReviewContextError("invalid_request", "Code Review team is invalid");
+		if (input.bucket === "team" && input.team === undefined)
+			throw new ForgeReviewContextError("invalid_request", "Code Review team is required for the team bucket");
+		if (
+			input.cursor !== undefined &&
+			(typeof input.cursor !== "string" || input.cursor.length > 512 || /[\u0000-\u001f]/.test(input.cursor))
+		)
+			throw new ForgeReviewContextError("invalid_request", "Code Review list cursor is invalid");
+		if (
+			input.limit !== undefined &&
+			(!Number.isSafeInteger(input.limit) ||
+				input.limit < 1 ||
+				input.limit > 100)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review list limit must be between 1 and 100",
+			);
+		return await this.request<unknown>("POST", "/v1/forge-review/list", {
+			projectId: input.projectId,
+			...(input.url === undefined ? {} : { url: input.url }),
+			...(input.provider === undefined ? {} : { provider: input.provider }),
+			...(input.state === undefined ? {} : { state: input.state }),
+			...(input.bucket === undefined ? {} : { bucket: input.bucket }),
+			...(input.team === undefined ? {} : { team: input.team }),
+			...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+			...(input.limit === undefined ? {} : { limit: input.limit }),
+		});
+	}
+
+	/** Read one authenticated provider review detail. No provider text is executed here. */
+	async detailForgeReview(
+		input: ForgeReviewDetailInput,
+	): Promise<ForgeReviewDetail> {
+		this.assertForgeReviewRequest(input);
+		return normalizeForgeReviewDetail(
+			await this.request<unknown>("POST", "/v1/forge-review/detail", {
+				projectId: input.projectId,
+				url: input.url,
+			}),
+		);
+	}
+
+	/** Read one bounded provider diff. The host refuses stale head/base commits with a typed error. */
+	async diffForgeReview(input: ForgeReviewDiffInput): Promise<ForgeReviewDiff> {
+		this.assertForgeReviewRequest(input);
+		if (
+			input.headSha !== undefined &&
+			(typeof input.headSha !== "string" || input.headSha.trim().length === 0)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review head SHA must be a non-empty string",
+			);
+		if (
+			input.baseSha !== undefined &&
+			(typeof input.baseSha !== "string" || input.baseSha.trim().length === 0)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review base SHA must be a non-empty string",
+			);
+		return normalizeForgeReviewDiff(
+			await this.request<unknown>("POST", "/v1/forge-review/diff", {
+				projectId: input.projectId,
+				url: input.url,
+				...(input.headSha === undefined ? {} : { headSha: input.headSha }),
+				...(input.baseSha === undefined ? {} : { baseSha: input.baseSha }),
+			}),
+		);
+	}
+
+	/** Read one paged section of a provider review. The host owns cursors and provider auth. */
+	async forgeReviewWorkflow(
+		input: ForgeReviewWorkflowInput,
+	): Promise<ForgeReviewWorkflowOutput> {
+		this.assertForgeReviewRequest(input);
+		if (
+			input.section !== "overview" &&
+			input.section !== "activity" &&
+			input.section !== "threads"
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review workflow section is invalid",
+			);
+		if (
+			input.cursor !== undefined &&
+			(typeof input.cursor !== "string" || input.cursor.length > 512 || /[\u0000-\u001f]/.test(input.cursor))
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review workflow cursor is invalid",
+			);
+		if (
+			input.limit !== undefined &&
+			(!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review workflow limit must be between 1 and 100",
+			);
+		return await this.request<ForgeReviewWorkflowOutput>(
+			"POST",
+			"/v1/forge-review/workflow",
+			{
+				projectId: input.projectId,
+				url: input.url,
+				section: input.section,
+				...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+				...(input.limit === undefined ? {} : { limit: input.limit }),
+			},
+		);
+	}
+
+	/** Submit one explicitly confirmed provider mutation through the host receipt owner. */
+	async mutateForgeReview(
+		input: ForgeReviewMutationInput,
+	): Promise<ForgeReviewMutationOutput> {
+		this.assertForgeReviewRequest(input);
+		if (
+			typeof input.commandId !== "string" ||
+			!/^[A-Za-z0-9._~-]{1,128}$/.test(input.commandId)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review mutation command id is invalid",
+			);
+		if (
+			typeof input.expectedHeadSha !== "string" ||
+			input.expectedHeadSha.trim().length === 0 ||
+			input.expectedHeadSha.length > 256 ||
+			/[\u0000-\u001f]/.test(input.expectedHeadSha)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review mutation needs the expected pull request head",
+			);
+		const operation = input.operation as ForgeReviewMutationOperation | undefined;
+		const kinds = [
+			"issue_comment",
+			"review",
+			"reply",
+			"resolve_thread",
+			"edit",
+			"reviewers",
+			"draft",
+			"state",
+			"merge",
+		] as const;
+		if (!operation || typeof operation !== "object" || !kinds.includes(operation.kind as (typeof kinds)[number]))
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review mutation operation is invalid",
+			);
+		return await this.request<ForgeReviewMutationOutput>(
+			"POST",
+			"/v1/forge-review/mutate",
+			{
+				projectId: input.projectId,
+				url: input.url,
+				commandId: input.commandId,
+				expectedHeadSha: input.expectedHeadSha,
+				operation,
+			},
+		);
+	}
+
+	/**
+	 * Fetch a fresh detail+diff pair, bind it to one immutable snapshot, then send the review
+	 * through the existing durable OMP task/turn path. This method has no provider write route.
+	 */
+	async runForgeReviewWithOmp(
+		input: ForgeReviewOmpInput,
+		mode: "review" | "ask",
+	): Promise<ForgeReviewOmpResult> {
+		this.assertForgeReviewRequest(input);
+		const commandId = this.reviewCommandId(input.commandId);
+		const detailValue = await this.request<unknown>(
+			"POST",
+			"/v1/forge-review/detail",
+			{ projectId: input.projectId, url: input.url },
+		);
+		const detail = normalizeForgeReviewDetail(detailValue);
+		const detailHead = detail.refs.head?.sha ?? detail.snapshot.headSha;
+		const detailBase = detail.refs.base?.sha ?? detail.snapshot.baseSha;
+		const diffValue = await this.request<unknown>(
+			"POST",
+			"/v1/forge-review/diff",
+			{
+				projectId: input.projectId,
+				url: input.url,
+				...((input.headSha ?? detailHead)
+					? { headSha: input.headSha ?? detailHead }
+					: {}),
+				...((input.baseSha ?? detailBase)
+					? { baseSha: input.baseSha ?? detailBase }
+					: {}),
+			},
+		);
+		const context = buildForgeReviewContext(detail, diffValue, {
+			...(input.snapshotHash === undefined
+				? {}
+				: { snapshotHash: input.snapshotHash }),
+			...(input.headSha === undefined ? {} : { headSha: input.headSha }),
+			...(input.baseSha === undefined ? {} : { baseSha: input.baseSha }),
+		});
+		const prompt = buildForgeReviewPrompt(
+			context,
+			mode,
+			input.prompt,
+			input.reviewInstructions,
+			input.attachedContext,
+		);
+		const associationIdentity: ForgeReviewTaskAssociationIdentity = {
+			projectId: input.projectId,
+			provider: context.anchor.provider,
+			hostname: context.anchor.repository.hostname,
+			repositoryPath: context.anchor.repository.path,
+			number: context.anchor.number,
+			snapshotHash: context.anchor.snapshotHash,
+			headSha: context.anchor.headSha,
+			baseSha: context.anchor.baseSha,
+		};
+		let taskAssociation: ForgeReviewTaskAssociation | null = null;
+		let associationWarning: string | undefined;
+		try {
+			taskAssociation = await this.readForgeReviewTaskAssociation(associationIdentity);
+		} catch (error) {
+			associationWarning = error instanceof Error ? error.message : "Review task association could not be read";
+		}
+		let commandBinding: Awaited<ReturnType<CediaAgentAdapter["readForgeReviewCommandBinding"]>> = null;
+		// The per-command record is the idempotency fence. A missing record is a normal
+		// first-run result, but an unavailable or malformed record must stop before OMP.
+		commandBinding = await this.readForgeReviewCommandBinding(associationIdentity, commandId);
+		let replayingCommand = commandBinding !== null || taskAssociation?.commandId === commandId;
+		// A command id is the durable idempotency key. Its per-command binding wins even when
+		// a renderer supplied a stale/different local thread id during a retry. The mutable latest
+		// task pointer is only the fallback for a new command on this PR snapshot.
+		let threadId = commandBinding?.threadId ?? (replayingCommand ? taskAssociation?.threadId : input.threadId ?? taskAssociation?.threadId);
+		let existingThread = false;
+		if (threadId !== undefined) {
+			if (!/^[A-Za-z0-9_-]{1,128}$/.test(threadId))
+				throw new ForgeReviewContextError(
+					"invalid_request",
+					"Review task id is invalid",
+				);
+			existingThread = true;
+		} else {
+			threadId = this.reviewTaskId(commandId);
+		}
+		if (threadId) {
+			let commandKind: "prompt" | "follow_up" | "steer" = replayingCommand
+				? commandBinding?.commandKind ??
+					(taskAssociation?.dispatchMode === "steer"
+						? "steer"
+						: taskAssociation?.dispatchMode === "queue"
+							? "follow_up"
+							: "prompt")
+				: existingThread
+					? "follow_up"
+					: "prompt";
+			let session: Session | undefined;
+			// Validate a user/task-selected session before claiming the command record. If
+			// it is gone, fail without leaving a durable binding that would make every
+			// retry point at an unrecoverable arbitrary task. The deterministic task is
+			// the only one that may be created below.
+			if (threadId !== this.reviewTaskId(commandId)) {
+				session = await this.session(threadId);
+				if (session.projectId !== input.projectId)
+					throw new ForgeReviewContextError(
+						"invalid_request",
+						"The selected review task belongs to another Cedia project",
+					);
+			}
+			let commandBindingPersisted = commandBinding !== null;
+			// Claim the per-command binding before creating a session. A competing renderer that
+			// loses this CAS must re-read the winner and send the exact same command to its thread,
+			// instead of creating an orphan task and a second turn.
+		if (!commandBindingPersisted) {
+			try {
+				commandBinding = await this.writeForgeReviewCommandBinding(associationIdentity, {
+					commandId,
+					threadId,
+					commandKind,
+					expectedRevision: 0,
+				});
+				commandBindingPersisted = true;
+				replayingCommand = false;
+			} catch (claimError) {
+				// A concurrent renderer may have won the create CAS. Reconcile the durable
+				// binding before doing anything that could reach OMP; an unavailable binding
+				// owner must fail closed rather than risk a duplicate provider turn.
+				let winner: Awaited<ReturnType<CediaAgentAdapter["readForgeReviewCommandBinding"]>> = null;
+				try {
+					winner = await this.readForgeReviewCommandBinding(associationIdentity, commandId);
+				} catch {
+					throw claimError;
+				}
+				if (!winner) throw claimError;
+				commandBinding = winner;
+				commandBindingPersisted = true;
+				replayingCommand = true;
+				threadId = winner.threadId;
+				existingThread = true;
+				commandKind = winner.commandKind;
+				session = undefined;
+			}
+		}
+		if (!commandBindingPersisted || !commandBinding)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Cedia could not persist the review command before dispatch; retry after the host is available",
+			);
+			if (!/^[A-Za-z0-9_-]{1,128}$/.test(threadId))
+				throw new ForgeReviewContextError("invalid_request", "Review task id is invalid");
+			if (!session) {
+			try {
+				session = await this.session(threadId);
+			} catch (sessionError) {
+				// Only the deterministic task owned by this command may be recreated after
+				// an accepted create or a lost response. A missing user-selected task is
+				// never silently replaced with a new conversation.
+				if (threadId !== this.reviewTaskId(commandId)) throw sessionError;
+				try {
+					await this.request("POST", "/v1/sessions", {
+						id: threadId,
+						projectId: input.projectId,
+						title:
+							`Review ${context.anchor.provider} #${context.anchor.number}: ${context.detail.title}`.slice(
+								0,
+								256,
+							),
+						workspaceMode: "local",
+					});
+				} catch (createError) {
+					// A retry after an accepted create can hit the durable identity again. Re-read
+					// that exact id and continue only if it belongs to this project.
+					try {
+						session = await this.session(threadId);
+					} catch {
+						throw createError;
+					}
+				}
+			}
+			}
+			if (!session) session = await this.session(threadId);
+			if (session.projectId !== input.projectId)
+				throw new ForgeReviewContextError(
+					"invalid_request",
+					"The selected review task belongs to another Cedia project",
+				);
+			const dispatchMode = commandKind === "steer" ? "steer" : commandKind === "follow_up" ? "queue" : "prompt";
+			await this.dispatch({
+				type: "thread.turn.start",
+				commandId,
+				threadId,
+				message: {
+					messageId: `forge-review-${commandId}`,
+					role: "user",
+					text: prompt,
+					attachments: [],
+				},
+				...(input.modelSelection === undefined
+					? {}
+					: { modelSelection: input.modelSelection }),
+				cediaForgeCommandKind: commandKind,
+				runtimeMode: "approval-required",
+				interactionMode: "default",
+				createdAt: iso(this.#now),
+			});
+			try {
+				taskAssociation = await this.writeForgeReviewTaskAssociation({
+					...associationIdentity,
+					threadId,
+					commandId,
+					dispatchMode,
+					expectedRevision: taskAssociation?.revision ?? 0,
+				});
+				associationWarning = undefined;
+			} catch (error) {
+				// The OMP command is already accepted. Return the task and a visible warning
+				// rather than throwing and causing a duplicate retry.
+				associationWarning = error instanceof Error ? error.message : "Review task association could not be saved";
+			}
+		}
+		return {
+			threadId,
+			commandId,
+			mode,
+			snapshot: context.anchor,
+			...(taskAssociation ? { taskAssociation } : {}),
+			...(associationWarning ? { associationWarning } : {}),
+		};
+	}
+
+	/**
+	* Read the latest OMP answer from the durable event journal so a reviewer can
+	* explicitly copy it into a local draft. This path never starts a runtime or
+	* sends a command; the existing session/event owner remains authoritative.
+	*/
+	async readForgeReviewTaskResult(
+		threadId: string,
+	): Promise<ForgeReviewTaskResult> {
+		if (
+			typeof threadId !== "string" ||
+			!/^[A-Za-z0-9_-]{1,128}$/.test(threadId)
+		) {
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review task id is invalid",
+			);
+		}
+		const session = await this.session(threadId);
+		const { state } = await this.events(session);
+		const assistantEntries = [...state.transcript]
+			.reverse()
+			.filter((entry) => entry.role === "assistant");
+		const latestAssistant = assistantEntries[0];
+		const turn = latestTurnFromState(state);
+		const latestCompleteAssistant = assistantEntries.find(
+			(entry) => entry.status === "completed" && entry.text.trim().length > 0,
+		);
+		const turnRunning =
+			turn?.state === "running" || latestAssistant?.status === "streaming";
+		const turnError =
+			turn?.state === "error" || latestAssistant?.status === "failed";
+		const text =
+			turnRunning || turnError ? "" : (latestCompleteAssistant?.text ?? "");
+		let status: ForgeReviewTaskResultStatus;
+		if (session.status === "recovery_required" || turnError) status = "error";
+		else if (turnRunning) status = "running";
+		else if (text.length > 0) status = "completed";
+		else if (session.status === "running") status = "queued";
+		else status = "empty";
+		if (text.length > 256 * 1024) {
+			return {
+				threadId,
+				status: "truncated",
+				text: "",
+				updatedAt:
+					latestCompleteAssistant?.createdAt ?? session.updatedAt ?? null,
+				truncated: true,
+				reason:
+					"OMP's review answer exceeds the draft import limit; open the task and copy a bounded excerpt.",
+			};
+		}
+		return {
+			threadId,
+			status,
+			text,
+			updatedAt:
+				latestCompleteAssistant?.createdAt ?? session.updatedAt ?? null,
+		};
+	}
+
+	/** Read the project-scoped review instructions used by Save and Save and run. */
+	async readForgeReviewInstructions(projectId: string): Promise<ForgeReviewInstructions> {
+		const draftId = forgeReviewInstructionsId(projectId);
+		try {
+			const value = await this.request<unknown>(
+				"GET",
+				`/v1/drafts/${encodeURIComponent(draftId)}`,
+			);
+			const row = record(value);
+			const content = record(row?.content);
+			if (row && string(row.draftId) && row.draftId !== draftId)
+				throw new ForgeReviewContextError(
+					"invalid_request",
+					"Cedia returned review instructions for another project",
+				);
+			if (
+				content &&
+				(content.kind !== "forge-review-instructions" || content.projectId !== projectId)
+			)
+				throw new ForgeReviewContextError(
+					"invalid_request",
+					"Cedia returned review instructions for another project",
+				);
+			return this.normalizeForgeReviewInstructions(row, projectId, draftId);
+		} catch (error) {
+			if ((error as { code?: unknown })?.code !== "draft_not_found") throw error;
+			return {
+				projectId,
+				revision: 0,
+				text: "",
+				examples: [],
+				updatedAt: null,
+			};
+		}
+	}
+
+	/** Persist instructions with host-owned numeric CAS; stale writes stay visible to the UI. */
+	async writeForgeReviewInstructions(
+		input: ForgeReviewInstructionsWriteInput,
+	): Promise<ForgeReviewInstructions> {
+		if (
+			!input ||
+			typeof input.projectId !== "string" ||
+			input.projectId.trim().length === 0
+		)
+			throw new ForgeReviewContextError("invalid_request", "Review instructions need a project");
+		if (typeof input.text !== "string" || input.text.length > FORGE_REVIEW_INSTRUCTIONS_LIMIT)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				`Review instructions exceed the ${FORGE_REVIEW_INSTRUCTIONS_LIMIT.toLocaleString()} character limit`,
+			);
+		const examples = input.examples ?? [];
+		if (
+			!Array.isArray(examples) ||
+			examples.length > FORGE_REVIEW_INSTRUCTION_EXAMPLES_LIMIT ||
+			examples.some(
+				(example) =>
+					typeof example !== "string" ||
+					example.length > FORGE_REVIEW_INSTRUCTION_EXAMPLE_LIMIT,
+			)
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review instruction examples are invalid or too large",
+			);
+		const expectedRevision = input.expectedRevision ?? 0;
+		if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+			throw new ForgeReviewContextError("invalid_request", "Review instruction revision is invalid");
+		const draftId = forgeReviewInstructionsId(input.projectId);
+		const value = await this.request<unknown>(
+			"PATCH",
+			`/v1/drafts/${encodeURIComponent(draftId)}`,
+			{
+				expectedRevision,
+				text: input.text,
+				source: "forge-review-instructions",
+				content: {
+					kind: "forge-review-instructions",
+					projectId: input.projectId,
+					examples,
+				},
+			},
+		);
+		return this.normalizeForgeReviewInstructions(record(value), input.projectId, draftId);
+	}
+
+	/** Read the task associated with one exact review snapshot, or null when none was saved. */
+	async readForgeReviewTaskAssociation(
+		input: ForgeReviewTaskAssociationIdentity,
+	): Promise<ForgeReviewTaskAssociation | null> {
+		const draftId = forgeReviewTaskAssociationId(input);
+		try {
+			const value = await this.request<unknown>(
+				"GET",
+				`/v1/drafts/${encodeURIComponent(draftId)}`,
+			);
+			return this.normalizeForgeReviewTaskAssociation(record(value), input, draftId);
+		} catch (error) {
+			if ((error as { code?: unknown })?.code !== "draft_not_found") throw error;
+			return null;
+		}
+	}
+
+	/** Save the OMP task identity after an accepted run without changing review snapshots. */
+	async writeForgeReviewTaskAssociation(
+		input: ForgeReviewTaskAssociationWriteInput,
+	): Promise<ForgeReviewTaskAssociation> {
+		if (
+			typeof input.threadId !== "string" ||
+			!/^[A-Za-z0-9_-]{1,128}$/.test(input.threadId)
+		)
+			throw new ForgeReviewContextError("invalid_request", "Review task id is invalid");
+		if (
+			input.commandId !== undefined &&
+			!/^[A-Za-z0-9._~-]{1,128}$/.test(input.commandId)
+		)
+			throw new ForgeReviewContextError("invalid_request", "Review command id is invalid");
+		const expectedRevision = input.expectedRevision ?? 0;
+		if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+			throw new ForgeReviewContextError("invalid_request", "Review task association revision is invalid");
+		const draftId = forgeReviewTaskAssociationId(input);
+		const value = await this.request<unknown>(
+			"PATCH",
+			`/v1/drafts/${encodeURIComponent(draftId)}`,
+			{
+				expectedRevision,
+				text: input.threadId,
+				source: "forge-review-task",
+				content: {
+					kind: "forge-review-task",
+					projectId: input.projectId,
+					provider: input.provider,
+					hostname: input.hostname,
+					repository: input.repositoryPath,
+					number: input.number,
+					snapshotHash: input.snapshotHash,
+					...(input.headSha === undefined ? {} : { headSha: input.headSha }),
+					...(input.baseSha === undefined ? {} : { baseSha: input.baseSha }),
+					threadId: input.threadId,
+					...(input.commandId === undefined ? {} : { commandId: input.commandId }),
+					...(input.dispatchMode === undefined ? {} : { dispatchMode: input.dispatchMode }),
+				},
+			},
+		);
+		return this.normalizeForgeReviewTaskAssociation(record(value), input, draftId);
+	}
+
+	/** Read inline comment drafts from their own PR-snapshot CAS record. */
+	async readForgeReviewInlineDraft(
+		input: ForgeReviewInlineDraftIdentity,
+	): Promise<ForgeReviewInlineDraft> {
+		const draftId = forgeReviewInlineDraftId(input);
+		try {
+			const value = await this.request<unknown>("GET", `/v1/drafts/${encodeURIComponent(draftId)}`);
+			return this.normalizeForgeReviewInlineDraft(record(value), input, draftId);
+		} catch (error) {
+			if ((error as { code?: unknown })?.code !== "draft_not_found") throw error;
+			return { draftId, revision: 0, comments: [], updatedAt: null };
+		}
+	}
+
+	/** Persist inline comments without competing with the main review-body draft record. */
+	async writeForgeReviewInlineDraft(
+		input: ForgeReviewInlineDraftWriteInput,
+	): Promise<ForgeReviewInlineDraft> {
+		const expectedRevision = input.expectedRevision ?? 0;
+		if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+			throw new ForgeReviewContextError("invalid_request", "Inline review draft revision is invalid");
+		const comments = this.normalizeForgeReviewInlineComments(input.comments);
+		const draftId = forgeReviewInlineDraftId(input);
+		const value = await this.request<unknown>(
+			"PATCH",
+			`/v1/drafts/${encodeURIComponent(draftId)}`,
+			{
+				expectedRevision,
+				text: comments.map((comment) => `${comment.path}:${comment.line}`).join("\n"),
+				source: "forge-review-inline",
+				content: {
+					kind: "forge-review-inline",
+					projectId: input.projectId,
+					provider: input.provider,
+					hostname: input.hostname,
+					repository: input.repositoryPath,
+					number: input.number,
+					snapshotHash: input.snapshotHash,
+					headSha: input.headSha,
+					baseSha: input.baseSha,
+					comments,
+				},
+			},
+		);
+		return this.normalizeForgeReviewInlineDraft(record(value), input, draftId);
+	}
+
+	private normalizeForgeReviewInlineComments(
+		value: unknown,
+	): readonly ForgeReviewInlineComment[] {
+		if (!Array.isArray(value) || value.length > 500)
+			throw new ForgeReviewContextError("invalid_request", "Inline review comments are invalid or too many");
+		return value.map((item, index) => {
+			const row = record(item);
+			if (
+				!row ||
+				typeof row.path !== "string" ||
+				row.path.length === 0 ||
+				row.path.length > 2_048 ||
+				/[\u0000-\u001f]/.test(row.path) ||
+				!Number.isSafeInteger(row.line) ||
+				(row.line as number) < 1 ||
+				(row.side !== "LEFT" && row.side !== "RIGHT") ||
+				typeof row.body !== "string" ||
+				row.body.trim().length === 0 ||
+				(row.body as string).length > 16 * 1024
+			)
+				throw new ForgeReviewContextError("invalid_request", `Inline comment ${index + 1} is invalid`);
+			if (row.startLine !== undefined && (!Number.isSafeInteger(row.startLine) || (row.startLine as number) < 1))
+				throw new ForgeReviewContextError("invalid_request", `Inline comment ${index + 1} start line is invalid`);
+			if (row.startSide !== undefined && row.startSide !== "LEFT" && row.startSide !== "RIGHT")
+				throw new ForgeReviewContextError("invalid_request", `Inline comment ${index + 1} start side is invalid`);
+			return {
+				path: row.path,
+				line: row.line as number,
+				side: row.side,
+				body: row.body as string,
+				...(row.startLine === undefined ? {} : { startLine: row.startLine as number }),
+				...(row.startSide === undefined ? {} : { startSide: row.startSide }),
+			};
+		});
+	}
+
+	private normalizeForgeReviewInlineDraft(
+		row: Record<string, unknown> | undefined,
+		input: ForgeReviewInlineDraftIdentity,
+		draftId: string,
+	): ForgeReviewInlineDraft {
+		const content = record(row?.content);
+		if (
+			!row ||
+			(row.draftId !== undefined && row.draftId !== draftId) ||
+			content?.kind !== "forge-review-inline" ||
+			content.projectId !== input.projectId ||
+			content.provider !== input.provider ||
+			content.hostname !== input.hostname ||
+			content.repository !== input.repositoryPath ||
+			content.number !== input.number ||
+			content.snapshotHash !== input.snapshotHash
+		)
+			throw new ForgeReviewContextError("invalid_request", "Cedia returned inline comments for another review");
+		for (const [key, expected] of [["headSha", input.headSha], ["baseSha", input.baseSha]] as const) {
+			if (expected !== undefined && content[key] !== expected)
+				throw new ForgeReviewContextError("stale_snapshot", "Inline comments belong to an older provider snapshot");
+		}
+		const revision = typeof row.revision === "number" && Number.isSafeInteger(row.revision) && row.revision >= 0 ? row.revision : 0;
+		const comments = this.normalizeForgeReviewInlineComments(content.comments);
+		return { draftId, revision, comments, updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : null };
+	}
+
+	/**
+	 * Per-command binding used for retries. The latest task pointer is intentionally mutable;
+	 * this record keeps an older command's thread and dispatch semantic from being overwritten by
+	 * a later review run on the same PR snapshot.
+	 */
+	private async readForgeReviewCommandBinding(
+		input: ForgeReviewTaskAssociationIdentity,
+		commandId: string,
+	): Promise<{ revision: number; commandId: string; threadId: string; commandKind: "prompt" | "follow_up" | "steer" } | null> {
+		const draftId = forgeReviewCommandAssociationId(input, commandId);
+		try {
+			const row = record(await this.request<unknown>("GET", `/v1/drafts/${encodeURIComponent(draftId)}`));
+			const content = record(row?.content);
+			const threadId = string(content?.threadId) ?? string(row?.text);
+			// `dispatchMode` was used by the first durable binding format. Read it as a
+			// one-time compatibility fallback, while all new writes persist the exact
+			// host command (`prompt`, `follow_up`, or `steer`) needed for replay.
+			const commandKind = content?.commandKind === "prompt" || content?.commandKind === "follow_up" || content?.commandKind === "steer"
+				? content.commandKind
+				: content?.dispatchMode === "queue"
+					? "follow_up"
+					: content?.dispatchMode === "steer"
+						? "steer"
+						: content?.dispatchMode === "prompt"
+							? "prompt"
+							: undefined;
+			if (
+				!row ||
+				row.draftId !== undefined && row.draftId !== draftId ||
+				content?.kind !== "forge-review-command" ||
+				content.projectId !== input.projectId ||
+				content.provider !== input.provider ||
+				content.hostname !== input.hostname ||
+				content.repository !== input.repositoryPath ||
+				content.number !== input.number ||
+				content.snapshotHash !== input.snapshotHash ||
+				content.commandId !== commandId ||
+				!threadId ||
+				!/^[A-Za-z0-9_-]{1,128}$/.test(threadId) ||
+				(commandKind !== "prompt" && commandKind !== "follow_up" && commandKind !== "steer")
+			)
+				throw new ForgeReviewContextError("invalid_request", "Cedia returned an invalid review command binding");
+			const revision = typeof row.revision === "number" && Number.isSafeInteger(row.revision) && row.revision >= 0 ? row.revision : 0;
+			return { revision, commandId, threadId, commandKind };
+		} catch (error) {
+			if ((error as { code?: unknown })?.code !== "draft_not_found") throw error;
+			return null;
+		}
+	}
+
+	private async writeForgeReviewCommandBinding(
+		input: ForgeReviewTaskAssociationIdentity,
+		binding: { commandId: string; threadId: string; commandKind: "prompt" | "follow_up" | "steer"; expectedRevision: number },
+	): Promise<{ revision: number; commandId: string; threadId: string; commandKind: "prompt" | "follow_up" | "steer" }> {
+		const draftId = forgeReviewCommandAssociationId(input, binding.commandId);
+		const value = await this.request<unknown>(
+			"PATCH",
+			`/v1/drafts/${encodeURIComponent(draftId)}`,
+			{
+				expectedRevision: binding.expectedRevision,
+				text: binding.threadId,
+				source: "forge-review-command",
+				content: {
+					kind: "forge-review-command",
+					projectId: input.projectId,
+					provider: input.provider,
+					hostname: input.hostname,
+					repository: input.repositoryPath,
+					number: input.number,
+					snapshotHash: input.snapshotHash,
+					headSha: input.headSha,
+					baseSha: input.baseSha,
+					commandId: binding.commandId,
+					threadId: binding.threadId,
+					commandKind: binding.commandKind,
+				},
+			},
+		);
+		const row = record(value);
+		const revision = typeof row?.revision === "number" && Number.isSafeInteger(row.revision) && row.revision >= 0 ? row.revision : binding.expectedRevision + 1;
+		return { revision, commandId: binding.commandId, threadId: binding.threadId, commandKind: binding.commandKind };
+	}
+
+	private normalizeForgeReviewInstructions(
+		row: Record<string, unknown> | undefined,
+		projectId: string,
+		draftId: string,
+	): ForgeReviewInstructions {
+		const content = record(row?.content);
+		const textValue = typeof row?.text === "string" ? row.text : "";
+		const examplesValue = content?.examples;
+		const examples = Array.isArray(examplesValue)
+			? examplesValue.filter((example): example is string => typeof example === "string")
+			: [];
+		if (
+			row &&
+			(content?.kind !== "forge-review-instructions" || content.projectId !== projectId ||
+				textValue.length > FORGE_REVIEW_INSTRUCTIONS_LIMIT ||
+				examples.length !== (Array.isArray(examplesValue) ? examplesValue.length : 0) ||
+				examples.length > FORGE_REVIEW_INSTRUCTION_EXAMPLES_LIMIT ||
+				examples.some((example) => example.length > FORGE_REVIEW_INSTRUCTION_EXAMPLE_LIMIT))
+		)
+			throw new ForgeReviewContextError("invalid_request", "Cedia returned invalid review instructions");
+		const revision = typeof row?.revision === "number" && Number.isSafeInteger(row.revision) && row.revision >= 0 ? row.revision : 0;
+		return {
+			projectId,
+			revision,
+			text: textValue,
+			examples,
+			updatedAt: typeof row?.updatedAt === "string" ? row.updatedAt : null,
+		};
+	}
+
+	private normalizeForgeReviewTaskAssociation(
+		row: Record<string, unknown> | undefined,
+		input: ForgeReviewTaskAssociationIdentity,
+		draftId: string,
+	): ForgeReviewTaskAssociation {
+		const content = record(row?.content);
+		const threadId = string(content?.threadId) ?? string(row?.text);
+		if (
+			!row ||
+			row.draftId !== undefined && row.draftId !== draftId ||
+			content?.kind !== "forge-review-task" ||
+			content.projectId !== input.projectId ||
+			content.provider !== input.provider ||
+			content.hostname !== input.hostname ||
+			content.repository !== input.repositoryPath ||
+			content.number !== input.number ||
+			content.snapshotHash !== input.snapshotHash ||
+			!threadId ||
+			!/^[A-Za-z0-9_-]{1,128}$/.test(threadId)
+		)
+			throw new ForgeReviewContextError("invalid_request", "Cedia returned an invalid review task association");
+		for (const [key, expected] of [["headSha", input.headSha], ["baseSha", input.baseSha]] as const) {
+			if (expected !== undefined && content[key] !== expected)
+				throw new ForgeReviewContextError("stale_snapshot", "This review task belongs to an older provider snapshot");
+		}
+		const revision = typeof row.revision === "number" && Number.isSafeInteger(row.revision) && row.revision >= 0 ? row.revision : 0;
+		return {
+			...input,
+			revision,
+			threadId,
+			...(string(content.commandId) ? { commandId: string(content.commandId) } : {}),
+			...(content.dispatchMode === "prompt" || content.dispatchMode === "queue" || content.dispatchMode === "steer"
+				? { dispatchMode: content.dispatchMode }
+				: {}),
+			updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : null,
+		};
+	}
+
+	async readForgeReviewDraft(
+		input: ForgeReviewDraftReadInput,
+	): Promise<unknown> {
+		const draftId = forgeReviewDraftId(input);
+		let value: unknown;
+		try {
+			value = await this.request<unknown>(
+				"GET",
+				`/v1/drafts/${encodeURIComponent(draftId)}`,
+			);
+		} catch (error) {
+			if ((error as { code?: unknown })?.code !== "draft_not_found")
+				throw error;
+			return {
+				draftId,
+				revision: 0,
+				text: "",
+				attachments: [],
+				updatedAt: iso(this.#now),
+				source: "forge-review",
+			};
+		}
+		const row = record(value);
+		if (row && string(row.draftId) && row.draftId !== draftId)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Cedia returned a draft for another review",
+			);
+		this.validateForgeReviewDraftIdentity(row, input);
+		return value;
+	}
+
+	async writeForgeReviewDraft(
+		input: ForgeReviewDraftWriteInput,
+	): Promise<unknown> {
+		const draftId = forgeReviewDraftId(input);
+		const expectedRevision = input.expectedRevision ?? 0;
+		if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review draft revision must be a non-negative integer",
+			);
+		if (typeof input.text !== "string" || input.text.length > 262_144)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review draft text is invalid or too long",
+			);
+		if (
+			typeof input.snapshotHash !== "string" ||
+			input.snapshotHash.trim().length === 0 ||
+			typeof input.headSha !== "string" ||
+			input.headSha.trim().length === 0 ||
+			typeof input.baseSha !== "string" ||
+			input.baseSha.trim().length === 0
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review draft needs its immutable snapshot anchor",
+			);
+		return await this.request<unknown>(
+			"PATCH",
+			`/v1/drafts/${encodeURIComponent(draftId)}`,
+			{
+				expectedRevision,
+				text: input.text,
+				source: "forge-review",
+				content: {
+					kind: "forge-review-draft",
+					projectId: input.projectId,
+					hostname: input.hostname,
+					provider: input.provider,
+					repository: input.repositoryPath,
+					number: input.number,
+					...(input.url === undefined ? {} : { url: input.url }),
+					snapshotHash: input.snapshotHash,
+					headSha: input.headSha,
+					baseSha: input.baseSha,
+				},
+			},
+		);
+	}
+
+	private validateForgeReviewDraftIdentity(
+		row: Record<string, unknown> | undefined,
+		input: ForgeReviewDraftReadInput,
+	): void {
+		if (!row) return;
+		const content = record(row.content);
+		if (row.source !== "forge-review" && content?.kind !== "forge-review-draft")
+			return;
+		if (
+			content?.kind !== "forge-review-draft" ||
+			content.projectId !== input.projectId ||
+			content.hostname !== input.hostname ||
+			content.provider !== input.provider ||
+			content.repository !== input.repositoryPath ||
+			content.number !== input.number
+		) {
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Cedia returned a draft for another provider review",
+			);
+		}
+		const expectedAnchors: Array<
+			[keyof ForgeReviewDraftReadInput, string | undefined]
+		> = [
+			["url", input.url],
+			["snapshotHash", input.snapshotHash],
+			["headSha", input.headSha],
+			["baseSha", input.baseSha],
+		];
+		for (const [key, expected] of expectedAnchors) {
+			if (expected !== undefined && content[key] !== expected) {
+				throw new ForgeReviewContextError(
+					"stale_snapshot",
+					"This review draft belongs to an older provider snapshot; refresh it before editing.",
+				);
+			}
+		}
+	}
+
+	private assertForgeReviewRequest(input: ForgeReviewDetailInput): void {
+		if (
+			!input ||
+			typeof input.projectId !== "string" ||
+			input.projectId.trim().length === 0
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review needs a selected Cedia project",
+			);
+		if (
+			typeof input.url !== "string" ||
+			input.url.trim().length === 0 ||
+			input.url.length > 2_048
+		)
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Code Review needs a valid pull/merge request URL",
+			);
+	}
+
+	private reviewCommandId(value: string | undefined): string {
+		if (value === undefined) return id();
+		if (!/^[A-Za-z0-9._~-]{1,128}$/.test(value))
+			throw new ForgeReviewContextError(
+				"invalid_request",
+				"Review command id is invalid",
+			);
+		return value;
+	}
+
+	private reviewTaskId(commandId: string): string {
+		const readable = `forge-review-${commandId}`;
+		return readable.length <= 128
+			? readable
+			: `forge-review-${reviewCommandDigest(commandId)}`;
+	}
+
 	/** OMP's live settings inventory, including Cedia's disposition for every schema path. */
 	async getOmpSettingsKeys(): Promise<unknown> {
 		return await this.request<unknown>("GET", "/v1/omp/settings/keys");
@@ -2958,7 +4189,18 @@ class CediaAgentAdapter {
 				...(turn.images.length > 0 ? { images: turn.images } : {}),
 				...(selectedSlashCommand ? { cediaSelectedSlashCommand: selectedSlashCommand } : {}),
 			};
-			const dispatchMode = row.dispatchMode === "steer" ? "steer" : row.dispatchMode === "queue" ? "queue" : undefined;
+			const explicitCommandKind = row.cediaForgeCommandKind === "prompt" || row.cediaForgeCommandKind === "follow_up" || row.cediaForgeCommandKind === "steer"
+				? row.cediaForgeCommandKind
+				: undefined;
+			const dispatchMode = explicitCommandKind === "steer"
+				? "steer"
+				: explicitCommandKind === "follow_up"
+					? "queue"
+					: row.dispatchMode === "steer"
+						? "steer"
+						: row.dispatchMode === "queue"
+							? "queue"
+							: undefined;
 			const existingSession = await this.session(threadId);
 			if (selectedSlashCommand && existingSession.status === "running" && dispatchMode) {
 				throw new Error("The selected slash command cannot be dispatched while this turn is running. Retry after the current turn finishes.");
@@ -2977,10 +4219,12 @@ class CediaAgentAdapter {
 			const selection = modelSelectionFromCommand(row.modelSelection);
 			// `dispatchMode: steer` feeds the running turn, which keeps the model it started with,
 			// so a change sent with it is deferred; a plain send owns the turn it starts.
-			if (selection) await this.setModelIfRequested(session, selection, { forSubmission: dispatchMode === undefined });
-			const command = session.status === "running" && dispatchMode
+			if (selection) await this.setModelIfRequested(session, selection, {
+				forSubmission: explicitCommandKind === undefined ? dispatchMode === undefined : explicitCommandKind === "prompt",
+			});
+			const command = explicitCommandKind ?? (session.status === "running" && dispatchMode
 				? dispatchMode === "steer" ? "steer" : "follow_up"
-				: "prompt";
+				: "prompt");
 			let result = await this.sendCommand(session, commandId, command, payload);
 			if (result.status === "not_dispatched") {
 				// A not_dispatched result is explicitly safe to retry with the same
@@ -3152,7 +4396,6 @@ class CediaAgentAdapter {
 				prewarmSearchIndex: async () => ({ started: false }),
 				resolveWorkspaceFileReferences: unsupportedAsync("projects.resolveWorkspaceFileReferences"),
 				resolveOutOfRootFileReference: unsupportedAsync("projects.resolveOutOfRootFileReference"),
-				createLocalFilePreviewGrant: unsupportedAsync("projects.createLocalFilePreviewGrant"),
 				runDevServer: unsupportedAsync("projects.runDevServer"),
 				stopDevServer: unsupportedAsync("projects.stopDevServer"),
 				listDevServers: async () => ({ servers: [] }),
@@ -3353,6 +4596,70 @@ export function createCediaNativeApi(options: AdapterOptions = {}): any {
 	return {
 		...api,
 		cedia: {
+			forgeReview: {
+				capabilities: async (): Promise<unknown> =>
+					await adapter.forgeReviewCapabilities(),
+				list: async (input: ForgeReviewListInput): Promise<unknown> =>
+					await adapter.listForgeReviews(input),
+				detail: async (
+					input: ForgeReviewDetailInput,
+				): Promise<ForgeReviewDetail> => await adapter.detailForgeReview(input),
+				diff: async (input: ForgeReviewDiffInput): Promise<ForgeReviewDiff> =>
+					await adapter.diffForgeReview(input),
+				reviewWithOmp: async (
+					input: ForgeReviewOmpInput,
+				): Promise<ForgeReviewOmpResult> =>
+					await adapter.runForgeReviewWithOmp(input, "review"),
+				ask: async (
+					input: ForgeReviewOmpInput,
+				): Promise<ForgeReviewOmpResult> =>
+					await adapter.runForgeReviewWithOmp(input, "ask"),
+				workflow: async (
+					input: ForgeReviewWorkflowInput,
+				): Promise<ForgeReviewWorkflowOutput> =>
+					await adapter.forgeReviewWorkflow(input),
+				mutate: async (
+					input: ForgeReviewMutationInput,
+				): Promise<ForgeReviewMutationOutput> =>
+					await adapter.mutateForgeReview(input),
+				readInstructions: async (
+					projectId: string,
+				): Promise<ForgeReviewInstructions> =>
+					await adapter.readForgeReviewInstructions(projectId),
+				writeInstructions: async (
+					input: ForgeReviewInstructionsWriteInput,
+				): Promise<ForgeReviewInstructions> =>
+					await adapter.writeForgeReviewInstructions(input),
+				readTaskAssociation: async (
+					input: ForgeReviewTaskAssociationIdentity,
+				): Promise<ForgeReviewTaskAssociation | null> =>
+					await adapter.readForgeReviewTaskAssociation(input),
+				writeTaskAssociation: async (
+					input: ForgeReviewTaskAssociationWriteInput,
+				): Promise<ForgeReviewTaskAssociation> =>
+					await adapter.writeForgeReviewTaskAssociation(input),
+				inlineDrafts: {
+					read: async (
+						input: ForgeReviewInlineDraftIdentity,
+					): Promise<ForgeReviewInlineDraft> =>
+						await adapter.readForgeReviewInlineDraft(input),
+					write: async (
+						input: ForgeReviewInlineDraftWriteInput,
+					): Promise<ForgeReviewInlineDraft> =>
+						await adapter.writeForgeReviewInlineDraft(input),
+				},
+				readTaskResult: async (
+					threadId: string,
+				): Promise<ForgeReviewTaskResult> =>
+					await adapter.readForgeReviewTaskResult(threadId),
+				drafts: {
+					read: async (input: ForgeReviewDraftReadInput): Promise<unknown> =>
+						await adapter.readForgeReviewDraft(input),
+					write: async (input: ForgeReviewDraftWriteInput): Promise<unknown> =>
+						await adapter.writeForgeReviewDraft(input),
+				},
+			},
+
 			getOwners: async (): Promise<unknown> => await adapter.request("GET", "/v1/owners"),
 			attachOwner: async (sessionId: string): Promise<unknown> => await adapter.attachOwner(sessionId),
 			getCapabilities: async (): Promise<unknown> => await adapter.capabilities(),

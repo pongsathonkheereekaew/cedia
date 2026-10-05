@@ -1,4 +1,6 @@
 /** Cedia application protocol. OMP remains the execution/transcript authority. */
+import type { ForgeReviewMutationKind } from "./forge-review-workflow.ts";
+
 export const CEDIA_PROTOCOL_VERSION = 1 as const;
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
@@ -1481,3 +1483,208 @@ export interface HostLifecycleAdmissionReceipt {
 export interface ApiError {
   error: { code: string; message: string };
 }
+
+/**
+ * Provider-neutral, read-only pull/merge-request data exposed by Cedia's Forge Review surface.
+ *
+ * The host deliberately keeps provider credentials and CLI details behind this DTO.  A nullable
+ * count means the provider did not return that fact for the requested operation; it is never a
+ * fabricated zero.  Review snapshots carry the exact ref pair used for a diff so a caller can
+ * refuse to apply an answer after the pull/merge request moved.
+ */
+export type ForgeReviewProvider = "github" | "gitlab";
+export type ForgeReviewState = "open" | "closed" | "merged";
+export type ForgeReviewListState = ForgeReviewState | "all";
+export type ForgeReviewListBucket = "all" | "authored" | "needs_review" | "team";
+export type ForgeReviewCapabilityState = "available" | "unauthenticated" | "unavailable";
+export type ForgeReviewOperation = "list" | "detail" | "diff";
+
+export interface ForgeReviewProviderCapability {
+  readonly provider: ForgeReviewProvider;
+  readonly hostname: string;
+  readonly state: ForgeReviewCapabilityState;
+  readonly reason?: string;
+  readonly operations: readonly ForgeReviewOperation[];
+}
+
+export interface ForgeReviewCapabilities {
+  readonly providers: readonly ForgeReviewProviderCapability[];
+  /** Remote writes are exposed only as typed, confirmation-gated workflow operations. */
+  readonly writes: readonly ForgeReviewMutationKind[];
+}
+
+export interface ForgeReviewRepository {
+  readonly provider: ForgeReviewProvider;
+  readonly hostname: string;
+  /** Provider path, including nested GitLab groups and excluding a trailing .git. */
+  readonly path: string;
+  readonly url: string;
+}
+
+export interface ForgeReviewRef {
+  readonly number: number;
+  readonly url: string;
+}
+
+export interface ForgeReviewActor {
+  readonly login: string;
+  readonly name?: string;
+  readonly avatarUrl?: string;
+}
+
+export interface ForgeReviewCommitRef {
+  readonly branch?: string;
+  readonly sha?: string;
+}
+
+export interface ForgeReviewRefs {
+  readonly head?: ForgeReviewCommitRef;
+  readonly base?: ForgeReviewCommitRef;
+}
+
+export interface ForgeReviewCounts {
+  readonly comments: number | null;
+  readonly reviews: number | null;
+  readonly commits: number | null;
+  readonly checks: number | null;
+}
+
+export interface ForgeReviewMerge {
+  readonly state: "mergeable" | "conflicts" | "unknown";
+  readonly status?: string;
+}
+
+export interface ForgeReviewSnapshot {
+  readonly hash: string;
+  readonly capturedAt: string;
+  readonly headSha?: string;
+  readonly baseSha?: string;
+  readonly truncated: boolean;
+}
+
+export interface ForgeReviewSummary {
+  readonly provider: ForgeReviewProvider;
+  readonly number: number;
+  readonly title: string;
+  readonly url: string;
+  readonly state: ForgeReviewState;
+  readonly draft: boolean;
+  readonly author?: ForgeReviewActor;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly refs: ForgeReviewRefs;
+  readonly counts: ForgeReviewCounts;
+  readonly requestedReviewers?: readonly ForgeReviewActor[];
+  readonly merge?: ForgeReviewMerge;
+}
+
+export interface ForgeReviewComment {
+  readonly id: string;
+  readonly body: string;
+  readonly author?: ForgeReviewActor;
+  readonly url?: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly path?: string;
+  readonly line?: number;
+  readonly side?: "left" | "right";
+}
+
+export type ForgeReviewReviewState = "approved" | "changes_requested" | "commented" | "pending" | "dismissed" | "unknown";
+
+export interface ForgeReviewReview {
+  readonly id: string;
+  readonly state: ForgeReviewReviewState;
+  readonly body: string;
+  readonly author?: ForgeReviewActor;
+  readonly url?: string;
+  readonly submittedAt?: string;
+  readonly commitSha?: string;
+}
+
+export interface ForgeReviewCommit {
+  readonly sha: string;
+  readonly message: string;
+  readonly author?: ForgeReviewActor;
+  readonly committedAt?: string;
+  readonly url?: string;
+}
+
+export type ForgeReviewCheckStatus = "queued" | "in_progress" | "completed" | "unknown";
+
+export interface ForgeReviewCheck {
+  readonly name: string;
+  readonly status: ForgeReviewCheckStatus;
+  readonly conclusion?: string;
+  readonly url?: string;
+}
+
+export interface ForgeReviewFile {
+  readonly path: string;
+  readonly additions?: number;
+  readonly deletions?: number;
+  readonly patch?: string;
+}
+
+export interface ForgeReviewDetail extends ForgeReviewSummary {
+  readonly repository: ForgeReviewRepository;
+  readonly body: string | null;
+  readonly ref: ForgeReviewRef;
+  readonly comments: readonly ForgeReviewComment[];
+  readonly reviews: readonly ForgeReviewReview[];
+  readonly commits: readonly ForgeReviewCommit[];
+  readonly checks: readonly ForgeReviewCheck[];
+  readonly files: readonly ForgeReviewFile[];
+  /** Provider-reported total, when available; files may be incomplete at provider limits. */
+  readonly changedFiles?: number;
+  readonly snapshot: ForgeReviewSnapshot;
+}
+
+export interface ForgeReviewListResult {
+  readonly provider: ForgeReviewProvider;
+  readonly repository: ForgeReviewRepository;
+  readonly items: readonly ForgeReviewSummary[];
+  readonly viewer?: ForgeReviewActor;
+  readonly bucket: ForgeReviewListBucket;
+  readonly nextCursor?: string;
+  readonly truncated: boolean;
+  readonly snapshot: ForgeReviewSnapshot;
+}
+
+export interface ForgeReviewDiffResult {
+  readonly provider: ForgeReviewProvider;
+  readonly repository: ForgeReviewRepository;
+  readonly ref: ForgeReviewRef;
+  readonly files: readonly ForgeReviewFile[];
+  readonly patch: string;
+  readonly truncated: boolean;
+  readonly snapshot: ForgeReviewSnapshot;
+}
+
+export interface ForgeReviewListRequest {
+  readonly projectId: string;
+  /** A repository URL or a pull/merge-request URL; omitted uses the project's origin. */
+  readonly url?: string;
+  readonly provider?: ForgeReviewProvider;
+  readonly state?: ForgeReviewListState;
+  /** Provider-backed discovery bucket; the host never infers a team from a personal queue. */
+  readonly bucket?: ForgeReviewListBucket;
+  /** Required for the `team` bucket, in provider organization/team slug form. */
+  readonly team?: string;
+  /** Opaque page cursor returned by a previous list response. */
+  readonly cursor?: string;
+  readonly limit?: number;
+}
+
+export interface ForgeReviewRequest {
+  readonly projectId: string;
+  readonly url: string;
+}
+
+export interface ForgeReviewDiffRequest extends ForgeReviewRequest {
+  /** Optional immutable anchors from a previously read detail response. */
+  readonly headSha?: string;
+  readonly baseSha?: string;
+}
+
+export * from "./forge-review-workflow.ts";

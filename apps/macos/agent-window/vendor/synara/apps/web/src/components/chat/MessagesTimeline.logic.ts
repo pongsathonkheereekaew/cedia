@@ -3,8 +3,13 @@
 // Layer: Web chat presentation helpers
 // Exports: row derivation, structural sharing, copy/timer helpers
 
-import { type MessageId, type TurnId } from "@synara/contracts";
-import { type TimelineEntry, type WorkLogEntry, formatElapsed } from "../../session-logic";
+import { type MessageId, TurnId } from "@synara/contracts";
+import {
+  type PendingApproval,
+  type TimelineEntry,
+  type WorkLogEntry,
+  formatElapsed,
+} from "../../session-logic";
 import { normalizeCompactToolLabel as normalizeCompactToolLabelValue } from "../../lib/toolCallLabel";
 import { isCodexActivityStatusWorkEntry } from "./agentActivity.logic";
 import {
@@ -22,7 +27,14 @@ import {
   type WorktreeSetupStep,
 } from "../../types";
 
-export const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
+export type AgentRunState = "running" | "settled" | "needs_continue" | "outcome_unknown";
+
+export interface AgentRunRowInput {
+  pendingApprovalByTurnId?: ReadonlyMap<string, PendingApproval>;
+  turnStateByTurnId?: ReadonlyMap<string, AgentRunState>;
+  turnQueueLineByTurnId?: ReadonlyMap<string, string | null>;
+  turnFileCountByTurnId?: ReadonlyMap<string, number>;
+}
 
 export function canSubmitUserMessageEdit(input: {
   draft: string;
@@ -232,6 +244,11 @@ export function capOpenWorkEntryRenderChunks(
 export function findLastLiveWorkGroupId(rows: ReadonlyArray<MessagesTimelineRow>): string | null {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index]!;
+    // Agent-run blocks are additive overlays, not turn boundaries: they shadow
+    // neither the live group nor the user-message cutoff below.
+    if (row.kind === "agent-run") {
+      continue;
+    }
     if (row.kind === "work") {
       return row.id;
     }
@@ -323,6 +340,22 @@ export type MessagesTimelineRow =
       id: string;
       steps: ReadonlyArray<WorktreeSetupStep>;
       open: boolean;
+    }
+  | {
+      // Arc-style per-turn agent-run block: the turn's tool-call groups fold
+      // with a live tail, the approval gate card renders before writes, and
+      // the settled result folds with a Review action. `filesChanged` carries
+      // the diff count; the Review action itself resolves in the component via
+      // the existing onOpenTurnDiff seam (rows stay pure data).
+      kind: "agent-run";
+      id: string;
+      createdAt: string;
+      turnId: TurnId;
+      state: AgentRunState;
+      queueLine: string | null;
+      workEntries: WorkLogEntry[];
+      pendingApproval: PendingApproval | null;
+      filesChanged: number | null;
     };
 
 export interface StableMessagesTimelineRowsState {
@@ -612,7 +645,7 @@ export function deriveMessagesTimelineRows(input: {
   activeTurnStartedAt: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
-}): MessagesTimelineRow[] {
+} & AgentRunRowInput): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
   const timelineMessages = input.timelineEntries.flatMap((entry) =>
     entry.kind === "message" ? [entry.message] : [],
@@ -759,6 +792,8 @@ export function deriveMessagesTimelineRows(input: {
   // completed chat does not end with a detached tool-log footer.
   flushPendingWorkGroup();
 
+  appendAgentRunRows(nextRows, input);
+
   if (input.worktreeSetup) {
     nextRows.push({
       kind: "worktree-setup",
@@ -807,6 +842,81 @@ export function deriveMessagesTimelineRows(input: {
 // The live turn starts at the most recent user message, so its header slots in
 // right after it. Absent any user message (degenerate transcripts) the header
 // leads the transcript so the "Working for" copy is never lost.
+// Groups per-turn tool work into additive Arc-style agent-run overlays. Existing
+// message/work rows are untouched: runs read work entries straight off the
+// timeline and attach the optional per-turn seams (approval gate, settled file
+// count) only when the caller feeds them.
+function appendAgentRunRows(
+  rows: MessagesTimelineRow[],
+  input: Pick<
+    Parameters<typeof deriveMessagesTimelineRows>[0],
+    "pendingApprovalByTurnId" | "turnStateByTurnId" | "turnQueueLineByTurnId" | "turnFileCountByTurnId"
+  >,
+): void {
+  const { pendingApprovalByTurnId, turnStateByTurnId, turnQueueLineByTurnId, turnFileCountByTurnId } =
+    input;
+  if (
+    !pendingApprovalByTurnId &&
+    !turnStateByTurnId &&
+    !turnQueueLineByTurnId &&
+    !turnFileCountByTurnId
+  ) {
+    return;
+  }
+  const entriesByTurnId = new Map<string, WorkLogEntry[]>();
+  for (const row of rows) {
+    const grouped = row.kind === "work" ? row.groupedEntries : undefined;
+    const collect = (entries: ReadonlyArray<WorkLogEntry> | undefined) => {
+      for (const entry of entries ?? []) {
+        if (entry.turnId === undefined || entry.turnId === null) continue;
+        const key = entry.turnId as string;
+        const existing = entriesByTurnId.get(key);
+        if (existing) {
+          existing.push(entry);
+        } else {
+          entriesByTurnId.set(key, [entry]);
+        }
+      }
+    };
+    collect(grouped);
+    if (row.kind === "message") {
+      collect(row.leadingWorkEntries);
+      collect(row.inlineWorkEntries);
+    }
+  }
+  const turnIds = new Set<string>();
+  for (const key of entriesByTurnId.keys()) turnIds.add(key);
+  for (const key of pendingApprovalByTurnId?.keys() ?? []) turnIds.add(key);
+  for (const key of turnStateByTurnId?.keys() ?? []) turnIds.add(key);
+  for (const key of turnQueueLineByTurnId?.keys() ?? []) turnIds.add(key);
+  for (const key of turnFileCountByTurnId?.keys() ?? []) turnIds.add(key);
+  for (const turnId of turnIds) {
+    const workEntries = entriesByTurnId.get(turnId) ?? [];
+    // No seam data and no work: nothing worth an overlay row.
+    if (
+      workEntries.length === 0 &&
+      !pendingApprovalByTurnId?.has(turnId) &&
+      !turnStateByTurnId?.has(turnId)
+    ) {
+      continue;
+    }
+    const pendingApproval = pendingApprovalByTurnId?.get(turnId) ?? null;
+    const state = turnStateByTurnId?.get(turnId) ?? (pendingApproval ? "running" : "settled");
+    rows.push({
+      kind: "agent-run",
+      id: `agent-run:${turnId}`,
+      createdAt: workEntries[0]?.createdAt ?? pendingApproval?.createdAt ?? new Date().toISOString(),
+      turnId: TurnId.makeUnsafe(turnId),
+      state,
+      queueLine: turnQueueLineByTurnId?.get(turnId) ?? null,
+      workEntries,
+      pendingApproval,
+      filesChanged:
+        state === "settled" ? (turnFileCountByTurnId?.get(turnId) ?? null) : null,
+    });
+  }
+}
+
 function findLiveTurnHeaderInsertIndex(rows: ReadonlyArray<MessagesTimelineRow>): number {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index]!;
@@ -1270,6 +1380,19 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
     case "message-segment": {
       const bm = b as typeof a;
       return a.message === bm.message && a.segmentIndex === bm.segmentIndex;
+    }
+
+    case "agent-run": {
+      const bm = b as typeof a;
+      return (
+        a.createdAt === bm.createdAt &&
+        (a.turnId as string) === (bm.turnId as string) &&
+        a.state === bm.state &&
+        a.queueLine === bm.queueLine &&
+        a.pendingApproval === bm.pendingApproval &&
+        a.filesChanged === bm.filesChanged &&
+        workLogEntryArraysEqual(a.workEntries, bm.workEntries)
+      );
     }
   }
 }

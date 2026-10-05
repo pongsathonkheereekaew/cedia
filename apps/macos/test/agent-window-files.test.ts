@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, mkdir, readFile, symlink, writeFile, rm, truncate } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, symlink, writeFile, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -15,6 +15,66 @@ async function fixture() {
 }
 
 describe("Cedia Agent files service", () => {
+	it("serves an allowlisted image through an exact-path capability grant", async () => {
+		const root = await fixture();
+		const imagePath = join(root, "preview.png");
+		const otherImagePath = join(root, "other.png");
+		const service = createAgentFilesService();
+		try {
+			const png = Buffer.from("89504e470d0a1a0a", "hex");
+			await writeFile(imagePath, png);
+			await writeFile(otherImagePath, png);
+			const grant = await service.handle({}, "projects.createLocalFilePreviewGrant", { path: imagePath, cwd: root }) as {
+				grant: string;
+				expiresAt: string;
+			};
+			expect(grant.grant).toMatch(/^[0-9a-f-]{36}$/);
+			expect(Date.parse(grant.expiresAt)).toBeGreaterThan(Date.now());
+			const loaded = await service.handle({}, "projects.readLocalFilePreview", {
+				path: imagePath,
+				cwd: root,
+				grant: grant.grant,
+			}) as { path: string; mimeType: string; dataBase64: string; version: string };
+			expect(loaded.path).toBe(await realpath(imagePath));
+			expect(loaded.mimeType).toBe("image/png");
+			expect(loaded.dataBase64).toBe(png.toString("base64"));
+			expect(loaded.version).toMatch(/^sha256:[0-9a-f]{64}$/);
+			await expect(service.handle({}, "projects.readLocalFilePreview", {
+				path: otherImagePath,
+				cwd: root,
+				grant: grant.grant,
+			})).rejects.toMatchObject({ code: "AGENT_FILES_PREVIEW_GRANT" });
+			await expect(service.handle({}, "projects.createLocalFilePreviewGrant", {
+				path: join(root, "README.md"),
+				cwd: root,
+			})).rejects.toMatchObject({ code: "AGENT_FILES_PREVIEW_TYPE" });
+		} finally {
+			service.dispose();
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects preview files outside the workspace and over the binary size cap", async () => {
+		const root = await fixture();
+		const service = createAgentFilesService();
+		const outside = await mkdtemp(join(tmpdir(), "cedia-files-preview-outside-"));
+		try {
+			const outsideImage = join(outside, "secret.png");
+			await writeFile(outsideImage, Buffer.from("png"));
+			await expect(service.handle({}, "projects.createLocalFilePreviewGrant", { path: outsideImage, cwd: root })).rejects.toMatchObject({ code: "AGENT_FILES_PREVIEW_PATH" });
+			await symlink(outsideImage, join(root, "escaped.png"));
+			await expect(service.handle({}, "projects.createLocalFilePreviewGrant", { path: join(root, "escaped.png"), cwd: root })).rejects.toMatchObject({ code: "AGENT_FILES_PREVIEW_PATH" });
+			const largeImage = join(root, "large.png");
+			await writeFile(largeImage, Buffer.alloc(1));
+			await truncate(largeImage, 8 * 1024 * 1024 + 1);
+			await expect(service.handle({}, "projects.createLocalFilePreviewGrant", { path: largeImage, cwd: root })).rejects.toMatchObject({ code: "AGENT_FILES_PREVIEW_CAPACITY" });
+		} finally {
+			service.dispose();
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
 	it("lists the workspace tree and reads normalized text with a byte version", async () => {
 		const root = await fixture();
 		const service = createAgentFilesService();

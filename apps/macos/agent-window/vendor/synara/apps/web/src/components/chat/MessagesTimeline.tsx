@@ -4,8 +4,10 @@
 // Exports: MessagesTimeline
 
 import {
+  type ApprovalRequestId,
   type EditorId,
   type MessageId,
+  type ProviderApprovalDecision,
   type ProviderMentionReference,
   type ResolvedKeybindingsConfig,
   ThreadId,
@@ -37,6 +39,7 @@ import {
   formatClockDuration,
   formatClockElapsed,
   isFileChangeWorkLogEntry,
+  type PendingApproval,
   type WorkLogEntry,
 } from "../../session-logic";
 import {
@@ -109,8 +112,8 @@ import {
   computeStableMessagesTimelineRows,
   deriveMessagesTimelineRows,
   findLastLiveWorkGroupId,
-  MAX_VISIBLE_WORK_LOG_ENTRIES,
   planWorkEntryRenderChunks,
+  type AgentRunState,
   type CollapsedTurnChunk,
   type CollapsedTurnItem,
   type MessagesTimelineRow,
@@ -121,6 +124,7 @@ import {
 } from "./MessagesTimeline.logic";
 import { summarizeToolCallGroup } from "./toolCallGroup.logic";
 import { ToolCallGroupSummaryRow } from "./ToolCallGroupSummaryRow";
+import { AgentRunTimelineRow } from "./AgentRunTimelineRow";
 import { useTailAnchorScroll } from "./useTailAnchorScroll";
 import { useTimelineRowOverlapGuard } from "./useTimelineRowOverlapGuard";
 import {
@@ -451,6 +455,23 @@ interface MessagesTimelineProps {
   nowIso?: string;
   expandedWorkGroups?: Record<string, boolean>;
   onToggleWorkGroup?: (groupId: string) => void;
+  /** Pending approvals keyed by turn id; feeds the agent-run approval gate card. */
+  pendingApprovalByTurnId?: ReadonlyMap<string, PendingApproval>;
+  /** Per-turn agent-run state, queue line, and settled file count (all keyed by turn id). */
+  turnStateByTurnId?: ReadonlyMap<string, AgentRunState>;
+  turnQueueLineByTurnId?: ReadonlyMap<string, string | null>;
+  turnFileCountByTurnId?: ReadonlyMap<string, number>;
+  /** Open state for agent-run rows, keyed by turn id (follows expandedWorkGroupsState pattern). */
+  agentRunOpenByTurnId?: Record<string, boolean>;
+  /** Toggle an agent-run row's expansion. */
+  onToggleAgentRun?: (turnId: TurnId) => void;
+  /** Respond to an agent-run approval gate (same shape as the composer approval card). */
+  onRespondToAgentRunApproval?: (
+    requestId: ApprovalRequestId,
+    decision: ProviderApprovalDecision,
+    lifecycleGeneration?: string,
+    requestKind?: PendingApproval["requestKind"],
+  ) => Promise<void>;
   onOpenAgentActivity?: (activityId: string) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   onOpenThread?: (threadId: ThreadId) => void;
@@ -541,6 +562,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   nowIso,
   expandedWorkGroups,
   onToggleWorkGroup,
+  pendingApprovalByTurnId: pendingApprovalByTurnIdProp,
+  turnStateByTurnId: turnStateByTurnIdProp,
+  turnQueueLineByTurnId: turnQueueLineByTurnIdProp,
+  turnFileCountByTurnId: turnFileCountByTurnIdProp,
+  agentRunOpenByTurnId: agentRunOpenByTurnIdProp,
+  onToggleAgentRun,
+  onRespondToAgentRunApproval,
   onOpenAgentActivity,
   onOpenTurnDiff,
   onOpenThread,
@@ -548,8 +576,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
   onUndoTurnFiles,
-  onEditUserMessage,
   onRespondToAsyncUserInput,
+  onEditUserMessage,
   editableUserMessageId,
   activeTurnId,
   isRevertingCheckpoint,
@@ -589,6 +617,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const worktreeSetupPendingAction = worktreeSetupPendingActionProp ?? null;
   const followLiveOutput = followLiveOutputProp ?? false;
   const enteringUserMessageIds = enteringUserMessageIdsProp ?? EMPTY_MESSAGE_ID_SET;
+  const pendingApprovalByTurnId = pendingApprovalByTurnIdProp ?? null;
+  const turnStateByTurnId = turnStateByTurnIdProp ?? null;
+  const turnQueueLineByTurnId = turnQueueLineByTurnIdProp ?? null;
+  const turnFileCountByTurnId = turnFileCountByTurnIdProp ?? null;
   const tailAnchorMessageId = tailAnchorMessageIdProp ?? null;
   const forkSource = forkSourceProp ?? null;
   const isTemporaryThread = isTemporaryThreadProp ?? false;
@@ -667,6 +699,19 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     {},
   );
   const expandedWorkGroupsState = expandedWorkGroups ?? localExpandedWorkGroups;
+  const [localAgentRunOpen, setLocalAgentRunOpen] = useState<Record<string, boolean>>({});
+  const agentRunOpenState = agentRunOpenByTurnIdProp ?? localAgentRunOpen;
+  const handleToggleAgentRun = useCallback(
+    (turnId: TurnId) => {
+      if (onToggleAgentRun) {
+        onToggleAgentRun(turnId);
+        return;
+      }
+      const key = turnId as string;
+      setLocalAgentRunOpen((current) => ({ ...current, [key]: !(current[key] ?? false) }));
+    },
+    [onToggleAgentRun],
+  );
   const handleToggleWorkGroup = useCallback(
     (groupId: string) => {
       if (onToggleWorkGroup) {
@@ -764,6 +809,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         activeTurnStartedAt,
         turnDiffSummaryByAssistantMessageId,
         revertTurnCountByUserMessageId,
+        ...(pendingApprovalByTurnId ? { pendingApprovalByTurnId } : {}),
+        ...(turnStateByTurnId ? { turnStateByTurnId } : {}),
+        ...(turnQueueLineByTurnId ? { turnQueueLineByTurnId } : {}),
+        ...(turnFileCountByTurnId ? { turnFileCountByTurnId } : {}),
       }),
     [
       timelineEntries,
@@ -774,6 +823,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeTurnStartedAt,
       turnDiffSummaryByAssistantMessageId,
       revertTurnCountByUserMessageId,
+      pendingApprovalByTurnId,
+      turnStateByTurnId,
+      turnQueueLineByTurnId,
+      turnFileCountByTurnId,
     ],
   );
   const rows = useStableRows(rawRows);
@@ -892,6 +945,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const enteringMessageRowIds = useMessageSendEnterAnimations(rows, enteringUserMessageIds);
   const timelineExtraData = useMemo(
     () => ({
+      agentRunOpenState,
       crossTaskOrigin,
       editingUserMessageId,
       enteringMessageRowIds,
@@ -910,6 +964,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       toolGroupSummaryOverrides,
     }),
     [
+      agentRunOpenState,
       crossTaskOrigin,
       editingUserMessageId,
       enteringMessageRowIds,
@@ -1398,7 +1453,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           });
           const cappedRenderPlan = capOpenWorkEntryRenderChunks(plannedRenderChunks, {
             expanded: isExpanded,
-            maxVisibleEntries: MAX_VISIBLE_WORK_LOG_ENTRIES,
+            maxVisibleEntries: MAX_VISIBLE_INLINE_TOOL_ENTRIES,
             keep: "last",
           });
           const renderChunks = cappedRenderPlan.chunks;
@@ -1446,10 +1501,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               </div>
             );
           }
-          const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
+          const hasOverflow = groupedEntries.length > MAX_VISIBLE_INLINE_TOOL_ENTRIES;
           const visibleEntries =
             hasOverflow && !isExpanded
-              ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
+              ? groupedEntries.slice(-MAX_VISIBLE_INLINE_TOOL_ENTRIES)
               : groupedEntries;
           const hiddenCount = groupedEntries.length - visibleEntries.length;
           const showOverflowToggle = hasOverflow;
@@ -2536,6 +2591,39 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           </div>
         </DisclosureRegion>
       )}
+      {row.kind === "agent-run" &&
+        (() => {
+          const turnKey = row.turnId as string;
+          const isOpen = agentRunOpenState[turnKey] ?? row.state === "running";
+          return (
+            <AgentRunTimelineRow
+              turnId={row.turnId}
+              state={row.state}
+              queueLine={row.queueLine}
+              workEntries={row.workEntries}
+              pendingApproval={row.pendingApproval}
+              {...(onRespondToAgentRunApproval ? { onRespondApproval: onRespondToAgentRunApproval } : {})}
+              {...(row.filesChanged !== null
+                ? {
+                    resultSummary: {
+                      filesChanged: row.filesChanged,
+                      onReview: () => onOpenTurnDiff(row.turnId),
+                    },
+                  }
+                : { resultSummary: null })}
+              open={isOpen}
+              onToggle={() => handleToggleAgentRun(row.turnId)}
+              followLive={activeTurnInProgress || isWorking}
+              chatMetaFontSizePx={appTypographyScale.chatMetaPx}
+              textFontSizePx={normalizedChatFontSizePx}
+              markdownCwd={markdownCwd}
+              timestampFormat={timestampFormat}
+              onImageExpand={onImageExpand}
+              {...(onOpenAgentActivity ? { onOpenAgentActivity } : {})}
+              {...(onOpenAutomation ? { onOpenAutomation } : {})}
+            />
+          );
+        })()}
     </div>
   );
 

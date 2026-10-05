@@ -7,12 +7,14 @@ import {
   isSupportedLocalImagePath,
   isSupportedLocalPreviewFilePath,
 } from "@synara/shared/localPreviewFiles";
-import { type MouseEvent as ReactMouseEvent } from "react";
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useCopyPathToClipboard } from "~/hooks/useCopyToClipboard";
 import {
+  CheckIcon,
   ChevronDownIcon,
   CopyIcon,
   EllipsisIcon,
+  EyeOpenIcon,
   MessageCircleIcon,
   PencilIcon,
 } from "~/lib/icons";
@@ -31,7 +33,18 @@ import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
 import { IconButton } from "./ui/icon-button";
 import { Menu, MenuItem, MenuTrigger } from "./ui/menu";
 
-type DiffRenderMode = "stacked" | "split";
+export type DiffRenderMode = "stacked" | "split";
+
+/**
+ * A local inline-review draft. The diff surface deliberately only emits this
+ * data to its caller; publishing it to a forge remains a workflow concern.
+ */
+export interface DiffInlineCommentDraft {
+  path: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+  body: string;
+}
 
 export interface DiffFileChatActions {
   onReferenceInChat: (filePath: string) => void;
@@ -136,10 +149,18 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
   onToggleFileCollapsed: (fileKey: string) => void;
   chatActions?: DiffFileChatActions | undefined;
   onBlameLine?: ((target: DiffLineBlameTarget) => void) | undefined;
+  onAddInlineComment?: ((comment: DiffInlineCommentDraft) => void) | undefined;
+  isFileViewed?: boolean;
+  onToggleFileViewed?: ((filePath: string) => void) | undefined;
 }) {
   const filePath = resolveFileDiffPath(props.fileDiff);
   const fileKey = buildFileDiffRenderKey(props.fileDiff);
   const { chatActions, isCollapsed } = props;
+  const [inlineComment, setInlineComment] = useState<{
+    line: number;
+    side: "LEFT" | "RIGHT";
+  } | null>(null);
+  const [inlineBody, setInlineBody] = useState("");
   // A deleted file no longer exists in the working tree, binary previews
   // (images, PDFs) are rejected by the text read, and symlinks or submodule
   // entries cannot be written as the text shown here.
@@ -153,6 +174,20 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
     !isCollapsed && props.workspaceRoot !== null && isSupportedLocalImagePath(filePath);
   const renderHeaderTrailing = () => (
     <>
+      {props.onToggleFileViewed ? (
+        <span data-diff-header-menu="true" className="inline-flex">
+          <IconButton
+            variant={props.isFileViewed ? "subtle" : "ghost"}
+            size="icon-xs"
+            label={props.isFileViewed ? "Mark file as unviewed" : "Mark file as viewed"}
+            title={props.isFileViewed ? "Mark file as unviewed" : "Mark file as viewed"}
+            aria-pressed={props.isFileViewed ?? false}
+            onClick={() => props.onToggleFileViewed?.(filePath)}
+          >
+            {props.isFileViewed ? <CheckIcon className="size-3.5" aria-hidden /> : <EyeOpenIcon className="size-3.5" aria-hidden />}
+          </IconButton>
+        </span>
+      ) : null}
       {chatActions ? (
         <span data-diff-header-menu="true" className="inline-flex">
           <DiffFileHeaderActionsMenu
@@ -166,9 +201,18 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
       <DiffFileCollapseChevron collapsed={isCollapsed} />
     </>
   );
-  const { onBlameLine } = props;
-  const handleLineClick = onBlameLine
+  const { onAddInlineComment, onBlameLine } = props;
+  const handleLineClick = onAddInlineComment || onBlameLine
     ? (line: DiffLineClickProps) => {
+        const lineNumber = Number.isInteger(line.lineNumber) && line.lineNumber > 0 ? line.lineNumber : null;
+        if (onAddInlineComment && lineNumber !== null) {
+          setInlineComment({
+            line: lineNumber,
+            side: line.lineType === "change-deletion" || line.annotationSide === "deletions" ? "LEFT" : "RIGHT",
+          });
+          return;
+        }
+        if (!onBlameLine) return;
         // Deletion lines blame the tree that still has the content: for a
         // rename that is the old path, since the new name does not exist at
         // the blame revision.
@@ -216,6 +260,54 @@ const DiffPanelFileRow = function DiffPanelFileRow(props: {
         renderHeaderTrailing={renderHeaderTrailing}
         onLineClick={handleLineClick}
       />
+      {inlineComment ? (
+        <form
+          className="mt-2 rounded-md border border-border/70 bg-[var(--color-background-surface)] p-2.5"
+          aria-label={`Draft comment on ${filePath} line ${inlineComment.line}`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const body = inlineBody.trim();
+            if (!body || !onAddInlineComment) return;
+            onAddInlineComment({
+              path: filePath,
+              line: inlineComment.line,
+              side: inlineComment.side,
+              body,
+            });
+            setInlineComment(null);
+            setInlineBody("");
+          }}
+        >
+          <textarea
+            value={inlineBody}
+            autoFocus
+            rows={3}
+            placeholder="Leave a review comment…"
+            aria-label={`Comment on ${filePath} line ${inlineComment.line}`}
+            className="w-full resize-y rounded border border-border bg-background px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-ring"
+            onChange={(event) => setInlineBody(event.target.value)}
+          />
+          <div className="mt-2 flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+              onClick={() => {
+                setInlineComment(null);
+                setInlineBody("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={inlineBody.trim().length === 0}
+              className="rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+            >
+              Save draft
+            </button>
+          </div>
+        </form>
+      ) : null}
       {shouldPreviewImage ? (
         <LocalImagePreview
           src={filePath}
@@ -239,6 +331,9 @@ export const DiffPanelFileList = function DiffPanelFileList(props: {
   onToggleFileCollapsed: (fileKey: string) => void;
   chatActions?: DiffFileChatActions | undefined;
   onBlameLine?: ((target: DiffLineBlameTarget) => void) | undefined;
+  onAddInlineComment?: ((comment: DiffInlineCommentDraft) => void) | undefined;
+  viewedFiles?: ReadonlySet<string> | undefined;
+  onToggleFileViewed?: ((filePath: string) => void) | undefined;
 }) {
   if (props.renderableFiles.length === 0) {
     return (
@@ -269,6 +364,9 @@ export const DiffPanelFileList = function DiffPanelFileList(props: {
             onToggleFileCollapsed={props.onToggleFileCollapsed}
             chatActions={props.chatActions}
             onBlameLine={props.onBlameLine}
+            onAddInlineComment={props.onAddInlineComment}
+            isFileViewed={props.viewedFiles?.has(resolveFileDiffPath(fileDiff)) ?? false}
+            onToggleFileViewed={props.onToggleFileViewed}
           />
         );
       })}

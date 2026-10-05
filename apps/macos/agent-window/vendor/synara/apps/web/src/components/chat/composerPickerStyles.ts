@@ -105,14 +105,18 @@ export const CHAT_CONTENT_CARD_CLASS_NAME = "chat-content-card relative z-[15] o
  *  `CHAT_CONTENT_CARD_CLASS_NAME` with their own background token instead. */
 export const CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME = `${CHAT_BACKGROUND_CLASS_NAME} ${CHAT_CONTENT_CARD_CLASS_NAME}`;
 
-/** Clipped full-height inset shell for routes that already own an outer card wrapper.
- *  Default RouteInsetSurface card routes use an unclipped inset so seam shadows can bleed. */
+/** Clipped inset shell for routes that already own an outer card wrapper.
+ *  Default RouteInsetSurface card routes use an unclipped inset so seam shadows can bleed.
+ *  h-full (not h-dvh): every route renders inside the route card's flex-1 column, so a
+ *  viewport-height shell would overflow it and push the status bar below the fold. */
 export const CHAT_ROUTE_INSET_SHELL_CLASS_NAME =
-  "h-dvh min-h-0 overflow-hidden overscroll-y-none text-foreground";
+  "h-full min-h-0 overflow-hidden overscroll-y-none text-foreground";
 
-/** Outer viewport shell for the split/single thread content wrapper that carries the card. */
+/** Outer shell for the split/single thread content wrapper that carries the card.
+ *  h-full (not h-dvh) for the same reason: the status bar owns its own row at the
+ *  foot of the route card, and a viewport-height shell would push it off-screen. */
 export const CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME =
-  "flex h-dvh min-h-0 min-w-0 flex-1 overflow-hidden";
+  "flex h-full min-h-0 min-w-0 flex-1 overflow-hidden";
 
 /** Horizontal padding shared by the transcript and composer columns. */
 export const CHAT_COLUMN_GUTTER_CLASS_NAME =
@@ -120,8 +124,12 @@ export const CHAT_COLUMN_GUTTER_CLASS_NAME =
 /** Centers the chat column and applies the shared max width. */
 export const CHAT_COLUMN_FRAME_CLASS_NAME = `mx-auto w-full min-w-0 ${COMPOSER_MAX_WIDTH_CLASS_NAME}`;
 
-/** Max width for the composer shell only; outer wrappers stay full width for shadow bleed. */
-export const COMPOSER_COLUMN_FRAME_CLASS_NAME = CHAT_COLUMN_FRAME_CLASS_NAME;
+/** Max width for the composer shell only; outer wrappers stay full width for shadow bleed.
+ *  Mockup cutover: the composer is a wide (~42rem) floating pill centered over the
+ *  transcript while the transcript keeps the full chat width, so this no longer
+ *  aliases the transcript frame. The footer tier layout demotes gracefully if the
+ *  toolbar ever overflows this width. */
+export const COMPOSER_COLUMN_FRAME_CLASS_NAME = "mx-auto w-full min-w-0 max-w-[42rem]";
 
 /**
  * Frame for rows stacked above the composer (queued steer/queue rows, live file

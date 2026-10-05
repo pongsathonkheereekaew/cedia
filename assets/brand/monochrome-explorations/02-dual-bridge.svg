@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">CEDIA dual bridge concept</title>
+  <g fill="none" stroke="#111" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M108 37H72c-20 0-35 15-35 35v112c0 20 15 35 35 35h36"/>
+    <path d="M148 37h36c20 0 35 15 35 35v112c0 20-15 35-35 35h-36"/>
+    <path d="M80 91h96"/>
+    <path d="M80 165h96"/>
+  </g>
+</svg>

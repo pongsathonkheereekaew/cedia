@@ -37,7 +37,7 @@ interface ComposerColumnFrameProps {
   className?: string;
 }
 
-/** Centers the composer column at the shared chat max width. */
+/** Centers the composer column at the wide floating-pill width (mockup cutover). */
 export const ComposerColumnFrame = function ComposerColumnFrame({
   children,
   className,

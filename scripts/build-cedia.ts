@@ -221,7 +221,7 @@ if (portable) {
   await cp(join(root, "docs/upstream-notices"), join(runtime, "notices"), { recursive: true });
 }
 // Code-OSS Electron packaging and the DMG builder both consume this icon.
-const brandIcon = join(root, "assets/brand/cedia-terminal-d-v1/cedia.icns");
+const brandIcon = join(root, "assets/brand/bloub-nuage-v1/cedia.icns");
 await mkdir(join(dist, "brand"), { recursive: true });
 await cp(brandIcon, join(dist, "brand/cedia.icns"));
 if (process.argv.includes("--desktop")) {

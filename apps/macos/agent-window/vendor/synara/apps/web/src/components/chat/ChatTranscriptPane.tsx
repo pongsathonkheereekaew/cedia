@@ -35,6 +35,13 @@ import { AgentActivityDetailView } from "./AgentActivityDetailView";
 import type { AgentActivityDetail } from "./agentActivity.logic";
 
 interface ChatTranscriptPaneProps {
+  pendingApprovalByTurnId?: ComponentProps<typeof MessagesTimeline>["pendingApprovalByTurnId"];
+  turnStateByTurnId?: ComponentProps<typeof MessagesTimeline>["turnStateByTurnId"];
+  turnQueueLineByTurnId?: ComponentProps<typeof MessagesTimeline>["turnQueueLineByTurnId"];
+  turnFileCountByTurnId?: ComponentProps<typeof MessagesTimeline>["turnFileCountByTurnId"];
+  agentRunOpenByTurnId?: ComponentProps<typeof MessagesTimeline>["agentRunOpenByTurnId"];
+  onToggleAgentRun?: ComponentProps<typeof MessagesTimeline>["onToggleAgentRun"];
+  onRespondToAgentRunApproval?: ComponentProps<typeof MessagesTimeline>["onRespondToAgentRunApproval"];
   activeThreadId: string;
   activeTurnId?: TurnId | null;
   activeTurnInProgress: boolean;
@@ -171,6 +178,13 @@ export function ChatTranscriptPane({
   editableUserMessageId,
   onScrollToBottom,
   onToggleWorkGroup,
+  pendingApprovalByTurnId,
+  turnStateByTurnId,
+  turnQueueLineByTurnId,
+  turnFileCountByTurnId,
+  agentRunOpenByTurnId,
+  onToggleAgentRun,
+  onRespondToAgentRunApproval,
   resolvedTheme,
   revertTurnCountByUserMessageId,
   scrollButtonVisible,
@@ -314,9 +328,15 @@ export function ChatTranscriptPane({
             }
             {...(expandedWorkGroups ? { expandedWorkGroups } : {})}
             {...(onToggleWorkGroup ? { onToggleWorkGroup } : {})}
+            {...(pendingApprovalByTurnId ? { pendingApprovalByTurnId } : {})}
+            {...(turnStateByTurnId ? { turnStateByTurnId } : {})}
+            {...(turnQueueLineByTurnId ? { turnQueueLineByTurnId } : {})}
+            {...(turnFileCountByTurnId ? { turnFileCountByTurnId } : {})}
+            {...(agentRunOpenByTurnId ? { agentRunOpenByTurnId } : {})}
+            {...(onToggleAgentRun ? { onToggleAgentRun } : {})}
+            {...(onRespondToAgentRunApproval ? { onRespondToAgentRunApproval } : {})}
           />
         )}
-
         {!agentActivityDetail ? (
           <div
             className={cn(

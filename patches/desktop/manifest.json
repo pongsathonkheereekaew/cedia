@@ -76,6 +76,10 @@
     {
       "file": "0063-cedia-dirty-editor-count.patch",
       "sha256": "28c0ebca4dce028e068b047978290688e89b985398ad949dd332d242f75f7d9d"
+    },
+    {
+      "file": "0064-cedia-ide-chrome-alignment.patch",
+      "sha256": "cb4b1e9c08942f196933497f9970a559f5814ef2459864805757ca76643b5329"
     }
   ],
   "removals": [

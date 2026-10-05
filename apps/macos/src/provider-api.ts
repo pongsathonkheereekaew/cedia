@@ -94,7 +94,7 @@ export interface CediaTaskViewProviderMethods {
 	openAgentsWindow(): void;
 	showIde(): void;
 	revealAgentSurface(): Promise<void>;
-	captureIdeLayout(): IdeLayoutSnapshot;
+	captureIdeLayout(auxiliaryBarVisible?: boolean): IdeLayoutSnapshot;
 	applyWorkbenchAppearance(mode: "agents" | "ide"): Promise<void>;
 	reapplyWorkbenchAppearance(): void;
 	inAgentsWindow(): boolean;

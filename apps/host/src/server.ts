@@ -17,6 +17,8 @@ import { SettingsStore } from "./settings.ts";
 import { EnrollmentStore } from "./enrollment.ts";
 import { startRemoteGateway, type StartedRemoteGateway } from "./remote-gateway.ts";
 import { DraftStore } from "./drafts.ts";
+import { createForgeReview, defaultForgeCommandRunner, type ForgeReviewService } from "./forge-review.ts";
+import { createForgeReviewWorkflow, type ForgeReviewWorkflowService } from "./forge-review-workflow.ts";
 
 /** What a started host hands back: the live objects plus the lifetime hooks.
  *
@@ -81,6 +83,8 @@ export async function startHostServer(options: Omit<HostOptions, "store"> & {
       editors: EditorConnections;
       remote?: RemoteConnection;
       git: HostGitService;
+      forgeReview: ForgeReviewService;
+      forgeReviewWorkflow?: ForgeReviewWorkflowService;
       ompCapabilities: (expectedRevision?: string) => Promise<import("../../../packages/protocol/src/index.ts").HostOmpCapabilitySnapshot>;
       ompSettingsKeys: () => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("../../../packages/protocol/src/index.ts").OmpSettingsKeysSnapshot>>;
       ompSettingsValue: (path: string) => Promise<import("../../../packages/protocol/src/index.ts").HostOmpSettingsAnswer<import("../../../packages/protocol/src/index.ts").OmpSettingsValue>>;
@@ -109,6 +113,11 @@ export async function startHostServer(options: Omit<HostOptions, "store"> & {
       artifacts: new ArtifactStore(options.stateDir),
       editors,
       git: createHostGit({ store }),
+      forgeReview: createForgeReview({
+        store,
+        githubHosts: (process.env.CEDIA_GITHUB_HOSTS ?? "").split(",").map(value => value.trim()).filter(Boolean),
+        gitlabHosts: (process.env.CEDIA_GITLAB_HOSTS ?? "").split(",").map(value => value.trim()).filter(Boolean),
+      }),
       ompCapabilities: (expectedRevision?: string) => host!.ompCapabilitySnapshot(expectedRevision),
       ompSettingsKeys: () => host!.ompSettingsKeys(),
       ompSettingsValue: (path: string) => host!.ompSettingsValue(path),
@@ -130,6 +139,11 @@ export async function startHostServer(options: Omit<HostOptions, "store"> & {
       drafts: new DraftStore(store),
       stateDir: options.stateDir,
     };
+    extras.forgeReviewWorkflow = createForgeReviewWorkflow({
+      store,
+      review: extras.forgeReview,
+      runner: defaultForgeCommandRunner,
+    });
     const router = createRouter(host, auth, extras);
     remote = new RemoteConnection(options.stateDir, auth, router);
     extras.remote = remote;

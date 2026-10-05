@@ -8,10 +8,10 @@ import { capabilityState, isCapabilityVisible, type HostCapability } from "./cap
 export const SETTINGS_SECTION_IDS = [
   // Cedia §10 item 60 keeps only backed sections: the general panel, notification
   // and behavior rows, the read-only keybindings sheet (editing lands with
-  // §10 item 57), models, providers, system tools, and archived threads, plus the
-  // local profile editors (name/handle/avatar persist in localStorage, no stats
-  // RPC). Every other section id is gone, so old `?section=` deep links normalize
-  // to general.
+  // §10 item 57), providers, system tools, and archived threads. Generic model
+  // and profile destinations remain in the route vocabulary only for migration;
+  // their old links resolve to an owner-backed destination instead of rendering
+  // a local-looking editor with no Cedia account owner.
   "general",
   "profile",
   "appearance",
@@ -89,7 +89,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     id: "appearance",
     group: "general",
     label: "Appearance",
-    description: "Customize the theme, typography, density, and time format.",
+    description: "Keep Cedia's shared chrome solid while tuning density, width, typography, and time format.",
     icon: "color-palette",
     eyebrow: "Visual language",
   },
@@ -120,8 +120,8 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   {
     id: "providers",
     group: "ai-omp",
-    label: "Agent providers",
-    description: "Choose visible coding agents and manage their installed CLI tools.",
+    label: "Providers & models",
+    description: "Manage OMP provider accounts and inspect the live model catalog.",
     icon: "puzzle",
     eyebrow: "Coding agents",
   },
@@ -129,7 +129,7 @@ export const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     id: "models",
     group: "ai-omp",
     label: "Models & writing",
-    description: "Choose the model used for Git writing and add custom model slugs.",
+    description: "Legacy provider model settings are now represented by the live OMP catalog.",
     icon: "brain",
     eyebrow: "Model configuration",
   },
@@ -199,6 +199,17 @@ export const SETTINGS_SECTION_CAPABILITY_IDS: Readonly<Partial<Record<SettingsSe
 };
 
 /**
+ * Compatibility-only destinations. The old generic model editor was backed by provider CLIs
+ * that Cedia does not own, so the id stays in the route contract but is never offered in UI.
+ */
+const HIDDEN_SETTINGS_SECTION_IDS: ReadonlySet<SettingsSectionId> = new Set(["models", "profile"]);
+
+const LEGACY_SETTINGS_SECTION_ALIASES: Readonly<Partial<Record<SettingsSectionId, SettingsSectionId>>> = {
+  models: "providers",
+  profile: "general",
+};
+
+/**
  * Whether a settings destination may be offered.
  *
  * An `integration_missing` row is absent from the working UI, exactly like the sidebar's
@@ -209,6 +220,9 @@ export function settingsSectionVisible(
   id: SettingsSectionId,
   capabilities: readonly HostCapability[] | undefined,
 ): boolean {
+  if (HIDDEN_SETTINGS_SECTION_IDS.has(id)) {
+    return false;
+  }
   const capabilityId = SETTINGS_SECTION_CAPABILITY_IDS[id];
   return isCapabilityVisible(capabilityState(capabilities, capabilityId));
 }
@@ -230,6 +244,7 @@ export function resolveSettingsSection(
   value: unknown,
   capabilities: readonly HostCapability[] | undefined,
 ): SettingsSectionId {
-  const requested = normalizeSettingsSection(value);
+  const normalized = normalizeSettingsSection(value);
+  const requested = LEGACY_SETTINGS_SECTION_ALIASES[normalized] ?? normalized;
   return settingsSectionVisible(requested, capabilities) ? requested : firstVisibleSettingsSection(capabilities);
 }

@@ -12,7 +12,9 @@ import {
 } from "./chat/composerPickerStyles";
 import { SidebarInset } from "./ui/sidebar";
 
-const CARD_SURFACE_ROUTE_INSET_CLASS_NAME = "h-dvh min-h-0 overscroll-y-none text-foreground";
+// h-full (not h-dvh): the route renders inside the route card column, so a viewport-height
+// shell would overflow it and push the status bar below the fold.
+const CARD_SURFACE_ROUTE_INSET_CLASS_NAME = "h-full min-h-0 overscroll-y-none text-foreground";
 
 // Default route surfaces keep SidebarInset as the sidebar peer while letting the
 // inner seam shadow bleed past the unclipped outer inset.

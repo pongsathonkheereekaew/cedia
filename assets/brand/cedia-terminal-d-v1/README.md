@@ -1,3 +1,9 @@
+# Superseded by bloub-nuage-v1
+
+Superseded in October 2026 by [`bloub-nuage-v1`](../bloub-nuage-v1/README.md). Retained as historical source only; app and package configuration now reference `bloub-nuage-v1`.
+
+---
+
 # Cedia Mark A — approved reference
 
 The owner approved option A on September 26, 2026. `approved-reference-board.png` is the exact

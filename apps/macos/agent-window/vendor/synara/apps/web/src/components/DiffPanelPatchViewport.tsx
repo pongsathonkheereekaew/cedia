@@ -7,12 +7,15 @@ import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { memo } from "react";
 import { cn } from "~/lib/utils";
 import type { RenderablePatch } from "~/lib/diffRendering";
-import { DiffPanelFileList, type DiffFileChatActions } from "./DiffPanelFileList";
+import {
+  DiffPanelFileList,
+  type DiffFileChatActions,
+  type DiffInlineCommentDraft,
+  type DiffRenderMode,
+} from "./DiffPanelFileList";
 import type { DiffLineBlameTarget } from "./DiffLineBlamePopover";
 import { DiffPanelLoadingState } from "./DiffPanelShell";
 import { PanelStateMessage } from "./chat/PanelStateMessage";
-
-type DiffRenderMode = "stacked" | "split";
 
 export const DiffPanelPatchViewport = memo(
   function DiffPanelPatchViewport(props: {
@@ -26,6 +29,9 @@ export const DiffPanelPatchViewport = memo(
     onToggleFileCollapsed: (fileKey: string) => void;
     chatActions?: DiffFileChatActions | undefined;
     onBlameLine?: ((target: DiffLineBlameTarget) => void) | undefined;
+    onAddInlineComment?: ((comment: DiffInlineCommentDraft) => void) | undefined;
+    viewedFiles?: ReadonlySet<string> | undefined;
+    onToggleFileViewed?: ((filePath: string) => void) | undefined;
     isLoading: boolean;
     hasNoChanges: boolean;
     error: string | null;
@@ -86,6 +92,9 @@ export const DiffPanelPatchViewport = memo(
             onToggleFileCollapsed={props.onToggleFileCollapsed}
             chatActions={props.chatActions}
             onBlameLine={props.onBlameLine}
+            onAddInlineComment={props.onAddInlineComment}
+            viewedFiles={props.viewedFiles}
+            onToggleFileViewed={props.onToggleFileViewed}
           />
         </div>
       );
@@ -121,6 +130,9 @@ export const DiffPanelPatchViewport = memo(
       previous.onToggleFileCollapsed === next.onToggleFileCollapsed &&
       previous.chatActions === next.chatActions &&
       previous.onBlameLine === next.onBlameLine &&
+      previous.onAddInlineComment === next.onAddInlineComment &&
+      previous.viewedFiles === next.viewedFiles &&
+      previous.onToggleFileViewed === next.onToggleFileViewed &&
       previous.isLoading === next.isLoading &&
       previous.hasNoChanges === next.hasNoChanges &&
       previous.error === next.error &&

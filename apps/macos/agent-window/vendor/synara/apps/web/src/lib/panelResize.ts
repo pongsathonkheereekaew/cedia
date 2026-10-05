@@ -16,6 +16,93 @@ import { notifyNativeSurfaceOcclusionChange } from "./nativeSurfaceOcclusion";
 // lets the right dock and split panes resize across a much wider range before the probe
 // stops the drag, while the overflow checks still prevent the composer from clipping.
 const COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX = 160;
+// The footer progressively hides labels and relocates its leading controls as
+// the composer narrows. A wide right-actions row measured at pointer-down is
+// therefore not a fixed lower bound: it can be hundreds of pixels wider than
+// the compact tier the drag will render. Keep only a compact-tier allowance in
+// the snapshot so a large model/review control row cannot pin the dock at its
+// starting width.
+const COMPOSER_COMPACT_MIN_RIGHT_ACTIONS_WIDTH_PX = 192;
+
+export interface ComposerWidthResizeSession {
+  /** Return whether a candidate panel width leaves the composer readable. */
+  shouldAcceptWidth: (nextWidth: number) => boolean;
+  /** Keep a fast drag from freezing when one pointer event jumps past the limit. */
+  clampWidth?: (nextWidth: number) => number;
+  /** Reserved for callers that need to release drag-local resources. */
+  dispose?: () => void;
+}
+
+/**
+ * Snapshot the composer's fixed-width constraints at pointer-down time.
+ *
+ * `canComposerHandlePanelWidth` is intentionally strict and is still used by
+ * embedded split panes. A right-dock drag, however, calls its width guard once
+ * per animation frame. Re-querying every form, computed style and bounding box
+ * there forces a synchronous layout on every pointermove, which makes a heavy
+ * review/diff pane feel several frames behind the pointer. The fixed controls
+ * do not change during one drag, so derive the minimum usable composer width
+ * once and project the chat viewport linearly as the dock grows.
+ */
+export function createComposerWidthResizeSession(input: {
+  currentPanelWidth: number;
+  paneScopeId?: string;
+}): ComposerWidthResizeSession {
+  const paneScopeId = input.paneScopeId ?? SINGLE_CHAT_PANE_SCOPE_ID;
+  const composerForm = findComposerForm(paneScopeId);
+  if (!composerForm) {
+    return { shouldAcceptWidth: () => true };
+  }
+
+  const composerViewport = findNearestMeasurableAncestor(composerForm);
+  if (!composerViewport) {
+    return { shouldAcceptWidth: () => true };
+  }
+
+  const viewportStyle = window.getComputedStyle(composerViewport);
+  const viewportPaddingLeft = Number.parseFloat(viewportStyle.paddingLeft) || 0;
+  const viewportPaddingRight = Number.parseFloat(viewportStyle.paddingRight) || 0;
+  const viewportContentWidth = Math.max(
+    0,
+    composerViewport.clientWidth - viewportPaddingLeft - viewportPaddingRight,
+  );
+  const composerRightActions = composerForm.querySelector<HTMLElement>(
+    "[data-chat-composer-actions='right']",
+  );
+  const composerRightActionsWidth = composerRightActions?.getBoundingClientRect().width ?? 0;
+  const composerFooter = composerForm.querySelector<HTMLElement>(
+    "[data-chat-composer-footer='true']",
+  );
+  const composerFooterGap = composerFooter
+    ? Number.parseFloat(window.getComputedStyle(composerFooter).columnGap) ||
+      Number.parseFloat(window.getComputedStyle(composerFooter).gap) ||
+      0
+    : 0;
+  const minimumComposerWidth =
+    COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX +
+    Math.min(composerRightActionsWidth, COMPOSER_COMPACT_MIN_RIGHT_ACTIONS_WIDTH_PX) +
+    composerFooterGap;
+  const maximumPanelWidth =
+    input.currentPanelWidth + viewportContentWidth - minimumComposerWidth;
+
+  return {
+    shouldAcceptWidth: (nextPanelWidth) => {
+      // A narrower dock always gives the composer more room. Keeping this
+      // monotonic escape hatch lets a drag recover from an already cramped
+      // window instead of trapping the user at the starting width.
+      if (nextPanelWidth <= input.currentPanelWidth) {
+        return true;
+      }
+      // Both desktop side panels consume space from the chat viewport. A wider
+      // candidate therefore reduces the measured viewport by the same delta.
+      const projectedViewportWidth =
+        viewportContentWidth + input.currentPanelWidth - nextPanelWidth;
+      return projectedViewportWidth + 0.5 >= minimumComposerWidth;
+    },
+    clampWidth: (nextPanelWidth) =>
+      Math.min(nextPanelWidth, Math.max(input.currentPanelWidth, maximumPanelWidth)),
+  };
+}
 
 // Probe whether the composer can render at `nextWidth` without overflowing its
 // viewport or violating its minimum control width. Applies the width, measures,

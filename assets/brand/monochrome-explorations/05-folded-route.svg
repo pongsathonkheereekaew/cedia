@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">CEDIA folded route concept</title>
+  <g fill="none" stroke="#111" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m184 48-42-18-78 39-32 59 32 59 78 39 42-18"/>
+    <path d="m167 82-29-13-45 23-20 36 20 36 45 23 29-13"/>
+    <path d="m146 128 63-39v78l-63-39Z"/>
+  </g>
+</svg>

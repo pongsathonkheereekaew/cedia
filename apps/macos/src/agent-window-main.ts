@@ -86,21 +86,47 @@ const REMOTE_ROUTES: readonly (readonly string[])[] = [
   ["devices"],
   ["devices", "*", "revoke"],
 ];
+/** Code Review is read-only in the renderer: each provider fetch has its own method and shape. */
+const FORGE_REVIEW_ROUTES: readonly { method: HostMethod; shape: readonly string[] }[] = [
+  { method: "GET", shape: ["forge-review", "capabilities"] },
+  { method: "POST", shape: ["forge-review", "list"] },
+  { method: "POST", shape: ["forge-review", "detail"] },
+  { method: "POST", shape: ["forge-review", "diff"] },
+  { method: "POST", shape: ["forge-review", "workflow"] },
+  { method: "POST", shape: ["forge-review", "mutate"] },
+];
+/** Durable Code Review drafts are renderer-owned text with host-owned CAS revisions. Keep the
+ * identifier segment opaque and expose only the direct record read/patch routes; submissions,
+ * clearing, and legacy import remain behind the native draft bridge. */
+const DRAFT_ROUTES: readonly { method: HostMethod; shape: readonly string[] }[] = [
+  { method: "GET", shape: ["drafts", "*"] },
+  { method: "PATCH", shape: ["drafts", "*"] },
+];
 
 function matchesProviderRoute(shape: readonly string[], segments: readonly string[]): boolean {
   return shape.length === segments.length
     && shape.every((part, index) => part === "*" ? /^[A-Za-z0-9._:@+-]{1,128}$/.test(segments[index]!) : part === segments[index]);
 }
 
+function matchesDraftRoute(shape: readonly string[], segments: readonly string[]): boolean {
+  return shape.length === segments.length
+    && shape[0] === "drafts"
+    && segments[0] === "drafts"
+    // forgeReviewDraftId uses base64url components and permits up to 480 characters overall.
+    && /^[A-Za-z0-9_-]{1,480}$/.test(segments[1]!);
+}
+
 /** Only application routes are exposed; device credentials and editor registration stay native. */
-function applicationPath(value: unknown): string {
+function applicationPath(value: unknown, method?: HostMethod): string {
   const path = text(value);
   if (!path.startsWith("/v1/") || path.includes("\\") || path.includes("#")) throw new Error("Invalid application path");
   const pathname = path.split("?")[0]!;
   const segments = pathname.split("/").map(part => decodeURIComponent(part));
   if (segments.some(part => part === "." || part === ".." || /[/\\\u0000-\u001f]/.test(part))) throw new Error("Invalid application path");
   const route = segments.slice(2);
-  if (!APPLICATION_ROOTS.includes(segments[2]!) && !PROVIDER_ROUTES.some(shape => matchesProviderRoute(shape, route)) && !REMOTE_ROUTES.some(shape => matchesProviderRoute(shape, route))) throw new Error("Unsupported application route");
+  const forgeReviewRoute = FORGE_REVIEW_ROUTES.some(candidate => candidate.method === method && matchesProviderRoute(candidate.shape, route));
+  const draftRoute = DRAFT_ROUTES.some(candidate => candidate.method === method && matchesDraftRoute(candidate.shape, route));
+  if (!APPLICATION_ROOTS.includes(segments[2]!) && !PROVIDER_ROUTES.some(shape => matchesProviderRoute(shape, route)) && !REMOTE_ROUTES.some(shape => matchesProviderRoute(shape, route)) && !forgeReviewRoute && !draftRoute) throw new Error("Unsupported application route");
   return path.slice(4);
 }
 
@@ -392,7 +418,7 @@ export function createAgentWindowHandler(options: HandlerOptions) {
         return (await readAgentThemeSnapshot(options.stateDir)) ?? null;
       case "request": {
         if (!["GET", "POST", "PATCH", "DELETE"].includes(String(value.method))) throw new Error("Unsupported application method");
-        const path = applicationPath(value.path);
+        const path = applicationPath(value.path, value.method as HostMethod);
         if (value.body !== undefined && JSON.stringify(value.body).length > 16 * 1024 * 1024) throw new Error("Application request is too large");
         try {
           return await options.request(value.method as HostMethod, path, value.body);

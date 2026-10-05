@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startHostServer, type StartedHostServer } from "../../host/src/server.ts";
 import { CediaHostClient } from "../src/api.ts";
+import { saveIdeHandoff } from "../src/agent-ui-state.ts";
 import { installVscodeStub, stubState, stubUri } from "./helpers/vscode-stub.ts";
 
 /*
@@ -237,6 +238,59 @@ describe("ide-native surface with a live host", () => {
 			provider.dispose();
 		}
 	}, 15_000);
+
+	it("answers bootstrap before a slow handoff and delivers that handoff once", async () => {
+		const slowStateDir = join(root, "slow-bootstrap-state");
+		const slowSessionId = "slow-bootstrap-session";
+		await saveIdeHandoff(slowStateDir, workspace, slowSessionId);
+		let releaseSession!: () => void;
+		const sessionReleased = new Promise<void>(resolve => { releaseSession = resolve; });
+		let onSessionCalls = 0;
+		const provider = new CediaIdeAgentProvider(
+			context(),
+			slowStateDir,
+			async () => ({
+				requestApplication: async (_method: string, path: string) => {
+					if (path === `sessions/${slowSessionId}`) return { id: slowSessionId, cwd: workspace };
+					throw new Error(`unexpected bootstrap path: ${path}`);
+				},
+			} as any),
+			async () => {
+				onSessionCalls += 1;
+				await sessionReleased;
+			},
+		);
+		const bridge = createWebviewHarness();
+		await provider.resolveWebviewView(bridge.view);
+		try {
+			const startedAt = Date.now();
+			await bridge.receive({ type: "cedia-agent-request", channel: "vscode:cediaAgent", id: "slow-bootstrap", input: { kind: "bootstrap" } });
+			const response = bridge.posted.find((message: any) => message.type === "cedia-agent-response" && message.id === "slow-bootstrap");
+			expect(response).toMatchObject({ type: "cedia-agent-response", id: "slow-bootstrap", result: { cwd: workspace } });
+			expect(Date.now() - startedAt).toBeLessThan(250);
+
+			const startedDeadline = Date.now() + 1_000;
+			while (onSessionCalls === 0 && Date.now() < startedDeadline) await new Promise(resolve => setTimeout(resolve, 10));
+			expect(onSessionCalls).toBe(1);
+			// Keep the handoff blocked across a complete polling interval.
+			await new Promise(resolve => setTimeout(resolve, 800));
+			expect(onSessionCalls).toBe(1);
+			expect(bridge.posted.some((message: any) => message.type === "cedia-agent-context")).toBe(false);
+			await bridge.receive({ type: "cedia-agent-ready" });
+			releaseSession();
+
+			const contextDeadline = Date.now() + 1_500;
+			while (!bridge.posted.some((message: any) => message.type === "cedia-agent-context" && message.sessionId === slowSessionId) && Date.now() < contextDeadline) {
+				await new Promise(resolve => setTimeout(resolve, 10));
+			}
+			expect(bridge.posted.filter((message: any) => message.type === "cedia-agent-context" && message.sessionId === slowSessionId)).toHaveLength(1);
+			// The 750ms poll may overlap the delayed handoff; the single-flight guard
+			// keeps it from syncing the same session a second time.
+			expect(onSessionCalls).toBe(1);
+		} finally {
+			provider.dispose();
+		}
+	}, 5_000);
 
 	it("pairs a device through the host and shows a real QR code", async () => {
 		vscodeApi.window.showInputBox = async () => "Test iPhone";

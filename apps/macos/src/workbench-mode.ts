@@ -226,7 +226,10 @@ export interface IdeLayoutSnapshot {
 
 export const DEFAULT_IDE_LAYOUT: IdeLayoutSnapshot = {
 	sidebarVisible: true,
-	auxiliaryBarVisible: false,
+	// Code-OSS opens a fresh IDE's auxiliary bar from the product's native
+	// defaultVisibility setting. Match that default when an older Cedia snapshot
+	// has no field; an explicit saved close still wins on mode restoration.
+	auxiliaryBarVisible: true,
 	panelVisible: true,
 	showTabs: "multiple",
 	statusBarVisible: true,
@@ -316,7 +319,12 @@ export function normalizeIdeLayout(value: unknown, fallback: IdeLayoutSnapshot =
 	const storedActivityBar = typeof record.activityBarLocation === "string" ? record.activityBarLocation : undefined;
 	return {
 		sidebarVisible: record.sidebarVisible !== false,
-		auxiliaryBarVisible: record.auxiliaryBarVisible === true,
+		// Older snapshots did not record the auxiliary bar at all. In that case
+		// inherit the current default (open for a fresh IDE); an explicit false is
+		// still a user's saved closed state and must remain closed on restore.
+		auxiliaryBarVisible: typeof record.auxiliaryBarVisible === "boolean"
+			? record.auxiliaryBarVisible
+			: fallback.auxiliaryBarVisible,
 		panelVisible: record.panelVisible !== false,
 		...(typeof record.activeEditorUri === "string" ? { activeEditorUri: record.activeEditorUri } : {}),
 		showTabs: storedShowTabs && storedShowTabs !== AGENTS_EDITOR_SHOW_TABS ? storedShowTabs : fallback.showTabs,

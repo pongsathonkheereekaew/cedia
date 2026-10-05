@@ -8,6 +8,7 @@ import { startHostServer } from "../../host/src/server.ts";
 import { HostHttpError } from "../src/api.ts";
 import { agentUiStateDir, importLegacyExtensionDrafts, legacyDraftMigrationFromExtensionState, readAgentUiState, writeAgentUiState } from "../src/agent-ui-state.ts";
 import { createAgentHostGateway, createAgentWindowHandler, parseAgentHostRequestTimeoutMs } from "../src/agent-window-main.ts";
+import { forgeReviewDraftId } from "../agent-window/src/forge-review-context.ts";
 
 let fixtureStateDirCounter = 0;
 function fixture() {
@@ -294,6 +295,60 @@ describe("Agent Window main-process boundary", () => {
     expect(bootstrap).toMatchObject({ version: "test" });
     expect(JSON.stringify(bootstrap)).not.toContain("token");
     expect(await handler(trusted, { kind: "theme" })).toBeNull();
+  });
+
+  it("allowlists the read-only Forge Review routes without opening a broad provider root", async () => {
+    const { handler, calls, trusted } = fixture();
+    const longDraftId = forgeReviewDraftId({
+      projectId: "project-1",
+      provider: "github",
+      hostname: "github.example.test",
+      repositoryPath: "acme/a-repository-with-a-long-name_and-a-slash/for-route-coverage",
+      number: 42,
+    });
+    expect(longDraftId.length).toBeGreaterThan(128);
+    expect(longDraftId.length).toBeLessThanOrEqual(480);
+    const requests = [
+      { method: "GET", path: "/v1/forge-review/capabilities" },
+      { method: "POST", path: "/v1/forge-review/list", body: { projectId: "project-1" } },
+      { method: "POST", path: "/v1/forge-review/detail", body: { projectId: "project-1", url: "https://github.com/acme/demo/pull/42" } },
+      { method: "POST", path: "/v1/forge-review/diff", body: { projectId: "project-1", url: "https://github.com/acme/demo/pull/42" } },
+      { method: "POST", path: "/v1/forge-review/workflow", body: { projectId: "project-1", url: "https://github.com/acme/demo/pull/42", section: "overview" } },
+      { method: "POST", path: "/v1/forge-review/mutate", body: { projectId: "project-1", url: "https://github.com/acme/demo/pull/42", commandId: "review-command", expectedHeadSha: "head-42", operation: { kind: "issue_comment", body: "draft" } } },
+      { method: "GET", path: "/v1/drafts/forge-review-v1-project-1" },
+      { method: "PATCH", path: "/v1/drafts/forge-review-v1-project-1", body: { expectedRevision: 0, text: "draft", content: { kind: "forge-review-draft" } } },
+      { method: "GET", path: `/v1/drafts/${longDraftId}` },
+    ] as const;
+    for (const request of requests) {
+      expect(await handler(trusted, { kind: "request", ...request })).toEqual({ projects: [] });
+    }
+    expect(calls).toEqual(requests.map(request => ({
+      method: request.method,
+      path: request.path.slice(4),
+      body: "body" in request ? request.body : undefined,
+    })));
+
+    const blocked = [
+      { method: "GET", path: "/v1/forge-review/list" },
+      { method: "POST", path: "/v1/forge-review/capabilities" },
+      { method: "PATCH", path: "/v1/forge-review/detail", body: {} },
+      { method: "POST", path: "/v1/forge-review/merge", body: {} },
+      { method: "POST", path: "/v1/forge-review/list/extra", body: {} },
+      { method: "GET", path: "/v1/forge-review/workflow" },
+      { method: "PATCH", path: "/v1/forge-review/mutate", body: {} },
+      { method: "GET", path: "/v1/drafts" },
+      { method: "POST", path: "/v1/drafts/forge-review-v1-project-1", body: {} },
+      { method: "GET", path: "/v1/drafts/forge-review-v1-project-1/extra" },
+      { method: "PATCH", path: "/v1/drafts/forge-review-v1-project-1/clear", body: {} },
+    ] as const;
+    for (const request of blocked) {
+      await expect(handler(trusted, { kind: "request", ...request })).rejects.toThrow("Unsupported application route");
+    }
+    await expect(handler(trusted, { kind: "request", method: "PUT", path: "/v1/drafts/forge-review-v1-project-1", body: {} }))
+      .rejects.toThrow("Unsupported application method");
+    await expect(handler(trusted, { kind: "request", method: "GET", path: `/v1/drafts/${"A".repeat(481)}` }))
+      .rejects.toThrow("Unsupported application route");
+    expect(calls).toHaveLength(requests.length);
   });
 
   it("refuses URL escapes, credential management and editor impersonation", async () => {

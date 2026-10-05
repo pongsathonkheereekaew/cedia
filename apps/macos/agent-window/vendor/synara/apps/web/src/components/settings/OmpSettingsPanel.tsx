@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
+import { cn } from "~/lib/utils";
 import {
   getOmpSettingsApi,
   mutateOmpSettings,
@@ -160,6 +161,16 @@ function scopeBadge(selection: OmpSettingsScopeSelection): string {
   return "Shared";
 }
 
+/** Give an unpublished path a readable title without guessing at a product-specific label. */
+function humanizeOmpSettingPath(path: string): string {
+  const leaf = path.split(".").at(-1) ?? path;
+  const words = leaf
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return words ? words.charAt(0).toLocaleUpperCase() + words.slice(1) : path;
+}
+
 function OmpSettingRow({
   setting,
   active,
@@ -290,14 +301,15 @@ function OmpSettingRow({
     }
   }, [valueQuery]);
 
-  const description = setting.disposition === "editable" || setting.disposition === "advanced"
-    ? `${setting.type}${setting.projectWritable ? " · project layer supported" : ""} · ${ompSettingApplyLabel(setting)}`
+  const technicalDescription = setting.disposition === "editable" || setting.disposition === "advanced"
+    ? `${setting.type} · ${ompSettingApplyLabel(setting)}`
     : `${ompSettingDispositionLabel(setting.disposition)} · ${setting.reason ?? "Cedia does not edit this path."} · ${ompSettingApplyLabel(setting)}`;
   const layerState = value ? `${ompSettingProvenanceLabel(value)} · ${scopeBadge(selection)} scope` : null;
   const masked = value && isOmpSettingMasked(value);
   const defaultText = setting.defaultJson === undefined ? null : `Default ${JSON.stringify(setting.defaultJson)}`;
   const envText = setting.envVar ? `Environment overrides with ${setting.envVar}` : null;
   const labelText = setting.label && setting.label !== setting.path ? setting.label : null;
+  const displayLabel = labelText ?? humanizeOmpSettingPath(setting.path);
   const valueText = value
     ? formatOmpSettingValue(value)
     : valueQuery.data?.state === "unavailable"
@@ -314,27 +326,45 @@ function OmpSettingRow({
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex min-h-5 items-center gap-1.5">
-            <h3 className={SETTINGS_CARD_ROW_TITLE_CLASS_NAME}>{setting.path}</h3>
+            <h3 className={cn(SETTINGS_CARD_ROW_TITLE_CLASS_NAME, "break-words")}>{displayLabel}</h3>
             <span className="rounded border border-[color:var(--color-border)] px-1.5 py-0.5 text-[10px] text-muted-foreground">
               {ompSettingDispositionLabel(setting.disposition)}
             </span>
           </div>
-          {labelText ? <p className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>{labelText}</p> : null}
-          <p className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>{description}</p>
           {setting.description ? <p className={SETTINGS_CARD_ROW_DESCRIPTION_CLASS_NAME}>{setting.description}</p> : null}
           <div className="pt-1 text-xs text-muted-foreground">
-            <span className="font-mono">{valueText}</span>
+            <span className="break-words font-mono">{valueText}</span>
             {layerState ? <span className="ml-2">({layerState})</span> : null}
           </div>
+          <p className="pt-1 text-xs text-muted-foreground">{ompSettingApplyLabel(setting)}.</p>
           {masked && value && Object.hasOwn(value, "storedGlobal") ? (
             <p className="pt-1 text-xs text-muted-foreground">
               A saved shared value (<span className="font-mono">{JSON.stringify(value.storedGlobal)}</span>) is masked by a stronger layer right now.
             </p>
           ) : null}
-          {defaultText && !(value && value.configured) ? (
-            <p className="pt-1 text-xs text-muted-foreground">{defaultText}.</p>
-          ) : null}
-          {envText ? <p className="pt-1 text-xs text-muted-foreground">{envText}.</p> : null}
+          <details className="pt-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none text-foreground/70 hover:text-foreground">
+              Technical details
+            </summary>
+            <div className="mt-2 space-y-1">
+              <p>
+                Path: <code className="font-mono text-foreground/80">{setting.path}</code>
+              </p>
+              <p>
+                Schema and apply: <span className="font-mono text-foreground/80">{technicalDescription}</span>
+              </p>
+              <p>
+                Scope: <span className="text-foreground/80">{scopeBadge(selection)}</span>
+                {selection.scope === "session"
+                  ? " · inspect-only live task view"
+                  : setting.projectWritable
+                    ? " · project editing supported"
+                    : " · project editing unavailable"}
+              </p>
+              {defaultText && !(value && value.configured) ? <p>{defaultText}.</p> : null}
+              {envText ? <p>{envText}.</p> : null}
+            </div>
+          </details>
           {selection.scope === "session" ? (
             <p className="pt-1 text-xs text-muted-foreground">
               Inspect-only view of a live task. Change persistent settings in the Shared or Project scope; drive this task from its composer.
@@ -527,7 +557,8 @@ export function OmpSettingsPanel({ active = true }: OmpSettingsPanelProps) {
     [scope, projectId, sessionId],
   );
   const viewKeys = useMemo(() => {
-    const keys = answer?.keys ?? [];
+    // Excluded keys are not working Cedia settings, even in Advanced.
+    const keys = (answer?.keys ?? []).filter(key => key.disposition !== "excluded");
     if (view !== "basic") return keys;
     return keys.filter(isOmpBasicKey);
   }, [answer?.keys, view]);

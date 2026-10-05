@@ -20,12 +20,11 @@ import { WorkspaceFilePreview } from "../WorkspaceFilePreview";
 import { PanelStateMessage } from "./PanelStateMessage";
 import { WorkspaceExplorerSidebar } from "./workspaceExplorer";
 
-// The dock lays out as a fixed horizontal row, so the shared sidebar takes a
-// full-height fixed-width column (the editor's responsive default would collapse
-// to a stacked block here). With the activity rail gone, the search box sits at
-// the top of this column and the freed width goes to the file viewer.
+// The explorer pane fills the dock card: the tree takes the full card width
+// (no fixed 240px column + preview side-by-side — the narrow card can't fit
+// both, which stacked the empty-state text under the tab strip).
 const DOCK_EXPLORER_SIDEBAR_CLASS =
-  "flex h-full min-h-0 w-60 shrink-0 flex-col border-r border-border/65 bg-[var(--color-background-surface)]";
+  "flex h-full min-h-0 w-full min-w-0 flex-col bg-[var(--color-background-surface)]";
 
 export const DockExplorerPane = function DockExplorerPane(props: {
   threadId: ThreadId;
@@ -112,7 +111,7 @@ export const DockExplorerPane = function DockExplorerPane(props: {
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <WorkspaceExplorerSidebar
         workspaceRoot={props.workspaceRoot}
         selectedFilePath={selectedFilePath}
@@ -124,22 +123,19 @@ export const DockExplorerPane = function DockExplorerPane(props: {
         onToggleDirectory={handleToggleDirectory}
         onReferenceInChat={props.onReferenceInChat}
       />
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <WorkspaceFilePreview
-          workspaceRoot={props.workspaceRoot}
-          filePath={selectedFilePath}
-          liveRevalidationEnabled={props.isVisible}
-          editable
-          emptyState={
-            <PanelStateMessage density="compact" fill="flex">
-              <p>Select a file from the tree to view it.</p>
-            </PanelStateMessage>
-          }
-          onReferenceInChat={props.onReferenceInChat}
-          onAskWhyInChat={props.onAskWhyInChat}
-          onCommentInChat={props.onCommentInChat}
-        />
-      </div>
+      {selectedFilePath ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-border/65">
+          <WorkspaceFilePreview
+            workspaceRoot={props.workspaceRoot}
+            filePath={selectedFilePath}
+            liveRevalidationEnabled={props.isVisible}
+            editable
+            onReferenceInChat={props.onReferenceInChat}
+            onAskWhyInChat={props.onAskWhyInChat}
+            onCommentInChat={props.onCommentInChat}
+          />
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -33,6 +33,9 @@ export interface NativeFilesApi {
 		searchLocalEntries(input: ProjectSearchLocalEntriesInput): Promise<ProjectSearchLocalEntriesResult>;
 		searchContent(input: ProjectSearchContentInput): Promise<ProjectSearchContentResult>;
 		readFile(input: ProjectReadFileInput, options?: { readonly signal?: AbortSignal }): Promise<ProjectReadFileResult>;
+		/** Cedia-only capability path for binary image previews in the embedded webview. */
+		createLocalFilePreviewGrant(input: { readonly path: string; readonly cwd: string }): Promise<{ grant: string; expiresAt: string }>;
+		readLocalFilePreview(input: { readonly path: string; readonly cwd: string; readonly grant: string }): Promise<{ path: string; mimeType: string; dataBase64: string; version: string }>;
 		writeFile(input: ProjectWriteFileInput): Promise<ProjectWriteFileResult>;
 		onFileChange(input: ProjectWatchFileInput, callback: (event: ProjectFileChangeEvent) => void): () => void;
 	};
@@ -80,6 +83,8 @@ export function createNativeFilesApi(bridge: NativeFilesBridge): NativeFilesApi 
 			searchLocalEntries: (input) => invoke("projects.searchLocalEntries", input) as Promise<ProjectSearchLocalEntriesResult>,
 			searchContent: (input) => invoke("projects.searchContent", input) as Promise<ProjectSearchContentResult>,
 			readFile: (input, options) => withAbort(invoke("projects.readFile", input) as Promise<ProjectReadFileResult>, options?.signal),
+			createLocalFilePreviewGrant: (input) => invoke("projects.createLocalFilePreviewGrant", input) as Promise<{ grant: string; expiresAt: string }>,
+			readLocalFilePreview: (input) => invoke("projects.readLocalFilePreview", input) as Promise<{ path: string; mimeType: string; dataBase64: string; version: string }>,
 			writeFile: (input) => invoke("projects.writeFile", input) as Promise<ProjectWriteFileResult>,
 			onFileChange: (input, callback) => {
 				let disposed = false;

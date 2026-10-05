@@ -141,6 +141,42 @@ it("sends this window's change with the revision it read, and only for keys the 
   expect(transport.calls.filter(call => call.action === "write")).toHaveLength(1);
 });
 
+it("drains pending appearance, layout, and composer changes without clobbering later categories", async () => {
+  setupWindow();
+  seedLocal({ uiDensity: "spacious", sidebarThreadSortOrder: "updated_at", composerEffortSlider: true });
+  let revision = 4;
+  const values: Record<string, unknown> = {
+    uiDensity: "spacious",
+    sidebarThreadSortOrder: "updated_at",
+    composerEffortSlider: true,
+  };
+  const transport = transportWith(input => {
+    if (input.action === "read") return { revision, values: { ...values } };
+    Object.assign(values, input.patch);
+    revision += 1;
+    return { status: "saved", revision, values: { ...values } };
+  });
+  const bridge = installHostPreferenceSync(transport);
+  dispose = bridge.dispose;
+  await bridge.hydrate();
+
+  seedLocal({ uiDensity: "compact", sidebarThreadSortOrder: "created_at", composerEffortSlider: false });
+  await bridge.flush();
+
+  expect(transport.calls.filter(call => call.action === "write").map(call => call.category)).toEqual([
+    "appearance",
+    "layout",
+    "composer",
+  ]);
+  expect(readLocal()).toMatchObject({
+    uiDensity: "compact",
+    sidebarThreadSortOrder: "created_at",
+    composerEffortSlider: false,
+  });
+  expect(bridge.unsaved()).toEqual([]);
+  expect(bridge.status()).toBe("ready");
+});
+
 it("applies the other window's committed revision when the main process publishes it", async () => {
   const fake = setupWindow();
   seedLocal({ uiDensity: "spacious" });
@@ -212,6 +248,7 @@ it("keeps a change it could not save visible instead of reporting it as saved", 
   seedLocal({ uiDensity: "compact" });
   await bridge.flush();
   expect(bridge.unsaved()).toEqual(["uiDensity"]);
+  expect(bridge.status()).toBe("conflict");
   expect(readLocal()).toMatchObject({ uiDensity: "compact" });
 });
 
@@ -221,6 +258,7 @@ it("is unavailable, not destructive, when the host cannot answer", async () => {
   const bridge = installHostPreferenceSync({ invoke: async () => { throw new Error("no host"); } });
   dispose = bridge.dispose;
   expect(await bridge.hydrate()).toBe("unavailable");
+  expect(bridge.status()).toBe("unavailable");
   expect(readLocal()).toMatchObject({ uiDensity: "spacious" });
 });
 

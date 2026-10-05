@@ -5,6 +5,11 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "test/**/*.ts",
+    "agent-window/vendor/synara/apps/web/src/vite-env.d.ts"
+  ],
   "exclude": []
 }

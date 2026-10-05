@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CEDIA — TARGET card layout on the agent window (1440x900)</title>
+<style>
+  :root{--bg:#f5f5f6;--ink:#1c1c1e;--soft:#8e8e93;--hair:#e4e4e7;
+    --pill:#ececef;--pill-on:#e3e3e6;--blue:#0a84ff}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#3a3a3e;font-family:-apple-system,"SF Pro Text",sans-serif;color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:22px}
+  .toolbar{display:flex;gap:8px;margin-bottom:10px}
+  .toolbar button{font:inherit;font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #55555a;
+    background:#4a4a4f;color:#fff;cursor:pointer}
+  .toolbar button[aria-pressed="true"]{background:#0a84ff;border-color:#0a84ff}
+  .spec{color:#b0b0b5;font-size:12px;margin-bottom:12px;max-width:1123px;text-align:center}
+  .stage{width:1123px;height:702px;background:var(--bg);border-radius:14px;position:relative;overflow:hidden}
+  /* IDE titlebar 46px */
+  .titlebar{height:36px;display:flex;align-items:center;padding:0 10px;gap:8px;border-bottom:1px solid var(--hair)}
+  .lights{display:flex;gap:7px}
+  .lights i{width:11px;height:11px;border-radius:50%}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .tnav{color:var(--soft);font-size:12px;display:flex;gap:8px;align-items:center}
+  .threadtab{margin-left:18px;font-size:12px;display:flex;gap:8px;align-items:center;color:var(--ink)}
+  .tacts{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .tacts .b{border:1px solid var(--hair);background:#fff;border-radius:7px;padding:4px 10px;font-size:11px;color:var(--ink)}
+  .tacts .b.blue{color:var(--blue);border-color:#cfe4fa;background:#f2f8ff}
+  .tacts .ic{color:var(--soft);font-size:13px}
+  .body{position:absolute;top:36px;bottom:0;left:0;right:0;display:flex;gap:6px;padding:8px}
+  .side,.main,.dockwrap{border-radius:14px}
+  .side{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+  .side{background:var(--bg)}
+  .main{background:#fbfbfc;border-left:0;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .side,.main{border:1px solid var(--hair)}
+  /* IDE activity rail */
+  .rail{width:37px;flex:none;display:flex;flex-direction:column;align-items:center;gap:5px;padding-top:8px}
+  .rail .b{width:25px;height:25px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#6e6e73}
+  .rail .b.on{background:var(--pill-on);color:var(--ink)}
+  .rail .b svg{width:14px;height:14px}
+  /* Cedia sidebar (workbench view) */
+  .side{width:200px;flex:none;border-left:1px solid var(--hair);border-right:1px solid var(--hair);
+    font-size:11px;overflow:hidden;position:relative;padding:8px 8px 8px;transition:width .3s cubic-bezier(.32,.72,0,1),opacity .3s}
+  .side .hd{font-size:13px;font-weight:600;display:flex;margin:0 4px 8px;align-items:center}
+  .side .hd .r{margin-left:auto;color:var(--soft);display:flex;gap:8px;font-size:12px}
+  .side .row{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:7px;white-space:nowrap;
+    overflow:hidden;color:#3a3a3c}
+  .side .row span.t{overflow:hidden;text-overflow:ellipsis}
+  .side .row.sel{background:var(--pill-on)}
+  .side .sec{font-size:10px;color:var(--soft);margin:10px 4px 4px}
+  .side .sub{padding-left:26px}
+  .side .foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid var(--hair);
+    padding:8px 12px;font-size:11px;color:var(--soft);display:flex;background:var(--bg)}
+  .side .foot .q{margin-left:auto}
+  /* center: compact dock transcript */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:#fbfbfc}
+  .umsg{text-align:right;font-size:12px;padding:14px 26px 0}
+  .trans{padding:12px 26px;font-size:12px;overflow:hidden}
+  .trans .who{font-size:11px;letter-spacing:.04em;color:var(--ink);margin:14px 0 6px}
+  .trans .meta{font-size:10px;color:var(--soft);display:flex;gap:10px;margin-bottom:10px}
+  .trans p{font-size:12px;line-height:1.55;max-width:430px;margin-bottom:8px}
+  .trans .rule{border-top:1px solid var(--hair);margin:12px 0}
+  .trans .ok{font-size:12px}
+  .trans .ok a{color:var(--blue);text-decoration:none}
+  .trans .ok code{font-family:ui-monospace,monospace;font-size:11px;background:#f0f0f2;border-radius:4px;padding:1px 5px}
+  .taskc{font-size:12px;padding:8px 26px;color:var(--ink);display:flex}
+  .taskc .d{margin-left:auto;color:var(--soft)}
+  .composer{width:380px;margin:2px auto 8px;background:#fff;border:1px solid var(--hair);
+    border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:10px 12px}
+  .composer .ph{font-size:12px;color:var(--soft);margin-bottom:12px}
+  .composer .frow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--soft)}
+  .composer .model{margin-left:auto;color:var(--ink);display:flex;gap:6px;align-items:center}
+  .composer .send{width:22px;height:22px;border-radius:50%;background:#d9d9de;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px}
+  .statusbar{height:18px;flex:none;border-top:1px solid var(--hair);display:flex;align-items:center;
+    padding:0 14px;font-size:9px;color:var(--soft);gap:10px;background:var(--bg)}
+  /* right: dock rail only (panel closed) */
+  .dockwrap{flex:none;display:flex;background:var(--bg);border:1px solid var(--hair);overflow:hidden;width:37px;
+    transition:width .3s cubic-bezier(.32,.72,0,1),opacity .3s cubic-bezier(.32,.72,0,1),margin .3s cubic-bezier(.32,.72,0,1)}
+  .dock{width:0;flex:none;overflow:hidden;transition:width .3s cubic-bezier(.32,.72,0,1)}
+  .dock .dpanel{border-left:0;width:270px;height:100%;border-left:1px solid var(--hair);padding:10px;font-size:11px}
+  .dock .tabs{display:flex;gap:6px;margin-bottom:10px}
+  .dock .tab{border:1px solid var(--hair);background:#fff;border-radius:6px;padding:4px 9px;font-size:11px;color:var(--soft)}
+  .dock .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .dock .f{padding:5px 6px;font-family:ui-monospace,monospace;font-size:10px;color:#3a3a3c}
+  .rrail{width:37px;flex:none;border-left:1px solid var(--hair);display:flex;flex-direction:column;
+    align-items:center;gap:5px;padding-top:8px}
+  .rrail .b{width:25px;height:25px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#6e6e73}
+  .rrail .b.on{background:var(--pill-on);color:var(--ink)}
+  .rrail .b svg{width:14px;height:14px}
+  .body.hide-left .side{width:0;opacity:0;padding:8px 0;margin-right:-6px;overflow:hidden}
+  .body.hide-left .side>*{display:none}
+  .body.show-right .dock{width:270px}
+  .body.show-right .dockwrap{width:307px}
+  .body.hide-dockrail .dockwrap{width:0;opacity:0;margin-left:-6px;border:0;overflow:hidden}
+  .body.hide-dockrail .dockwrap>*{display:none}
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="tLeft" aria-pressed="false">Toggle sidebar</button>
+    <button id="tRight" aria-pressed="false">Toggle dock panel</button>
+    <button id="tRail" aria-pressed="false">Toggle right rail</button>
+  </div>
+  <div class="spec">TARGET Apple Notes-style floating cards &middot; margin 8 gap 6 radius 12/14 &middot;  1440x900 @0.78 &middot; titlebar 46 &middot;
+    activity rail 48/icon 18 &middot; sidebar 256 &middot; dock rail only (panel closed) &middot; IDE status bar</div>
+  <div class="stage">
+    <div class="titlebar">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <span class="tnav">▭&nbsp;&nbsp;‹&nbsp;&nbsp;›</span>
+      <span class="threadtab">⚗ Reply with exactly the word READY</span>
+      <span class="tacts"><span class="b">⇄ Hand off</span><span class="b">+ Add action</span><span class="b blue">✈ IDE</span>
+        <span class="ic">···</span><span class="ic">☰</span><span class="ic">▭</span></span>
+    </div>
+    <div class="body" id="cards">
+      <div class="rail">
+        <span class="b on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-7h-6v7H5a2 2 0 01-2-2z"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-4 3.5-8 3.5"/></svg></span>
+      </div>
+      <div class="side">
+        <div class="hd">Cedia <span class="r">⌕ ▭</span></div>
+        <div class="row">✎ <span class="t">New thread</span></div>
+        <div class="sec">Projects</div>
+        <div class="row">📁 <span class="t">cedia</span></div>
+        <div class="row sub">⚗ <span class="t">Review github #1: Make AGENTS…</span></div>
+        <div class="row sel sub">⚗ <span class="t">Reply with exactly the word READ…</span></div>
+        <div class="row sub">⚗ <span class="t">hi</span></div>
+        <div class="row">📁 <span class="t">Quit fixture</span></div>
+        <div class="row sub">⚗ <span class="t">Running task</span></div>
+        <div class="row">📁 <span class="t">Settings fixture</span></div>
+        <div class="row sub">⚗ <span class="t">Settings route proof</span></div>
+        <div class="row">📁 <span class="t">Write fixture</span></div>
+        <div class="row sub">⚗ <span class="t">Write proof</span></div>
+        <div class="sec">Chats ›</div>
+        <div class="foot">⚙ Settings <span class="q">?</span></div>
+      </div>
+      <div class="main">
+        <div class="umsg">Reply with exactly the word READY and nothing else.</div>
+        <div class="trans">
+          <div class="who">READY</div>
+          <div class="meta"><span>⧉</span><span>⑂</span><span>✧</span><span>Sep 26 7:54 PM</span></div>
+          <p>Create the file /tmp/cedia-turn-proof/hello.txt with exactly this content and nothing else: hello from cedia. Do not edit anything else…</p>
+          <div class="rule"></div>
+          <div class="who">Worked for 22s ›</div>
+          <div class="rule"></div>
+          <div class="ok">Created <a>📄 /tmp/cedia-turn-proof/hello.txt</a> with exact bytes <code>hello from cedia.</code> — verified.</div>
+          <div class="meta" style="margin-top:6px"><span>⧉</span><span>⑂</span><span>✧</span><span>Sep 26 7:57 PM</span></div>
+        </div>
+        <div class="taskc">Task controls <span class="d">⌄</span></div>
+        <div class="composer">
+          <div class="ph">Ask for follow-up changes or attach images</div>
+          <div class="frow"><span>+</span><span>✋ Ask for approval ⌄</span>
+            <span class="model">◉ Muse Spark 1.3 Contri… xhigh ⌄</span><span class="send">↑</span></div>
+        </div>
+        <div class="statusbar"><span>host · live</span><span>model</span><span>session</span><span>branch main</span></div>
+      </div>
+      <div class="dockwrap">
+      <div class="dock"><div class="dpanel">
+        <div class="tabs"><span class="tab on">Changes</span><span class="tab">Browser</span><span class="tab">Terminal</span><span class="tab">Files</span></div>
+        <div class="f">M patches/desktop/0064-….patch</div>
+        <div class="f">M apps/macos/src/workbench-mode.ts</div>
+      </div></div>
+      <div class="rrail" style="border-left:0">
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h3m8-18h3a2 2 0 012 2v14a2 2 0 01-2 2h-3m-8-6h8"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
+        <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2"/></svg></span>
+      </div>
+      </div>
+    </div>
+  </div>
+<script>
+  const cards = document.getElementById('cards');
+  const tL = document.getElementById('tLeft'), tR = document.getElementById('tRight');
+  tL.onclick = () => { const v = cards.classList.toggle('hide-left'); tL.setAttribute('aria-pressed', v); };
+  tR.onclick = () => { const v = cards.classList.toggle('show-right'); tR.setAttribute('aria-pressed', v); };
+  const tRail = document.getElementById('tRail');
+  tRail.onclick = () => { const v = cards.classList.toggle('hide-dockrail'); tRail.setAttribute('aria-pressed', v); };
+</script>
+</body>
+</html>

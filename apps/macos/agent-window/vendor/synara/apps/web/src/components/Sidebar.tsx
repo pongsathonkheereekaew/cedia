@@ -35,8 +35,9 @@ import { PinStatusIcon, pinActionLabel } from "~/lib/pin";
 import { THREAD_CONTEXT_MENU_ICONS } from "~/lib/contextMenuIcons";
 import { ensureNativeApi } from "~/nativeApi";
 import { autoAnimate } from "@formkit/auto-animate";
-import { FiGitBranch } from "react-icons/fi";
+import { FiGitBranch, FiGitPullRequest, FiMoreHorizontal } from "react-icons/fi";
 import { GoRepoForked } from "react-icons/go";
+import { createPortal } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -176,9 +177,7 @@ import {
   groupAutomationsByContinuedThread,
 } from "../routes/-automations.shared";
 import { shouldRenderTerminalWorkspace } from "./ChatView.logic";
-import { CHAT_SURFACE_HEADER_HEIGHT_CLASS } from "./chat/chatHeaderControls";
 import { isModelPickerShortcutScopeActive } from "./chat/ComposerModelPicker.logic";
-import { SidebarLeadingControls } from "./SidebarHeaderNavigationControls";
 import { ProjectSidebarIcon } from "./ProjectSidebarIcon";
 import { ThreadHoverCardContent } from "./ThreadHoverCardContent";
 import { ProjectHoverCardContent } from "./ProjectHoverCardContent";
@@ -202,6 +201,16 @@ import { SidebarRowHoverActions } from "./SidebarRowHoverActions";
 import { SidebarSectionToolbar } from "./SidebarSectionToolbar";
 import { SidebarGlyph, sidebarGlyphClass } from "./sidebarGlyphs";
 import { SidebarStatusTrailingGlyph } from "./SidebarStatusTrailingGlyph";
+import {
+  canOpenRailFlyout,
+  shouldCloseRailFlyout,
+  type RailFlyoutSection,
+} from "./Sidebar.railFlyout.logic";
+import {
+  readCodeReviewRailPinned,
+  subscribeCodeReviewRailPinned,
+  writeCodeReviewRailPinned,
+} from "./Sidebar.moreNavigation";
 import { ThreadArchiveActionButton } from "./ThreadArchiveActionButton";
 import { ThreadPinToggleButton } from "./ThreadPinToggleButton";
 import {
@@ -271,7 +280,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -282,6 +290,8 @@ import {
   useSidebar,
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
+import { useSidebarRailRequestStore } from "../sidebarRailRequestStore";
+import { useSidebarSearchRequestStore } from "../sidebarSearchRequestStore";
 import {
   buildProjectThreadTree,
   derivePinnedProjectIdsForSidebar,
@@ -322,7 +332,6 @@ import {
 } from "./Sidebar.logic";
 import type { LastThreadRoute } from "../chatRouteRestore";
 import { useCopyPathToClipboard, useCopyThreadIdToClipboard } from "~/hooks/useCopyToClipboard";
-import { DESKTOP_TOP_BAR_TRAFFIC_LIGHT_GUTTER_CLASS } from "~/hooks/useDesktopTopBarGutter";
 import { cn } from "~/lib/utils";
 import {
   disclosureContentClassName,
@@ -338,7 +347,7 @@ import {
 } from "../lib/threadHandoff";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { useDiffRouteSearch } from "../hooks/useDiffRouteSearch";
-import { normalizeSettingsSection } from "../settingsNavigation";
+import { resolveSettingsSection } from "../settingsNavigation";
 import {
   sidebarHoverRevealHideClassName,
   SIDEBAR_HEADER_ROW_CLASS_NAME,
@@ -352,6 +361,7 @@ import {
   SIDEBAR_SECTION_LABEL_CLASS_NAME,
 } from "../sidebarRowStyles";
 import { SettingsSidebarNav } from "./SettingsSidebarNav";
+import { CodeReviewSidebar } from "./code-review/CodeReviewSidebar";
 import { ComposerPickerMenuPopup } from "./chat/ComposerPickerMenuPopup";
 import { ENVIRONMENT_PANEL_SURFACE_CLASS_NAME } from "./chat/composerPickerStyles";
 import { selectSplitView, useSplitViewStore } from "../splitViewStore";
@@ -398,6 +408,8 @@ import {
 const ExpandAllIcon = createCentralIconComponent("expand-45");
 const CollapseAllIcon = createCentralIconComponent("minimize-45");
 const SortFilterIcon = createCentralIconComponent("filter-2");
+// Codex-round house from the Central set for the detached 48px rail.
+const RailHomeIcon = createCentralIconComponent("home");
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const subscribeGitHubProvisioningCapability = (listener: () => void) =>
@@ -1167,8 +1179,130 @@ function SidebarActivityBellButton({
   );
 }
 
+// Agent-window cutover: the 48px icon rail is shell-mounted OUTSIDE the sidebar
+// card so the thread panel is its own floating card. The rail owns its visual
+// strip (no border/rounded/shadow/card background — transparent, on the stage)
+// and forwards intent through useSidebarRailRequestStore ("search" opens the
+// existing search palette; "activity" toggles the Activity view; flyout/new-thread/
+// detail requests reuse the sidebar's existing handlers). Sidebar default export
+// renders the thread panel only. Props: none.
+export function CediaLeftIconRail() {
+  const { state: railState } = useSidebar();
+  const keybindingsQuery = useQuery({
+    ...serverConfigQueryOptions(),
+    select: (config) => config.keybindings,
+  });
+  const keybindings = keybindingsQuery.data ?? EMPTY_KEYBINDINGS;
+  const pathname = useLocation({ select: (loc) => loc.pathname });
+  const isOnCodeReview = pathname === "/code-review";
+  const codeReviewRailPinned = useSyncExternalStore(
+    subscribeCodeReviewRailPinned,
+    readCodeReviewRailPinned,
+    () => true,
+  );
+  const sendRailRequest = useSidebarRailRequestStore((state) => state.sendRailRequest);
+  const searchShortcutLabel =
+    shortcutLabelForCommand(keybindings, "sidebar.search") ??
+    (isMacNavigatorPlatform() ? "⌘K" : "Ctrl+K");
+  return (
+    <div className="hidden w-12 shrink-0 flex-col items-center gap-1 py-2 md:flex">
+      <SidebarIconButton
+        icon={RailHomeIcon}
+        label="Threads"
+        iconClassName="size-[18px]"
+        size="header"
+        className="size-8 text-muted-foreground/70 hover:text-foreground"
+        tooltip="Threads"
+        tooltipSide="right"
+        data-rail-flyout-trigger
+        onPointerEnter={() => sendRailRequest("flyout-hover", "threads")}
+        onPointerLeave={() => sendRailRequest("flyout-leave")}
+        onClick={() => sendRailRequest("section-click", "threads")}
+      />
+      <SidebarIconButton
+        icon={NewThreadIcon}
+        label="New thread"
+        iconClassName="size-[18px]"
+        size="header"
+        className="size-8 text-muted-foreground/70 hover:text-foreground"
+        tooltip="New thread"
+        tooltipSide="right"
+        onMouseEnter={() => sendRailRequest("new-thread-hover")}
+        onFocus={() => sendRailRequest("new-thread-hover")}
+        onClick={() => sendRailRequest("new-thread")}
+      />
+      <SidebarIconButton
+        icon={SearchIcon}
+        label="Search"
+        iconClassName="size-[18px]"
+        size="header"
+        className="size-8 text-muted-foreground/70 hover:text-foreground"
+        tooltip={searchShortcutLabel ? `Search (${searchShortcutLabel})` : "Search"}
+        tooltipSide="right"
+        onClick={() => sendRailRequest("search")}
+      />
+      <SidebarIconButton
+        icon={BellIcon}
+        label="Activity"
+        iconClassName="size-[18px]"
+        size="header"
+        className="size-8 text-muted-foreground/70 hover:text-foreground"
+        tooltip="Activity"
+        tooltipSide="right"
+        onClick={() => sendRailRequest("activity")}
+      />
+      <SidebarIconButton
+        icon={FiMoreHorizontal}
+        label="More"
+        iconClassName="size-[18px]"
+        size="header"
+        className="size-8 text-muted-foreground/70 hover:text-foreground"
+        tooltip="More"
+        tooltipSide="right"
+        data-rail-flyout-trigger
+        onPointerEnter={() => sendRailRequest("flyout-hover", "more")}
+        onPointerLeave={() => sendRailRequest("flyout-leave")}
+        onClick={() => sendRailRequest("section-click", "more")}
+      />
+      <div aria-hidden className="mx-auto my-1 h-px w-6 bg-sidebar-border/60" />
+      {codeReviewRailPinned || isOnCodeReview ? (
+        <SidebarIconButton
+          icon={FiGitPullRequest}
+          label="Code Review"
+          iconClassName="size-[18px]"
+          size="header"
+          className={cn("size-8 text-muted-foreground/70 hover:text-foreground", isOnCodeReview && "bg-sidebar-accent text-foreground")}
+          tooltip="Code Review"
+          tooltipSide="right"
+          onClick={() => sendRailRequest("code-review")}
+        />
+      ) : null}
+      {railState === "collapsed" ? (
+      <div className="mt-auto flex w-full flex-col items-center gap-1 pt-1.5">
+        <SidebarIconButton
+          icon={SettingsIcon}
+          label="Settings"
+          iconClassName="size-[18px]"
+          size="header"
+          className="size-8 text-muted-foreground/70 hover:text-foreground"
+          tooltip="Settings"
+          tooltipSide="right"
+          onClick={() => sendRailRequest("settings")}
+        />
+      </div>
+      ) : null}
+    </div>
+  );
+}
 export default function Sidebar() {
-  const { shellNavigationOwner } = useSidebar();
+  const {
+    isMobile: railIsMobile,
+    state: railState,
+    shellNavigationOwner,
+    setOpen: setRailOpen,
+    setOpenMobile: setRailOpenMobile,
+    toggleSidebar: toggleRailSidebar,
+  } = useSidebar();
   const githubProvisioningAvailable = useSyncExternalStore(
     subscribeGitHubProvisioningCapability,
     readGitHubProvisioningCapability,
@@ -1211,6 +1345,8 @@ export default function Sidebar() {
   const isOnSettings = useLocation({
     select: (loc) => loc.pathname === "/settings",
   });
+  const isOnCodeReview = pathname === "/code-review";
+  const isOnDetailSurface = isOnSettings || isOnCodeReview;
   const isOnAutomations = pathname.startsWith("/automations");
   // Lightweight read of automations to drive the sidebar attention badge. Shares the
   // ["automations"] query cache with the Automations route (and its live stream updates).
@@ -1246,6 +1382,11 @@ export default function Sidebar() {
   const { settings: appSettings, serverSettings, updateSettings } = useAppSettings();
   // Projects is always available; the standalone Chats footer can be hidden from Settings.
   const chatsSectionVisible = appSettings.showChatsSection;
+  const codeReviewRailPinned = useSyncExternalStore(
+    subscribeCodeReviewRailPinned,
+    readCodeReviewRailPinned,
+    () => true,
+  );
   const { handleNewThread } = useHandleNewThread();
   const { handleNewChat } = useHandleNewChat();
   const { createThreadHandoff } = useThreadHandoff();
@@ -1255,7 +1396,6 @@ export default function Sidebar() {
   });
   const routeSearch = useDiffRouteSearch();
   const settingsSectionSearch = useSearch({ strict: false }) as Record<string, unknown>;
-  const activeSettingsSection = normalizeSettingsSection(settingsSectionSearch.section);
   const activeSplitView = useSplitViewStore(
     useMemo(() => selectSplitView(routeSearch.splitViewId ?? null), [routeSearch.splitViewId]),
   );
@@ -1350,6 +1490,7 @@ export default function Sidebar() {
   // snapshot leaves every row in its current state; only an explicit
   // `integration_missing` takes a row out of the sidebar.
   const capabilitiesQuery = useQuery(serverCapabilitiesQueryOptions());
+  const activeSettingsSection = resolveSettingsSection(settingsSectionSearch.section, capabilitiesQuery.data);
   // Declared next to `keybindings` (rather than further down) because the project-row render
   // helpers above read these labels. A const declared after the closure that captures it
   // widens its inferred mutable range and makes React Compiler drop the memoization of every
@@ -1376,6 +1517,66 @@ export default function Sidebar() {
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
   const [searchPaletteMode, setSearchPaletteMode] = useState<SidebarSearchPaletteMode>("search");
+  // Owner mockup: the header's centered search field opens this same palette.
+  const searchRequestNonce = useSidebarSearchRequestStore((state) => state.requestNonce);
+  const searchRequestSeenRef = useRef(searchRequestNonce);
+  useEffect(() => {
+    if (searchRequestNonce === searchRequestSeenRef.current) return;
+    searchRequestSeenRef.current = searchRequestNonce;
+    setSearchPaletteMode("search");
+    setSearchPaletteOpen(true);
+  }, [searchRequestNonce]);
+  // Agent-window cutover: dispatch requests from the shell-mounted 48px rail
+  // (CediaLeftIconRail) through the same handlers as the old in-card rail.
+  const railRequest = useSidebarRailRequestStore((state) => state.request);
+  const railRequestSeenRef = useRef(railRequest.nonce);
+  useEffect(() => {
+    if (railRequest.nonce === railRequestSeenRef.current) return;
+    railRequestSeenRef.current = railRequest.nonce;
+    switch (railRequest.kind) {
+      case "flyout-hover":
+        if (railRequest.section) scheduleRailFlyout(railRequest.section);
+        break;
+      case "flyout-leave":
+        handleRailTriggerLeave();
+        break;
+      case "section-click":
+        if (railRequest.section === "threads" || railRequest.section === "more") {
+          handleRailSectionClick(railRequest.section);
+        }
+        break;
+      case "new-thread-hover":
+        prefetchModelsForPrimaryNewThread();
+        break;
+      case "new-thread":
+        void handlePrimaryNewThread();
+        break;
+      case "search":
+        setSearchPaletteMode("search");
+        setSearchPaletteOpen(true);
+        break;
+      case "activity":
+        closeRailFlyout();
+        if (isOnDetailSurface || railState === "collapsed") {
+          setRailOpen(true);
+          if (isOnDetailSurface) handleBackToAppFromSettings();
+          setActivityViewEnabledSmoothly(true);
+        } else {
+          setActivityViewEnabledSmoothly(!activityViewEnabled);
+        }
+        break;
+      case "code-review":
+        ensureDetailSidebarOpen();
+        void navigate({ to: "/code-review" });
+        break;
+      case "settings":
+        openSettings();
+        break;
+      case "ensure-detail-open":
+        ensureDetailSidebarOpen();
+        break;
+    }
+  });
   const projectAdditionLockRef = useRef(false);
   const [renameDialogThreadId, setRenameDialogThreadId] = useState<ThreadId | null>(null);
   const [renameProjectDialogId, setRenameProjectDialogId] = useState<ProjectId | null>(null);
@@ -3453,6 +3654,247 @@ export default function Sidebar() {
     shouldShowProjectPathEntry: createProjectDialogOpen,
     threadsHydrated,
   });
+
+  // Cedia icon rail flyout (item 71): hovering the rail's home/More icons
+  // slides a sheet out from behind the 48px rail (Codex pattern). Lightweight
+  // rows only — the full sidebar rows stay mounted once in the hidden content,
+  // so the flyout never double-mounts hover cards or context menus.
+  const [railFlyout, setRailFlyout] = useState<null | {
+    section: RailFlyoutSection;
+    pinned: boolean;
+  }>(null);
+  const [railFlyoutShown, setRailFlyoutShown] = useState(false);
+  const railFlyoutTimer = useRef<number | null>(null);
+  const railFlyoutFrame = useRef<number | null>(null);
+  const railFlyoutEnvironmentRef = useRef({
+    isOnSettings: isOnDetailSurface,
+    railIsMobile,
+    railState,
+  });
+  railFlyoutEnvironmentRef.current = { isOnSettings: isOnDetailSurface, railIsMobile, railState };
+  const railFlyoutPathnameRef = useRef(pathname);
+  const railFlyoutPinnedRef = useRef(false);
+  const railFlyoutRef = useRef<HTMLDivElement | null>(null);
+  const railProjectsRef = useRef<HTMLDivElement | null>(null);
+  const cancelRailFlyoutTimer = useCallback(() => {
+    if (railFlyoutTimer.current !== null) {
+      window.clearTimeout(railFlyoutTimer.current);
+      railFlyoutTimer.current = null;
+    }
+  }, []);
+  const openRailFlyout = useCallback(
+    (section: RailFlyoutSection, pinned: boolean) => {
+      cancelRailFlyoutTimer();
+      // The expanded sidebar already owns the corresponding content. Only the
+      // More menu remains useful while expanded; Threads and Projects must not
+      // portal a second sheet over the open panel.
+      const environment = railFlyoutEnvironmentRef.current;
+      if (
+        !canOpenRailFlyout(section, {
+          isOnSettings: environment.isOnSettings,
+          isMobile: environment.railIsMobile,
+          state: environment.railState,
+        })
+      ) {
+        return;
+      }
+      railFlyoutPinnedRef.current = pinned;
+      setRailFlyout({ section, pinned });
+    },
+    [cancelRailFlyoutTimer, isOnSettings, railState],
+  );
+  const scheduleRailFlyout = useCallback(
+    (section: RailFlyoutSection) => {
+      cancelRailFlyoutTimer();
+      const environment = railFlyoutEnvironmentRef.current;
+      if (
+        !canOpenRailFlyout(section, {
+          isOnSettings: environment.isOnSettings,
+          isMobile: environment.railIsMobile,
+          state: environment.railState,
+        })
+      ) {
+        return;
+      }
+      railFlyoutTimer.current = window.setTimeout(() => openRailFlyout(section, false), 160);
+    },
+    [cancelRailFlyoutTimer, isOnSettings, openRailFlyout, railState],
+  );
+  const closeRailFlyout = useCallback(() => {
+    cancelRailFlyoutTimer();
+    railFlyoutPinnedRef.current = false;
+    setRailFlyout(null);
+  }, [cancelRailFlyoutTimer]);
+  const handleRailTriggerLeave = useCallback(() => {
+    cancelRailFlyoutTimer();
+    railFlyoutTimer.current = window.setTimeout(() => {
+      if (!railFlyoutPinnedRef.current) setRailFlyout(null);
+    }, 160);
+  }, [cancelRailFlyoutTimer]);
+  useEffect(() => {
+    if (!railFlyout) {
+      setRailFlyoutShown(false);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      railFlyoutFrame.current = window.requestAnimationFrame(() => {
+        railFlyoutFrame.current = null;
+        setRailFlyoutShown(true);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (railFlyoutFrame.current !== null) {
+        window.cancelAnimationFrame(railFlyoutFrame.current);
+        railFlyoutFrame.current = null;
+      }
+    };
+  }, [railFlyout]);
+  useEffect(() => {
+    // Route, responsive-mode, and expand transitions invalidate a queued hover
+    // open immediately. The callback also reads the ref above because an old
+    // timer can otherwise run before React flushes this effect.
+    const pathnameChanged = railFlyoutPathnameRef.current !== pathname;
+    railFlyoutPathnameRef.current = pathname;
+    cancelRailFlyoutTimer();
+    if (
+      shouldCloseRailFlyout({
+        pathnameChanged,
+        flyout: railFlyout,
+        environment: { isOnSettings: isOnDetailSurface, isMobile: railIsMobile, state: railState },
+      })
+    ) {
+      closeRailFlyout();
+    }
+  }, [
+    cancelRailFlyoutTimer,
+    closeRailFlyout,
+    isOnDetailSurface,
+    pathname,
+    railFlyout,
+    railIsMobile,
+    railState,
+  ]);
+  useEffect(() => () => cancelRailFlyoutTimer(), [cancelRailFlyoutTimer]);
+
+  // Settings and Code Review reveal their navigation when entered
+  // so its section navigation is visible. Track the route edge so a user can
+  // still collapse it manually while remaining on Settings.
+  const wasOnDetailSurfaceRef = useRef(false);
+  const ensureDetailSidebarOpen = useCallback(() => {
+    closeRailFlyout();
+    if (railIsMobile) {
+      setRailOpenMobile(true);
+    } else {
+      setRailOpen(true);
+    }
+  }, [closeRailFlyout, railIsMobile, setRailOpen, setRailOpenMobile]);
+  const openProjectsFromMore = useCallback(() => {
+    closeRailFlyout();
+    if (isOnDetailSurface) {
+      handleBackToAppFromSettings();
+    }
+    if (railIsMobile) {
+      setRailOpenMobile(true);
+    } else {
+      setRailOpen(true);
+    }
+    setActivityViewEnabledSmoothly(false);
+  }, [
+    closeRailFlyout,
+    handleBackToAppFromSettings,
+    isOnDetailSurface,
+    railIsMobile,
+    setActivityViewEnabledSmoothly,
+    setRailOpen,
+    setRailOpenMobile,
+  ]);
+  const toggleCodeReviewRailPin = useCallback(() => {
+    writeCodeReviewRailPinned(!codeReviewRailPinned);
+  }, [codeReviewRailPinned]);
+  useEffect(() => {
+    const enteringDetailSurface = isOnDetailSurface && !wasOnDetailSurfaceRef.current;
+    wasOnDetailSurfaceRef.current = isOnDetailSurface;
+    if (enteringDetailSurface) {
+      ensureDetailSidebarOpen();
+    }
+  }, [ensureDetailSidebarOpen, isOnDetailSurface]);
+
+  const openSettings = useCallback(
+    (section?: "shortcuts" | "archived") => {
+      ensureDetailSidebarOpen();
+      if (section) {
+        void navigate({ to: "/settings", search: { section } });
+      } else {
+        void navigate({ to: "/settings" });
+      }
+    },
+    [ensureDetailSidebarOpen, navigate],
+  );
+
+  const handleRailSectionClick = useCallback(
+    (section: "threads" | "projects" | "more") => {
+      if (isOnDetailSurface && section !== "more") {
+        closeRailFlyout();
+        if (railIsMobile) {
+          setRailOpenMobile(true);
+        } else {
+          setRailOpen(true);
+        }
+        handleBackToAppFromSettings();
+        return;
+      }
+      if (section !== "more" && railState !== "collapsed") {
+        closeRailFlyout();
+        if (activityViewEnabled) {
+          setActivityViewEnabledSmoothly(false);
+        }
+        return;
+      }
+      openRailFlyout(section, true);
+    },
+    [
+      closeRailFlyout,
+      handleBackToAppFromSettings,
+      isOnDetailSurface,
+      openRailFlyout,
+      railIsMobile,
+      railState,
+      activityViewEnabled,
+      setActivityViewEnabledSmoothly,
+      setRailOpen,
+      setRailOpenMobile,
+    ],
+  );
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRailFlyout();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeRailFlyout]);
+  useEffect(() => {
+    if (!railFlyout?.pinned) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (railFlyoutRef.current?.contains(target)) return;
+      if (target?.closest?.("[data-rail-flyout-trigger]")) return;
+      closeRailFlyout();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [railFlyout?.pinned, closeRailFlyout]);
+  useEffect(() => {
+    if (railFlyout?.section === "projects" && railFlyoutShown) {
+      railProjectsRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [railFlyout?.section, railFlyoutShown]);
+  const railFlyoutRecentThreads = useMemo(() => {
+    const pinnedIds = new Set(pinnedThreads.map((thread) => thread.id));
+    return sidebarThreads
+      .filter((thread) => thread.archivedAt == null && !pinnedIds.has(thread.id))
+      .slice(0, 8);
+  }, [pinnedThreads, sidebarThreads]);
   const standardProjectSidebarDataById = useMemo<ReadonlyMap<ProjectId, SidebarDerivedProjectData>>(
     () =>
       deriveSidebarProjectData({
@@ -5088,27 +5530,8 @@ export default function Sidebar() {
     setAllProjectsExpanded(true);
   }, [allProjectsExpanded, collapseProjectsExcept, focusedProjectId, setAllProjectsExpanded]);
 
-  // Only macOS draws the traffic lights in the renderer's top-left, so only there
-  // does the open-sidebar header need to reserve the gutter (mirrors the mac guard
-  // in useDesktopTopBarTrafficLightGutterClassName used by the closed-state surfaces).
-  const isMacDesktop = isMacNavigatorPlatform();
-
-  // Open-sidebar (in-sidebar) and non-electron wordmark clusters share the one
-  // SidebarLeadingControls primitive with the closed-state host headers, so the
-  // toggle + arrows look identical whether the sidebar is open or collapsed; only
-  // the wrapper layout differs per host.
-  const titlebarControls = shellNavigationOwner ? null : (
-    <SidebarLeadingControls className="hidden md:flex" />
-  );
-
-  const headerControls = <SidebarLeadingControls className="ml-auto hidden md:flex" />;
-
-  const wordmark = (
-    <div className="flex w-full items-center gap-1.5">
-      <SidebarTrigger className="shrink-0 text-muted-foreground/75 hover:text-foreground md:hidden" />
-      {headerControls}
-    </div>
-  );
+  // (Cedia card row: the in-card SidebarHeader + its titlebarControls/wordmark
+  // content were removed — the window header owns toggle + arrows now.)
   const renameProjectDialogProject = renameProjectDialogId
     ? (projectById.get(renameProjectDialogId) ?? null)
     : null;
@@ -5147,27 +5570,24 @@ export default function Sidebar() {
 
   return (
     <>
-      {isElectron ? (
-        <>
-          <SidebarHeader
-            className={cn(
-              "drag-region flex-row items-center gap-2 py-0 ps-4 pe-3 font-system-ui",
-              CHAT_SURFACE_HEADER_HEIGHT_CLASS,
-              isMacDesktop && DESKTOP_TOP_BAR_TRAFFIC_LIGHT_GUTTER_CLASS,
-            )}
-          >
-            {titlebarControls}
-          </SidebarHeader>
-        </>
-      ) : (
-        <SidebarHeader className="gap-3 px-3 py-2.5 font-system-ui sm:gap-2.5 sm:px-4 sm:py-3">
-          {wordmark}
-        </SidebarHeader>
-      )}
+      <div
+        className={cn(
+          "min-h-0 min-w-0 w-full flex-1 flex-col",
+          isOnDetailSurface && "cedia-detail-sidebar",
+          // Cedia card row: keep mounted while collapsed so the width
+          // transition is visible — the w-0 card + overflow clips it.
+          // (Was `hidden`, which snapped shut with no motion.)
+          !railIsMobile && railState === "collapsed" ? "invisible flex" : "flex",
+        )}
+      >
+      {/* Cedia card row: the window header (route level) owns the ONLY title
+          row — the in-card sidebar header is dead space (renders null via
+          shellNavigationOwner) but still occupies 46px + leaves a divider
+          line that breaks the card's top corner. Removed entirely. */}
 
       <SidebarContent className="gap-0 font-system-ui">
         {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
-          <SidebarGroup className="px-2 pt-2 pb-0">
+          <SidebarGroup className="px-2 pt-2 pb-0 group-data-[collapsible=icon]:hidden">
             <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
               <TriangleAlertIcon />
               <AlertTitle>Intel build on Apple Silicon</AlertTitle>
@@ -5191,8 +5611,10 @@ export default function Sidebar() {
             </Alert>
           </SidebarGroup>
         ) : null}
-        {isOnSettings ? (
-          <SidebarGroup className="p-0">
+        {isOnCodeReview ? (
+          <CodeReviewSidebar />
+        ) : isOnSettings ? (
+          <SidebarGroup className="p-0 group-data-[collapsible=icon]:hidden">
             <SettingsSidebarNav
               activeSection={activeSettingsSection}
               capabilities={capabilitiesQuery.data}
@@ -5211,7 +5633,9 @@ export default function Sidebar() {
           </SidebarGroup>
         ) : (
           <>
-            <div className="flex items-center gap-1 pt-0 pb-1 pr-2.5 pl-1.5">
+            {/* Cedia icon rail (item 71): the app-name row hides on the rail;
+                the icon-only search block below shows instead. */}
+            <div className="flex items-center gap-1 pt-2 pb-1 pr-2.5 pl-1.5 group-data-[collapsible=icon]:hidden">
               <span className="font-display min-w-0 truncate px-2.5 text-[17px] text-foreground">
                 {APP_BASE_NAME}
               </span>
@@ -5239,7 +5663,7 @@ export default function Sidebar() {
                 swaps between Projects and Activity. */}
             <div
               key={activityViewEnabled ? "activity" : "threads"}
-              className="sidebar-surface-enter"
+              className="sidebar-surface-enter group-data-[collapsible=icon]:hidden"
             >
               {/* Primary sidebar actions stay limited to features we currently ship. */}
               {isCustomizingNav ? (
@@ -5293,7 +5717,10 @@ export default function Sidebar() {
                   </div>
                 </SidebarGroup>
               ) : (
-                <SidebarGroup className="px-1.5 pt-1 pb-1.5" onContextMenu={handleNavContextMenu}>
+                <SidebarGroup
+                  className="px-1.5 pt-1 pb-1.5 group-data-[collapsible=icon]:hidden"
+                  onContextMenu={handleNavContextMenu}
+                >
                   <SidebarMenu className="gap-0.5">
                     {visibleSidebarNavIds.map((id) => {
                       const item = sidebarNavDescriptors[id];
@@ -5461,9 +5888,11 @@ export default function Sidebar() {
             </div>
           </>
         )}
-        {!isOnSettings && !activityViewEnabled && chatsSectionVisible ? (
+        {!isOnDetailSurface && !activityViewEnabled && chatsSectionVisible ? (
           // sidebar-surface-enter: animates in step with the keyed surface wrapper above.
-          <SidebarGroup className="sidebar-surface-enter px-1.5 pt-1 pb-2">
+          // Cedia icon rail (item 71): this disclosure header collapses to a stray
+          // ">" chevron at 48px — the rail flyout already covers threads.
+          <SidebarGroup className="sidebar-surface-enter px-1.5 pt-1 pb-2 group-data-[collapsible=icon]:hidden">
             <div className="group/collapsible">
               <div className="group/project-header relative">
                 <SidebarMenuButton
@@ -5580,7 +6009,10 @@ export default function Sidebar() {
         ) : null}
       </SidebarContent>
 
-      <SidebarFooter className="gap-2 border-sidebar-border border-t p-2 font-system-ui">
+      {/* Cedia icon rail (item 71): Codex shows no footer on its rail — the
+          settings gear, search and customize live on the rail and in the dots
+          menu instead. Update availability still surfaces when expanded. */}
+      <SidebarFooter className="gap-2 border-sidebar-border border-t p-2 font-system-ui group-data-[collapsible=icon]:hidden">
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex flex-col gap-1">
@@ -5599,7 +6031,7 @@ export default function Sidebar() {
                       SIDEBAR_ROW_HOVER_CLASS_NAME,
                       "flex-1",
                     )}
-                    onClick={() => void navigate({ to: "/settings" })}
+                    onClick={() => openSettings()}
                   >
                     <SidebarLeadingIcon size="sm" tone={SIDEBAR_ROW_LABEL_TEXT_CLASS_NAME}>
                       <SidebarGlyph icon={SettingsIcon} variant="leading" />
@@ -5607,7 +6039,12 @@ export default function Sidebar() {
                     <span>Settings</span>
                   </SidebarMenuButton>
                 )}
-                {showDesktopUpdateButton ? (
+                {/* Cedia icon rail (item 71): the rail keeps the settings gear
+                    (it clips to an icon on its own); update/help need full width,
+                    so they render only while expanded. In offcanvas mode the whole
+                    sidebar is off-screen when collapsed, making this a no-op there,
+                    and the mobile drawer is unaffected. */}
+                {!railIsMobile && railState === "collapsed" ? null : showDesktopUpdateButton ? (
                   <Tooltip>
                     <TooltipTrigger
                       render={
@@ -5642,7 +6079,7 @@ export default function Sidebar() {
                 ) : (
                   <SidebarHelpMenu
                     onOpenShortcuts={() =>
-                      void navigate({ to: "/settings", search: { section: "shortcuts" } })
+                      openSettings("shortcuts")
                     }
                     onCustomizeSidebar={
                       isOnSettings
@@ -5658,6 +6095,204 @@ export default function Sidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      </div>
+      {/* Cedia icon rail flyout: hovers on the shell-mounted 48px rail slide this
+          sheet out from behind it (Codex pattern). Rendered in a body portal so no
+          sidebar overflow clips it. */}
+      {!railIsMobile &&
+      railFlyout &&
+      canOpenRailFlyout(railFlyout.section, {
+        isOnSettings: isOnDetailSurface,
+        isMobile: railIsMobile,
+        state: railState,
+      })
+        ? createPortal(
+          <div
+            ref={railFlyoutRef}
+            role="dialog"
+            aria-label={
+              railFlyout.section === "projects"
+                  ? "Projects"
+                  : railFlyout.section === "more"
+                    ? "More"
+                    : "Threads"
+              }
+            className={cn(
+              // Keep the portal below the 46px chrome inside the 8px card
+              // shell (rail now spans x8..56, chrome bottom sits at y54).
+              // The flyout is body-mounted, so it positions against the
+              // viewport while the panel itself is collapsed or opening.
+              // z-60: above the dock card (z-30) and the right rail (z-40).
+              "fixed top-[54px] left-14 z-[60] w-[264px] overflow-y-auto rounded-[10px] border border-sidebar-border bg-sidebar p-4 text-sidebar-foreground shadow-[0_8px_24px_rgba(0,0,0,0.14)] transition-opacity duration-200 motion-reduce:duration-0",
+              "bottom-2 max-h-[calc(100dvh-62px)]",
+              railFlyoutShown ? "opacity-100" : "opacity-0",
+            )}
+            data-rail-flyout
+            onPointerEnter={cancelRailFlyoutTimer}
+              onPointerLeave={handleRailTriggerLeave}
+            >
+              <div className="mb-1 px-2 text-[14px] font-semibold text-foreground">
+                {railFlyout.section === "projects"
+                  ? "Projects"
+                  : railFlyout.section === "more"
+                    ? "More"
+                    : "Threads"}
+              </div>
+              {railFlyout.section !== "more" ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-[var(--sidebar-accent)] hover:text-foreground"
+                    onClick={() => {
+                      closeRailFlyout();
+                      void handlePrimaryNewThread();
+                    }}
+                  >
+                    <SidebarGlyph icon={NewThreadIcon} variant="leading" />
+                    <span className="truncate">New thread</span>
+                  </button>
+                  {pinnedThreads.length > 0 ? (
+                    <>
+                      <div className={cn(SIDEBAR_SECTION_LABEL_CLASS_NAME, "mt-2 px-2 py-1")}>Pinned</div>
+                      {pinnedThreads.map((thread) => (
+                        <button
+                          key={thread.id}
+                          type="button"
+                          title={thread.title}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px]",
+                            visualActiveSidebarThreadId === thread.id
+                              ? "bg-[var(--sidebar-selected)] font-medium text-[var(--sidebar-accent-foreground)]"
+                              : "text-muted-foreground hover:bg-[var(--sidebar-accent)] hover:text-foreground",
+                          )}
+                          onClick={() => {
+                            closeRailFlyout();
+                            activateThreadFromSidebarIntent(thread.id);
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : null}
+                  {railFlyoutRecentThreads.length > 0 ? (
+                    <>
+                      <div className={cn(SIDEBAR_SECTION_LABEL_CLASS_NAME, "mt-2 px-2 py-1")}>Recent</div>
+                      {railFlyoutRecentThreads.map((thread) => (
+                        <button
+                          key={thread.id}
+                          type="button"
+                          title={thread.title}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px]",
+                            visualActiveSidebarThreadId === thread.id
+                              ? "bg-[var(--sidebar-selected)] font-medium text-[var(--sidebar-accent-foreground)]"
+                              : "text-muted-foreground hover:bg-[var(--sidebar-accent)] hover:text-foreground",
+                          )}
+                          onClick={() => {
+                            closeRailFlyout();
+                            activateThreadFromSidebarIntent(thread.id);
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+              {railFlyout.section === "more" ? (
+                <div className="space-y-0.5" role="group" aria-label="Cedia destinations">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-[var(--sidebar-accent)] hover:text-foreground"
+                    aria-label="Open Projects"
+                    onClick={openProjectsFromMore}
+                  >
+                    <SidebarGlyph icon={FiGitBranch} variant="leading" />
+                    <span className="min-w-0 flex-1 truncate">Projects</span>
+                  </button>
+                  <div className="flex w-full items-center gap-1 rounded-lg text-[13px] text-muted-foreground hover:bg-[var(--sidebar-accent)] hover:text-foreground">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
+                      aria-label="Open Code Review"
+                      onClick={() => {
+                        closeRailFlyout();
+                        ensureDetailSidebarOpen();
+                        void navigate({ to: "/code-review" });
+                      }}
+                    >
+                      <SidebarGlyph icon={FiGitPullRequest} variant="leading" />
+                      <span className="min-w-0 flex-1 truncate">Code Review</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="mr-1 rounded-md p-1 text-muted-foreground/75 hover:bg-[var(--sidebar-accent)] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-ring)]"
+                      aria-label={
+                        codeReviewRailPinned
+                          ? "Remove Code Review from rail"
+                          : "Pin Code Review to rail"
+                      }
+                      aria-pressed={codeReviewRailPinned}
+                      title={
+                        codeReviewRailPinned
+                          ? "Remove Code Review from rail"
+                          : "Pin Code Review to rail"
+                      }
+                      onClick={toggleCodeReviewRailPin}
+                    >
+                      <SidebarGlyph
+                        icon={PinIcon}
+                        variant="meta"
+                        className={codeReviewRailPinned ? "text-foreground" : undefined}
+                      />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {railFlyout.section !== "more" ? (
+                <>
+                  <div
+                    ref={railProjectsRef}
+                    className={cn(SIDEBAR_SECTION_LABEL_CLASS_NAME, "mt-2 px-2 py-1")}
+                  >
+                    Projects
+                  </div>
+                  {standardProjects.length === 0 ? (
+                    <div className="px-2 py-1.5 text-[13px] text-muted-foreground">No projects yet</div>
+                  ) : (
+                    standardProjects.map((project) => (
+                      <button
+                        key={project.id}
+                        type="button"
+                        title={project.name}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-[var(--sidebar-accent)] hover:text-foreground"
+                        onClick={() => {
+                          closeRailFlyout();
+                          if (railIsMobile) {
+                            setRailOpenMobile(true);
+                          } else {
+                            setRailOpen(true);
+                          }
+                        }}
+                      >
+                        <SidebarGlyph icon={FiGitBranch} variant="meta" className="text-muted-foreground/55" />
+                        <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                      </button>
+                    ))
+                  )}
+                  {pinnedThreads.length === 0 &&
+                  railFlyoutRecentThreads.length === 0 &&
+                  standardProjects.length === 0 ? (
+                    <div className="px-2 py-1.5 text-[13px] text-muted-foreground">No threads yet</div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
 
       <CreateProjectDialog
         open={createProjectDialogOpen}
@@ -5971,9 +6606,7 @@ export default function Sidebar() {
           onCreateThread={handlePrimaryNewThread}
           onAddProjectPath={addProjectFromPath}
           homeDir={homeDir}
-          onOpenSettings={() => {
-            void navigate({ to: "/settings" });
-          }}
+          onOpenSettings={() => openSettings()}
           onOpenProject={handleOpenProjectFromSearch}
           onImportThread={handleImportThread}
           onOpenThread={(threadId) => {

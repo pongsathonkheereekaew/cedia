@@ -6,16 +6,8 @@
 //          data path.
 // Layer: Cedia web shell chrome (vendored-app-owned file, not upstream Synara)
 
-import { useMemo } from "react";
-import { useParams } from "@tanstack/react-router";
-import { ThreadId } from "@synara/contracts";
-
-import { useFocusedChatContext } from "../focusedChatContext";
 import { resolveThreadModelSummary } from "../lib/threadModelSummary";
 import { turnQueueSummary } from "../lib/turnQueue";
-import { createThreadSelector } from "../storeSelectors";
-import { useStore } from "../store";
-import { cn } from "~/lib/utils";
 
 function sessionLabel(status: string | undefined, hasError: boolean): string {
   if (hasError) return "error";
@@ -123,55 +115,9 @@ export function pendingModelLabelForTest(
 }
 
 export function CediaStatusBar({ className }: { className?: string }) {
-  // Route-agnostic: `strict: false` resolves on thread, settings and index routes
-  // alike; the focused context (split-aware) picks the live thread.
-  const routeThreadId = useParams({
-    strict: false,
-    select: (params: Record<string, string | undefined>) =>
-      params.threadId ? ThreadId.makeUnsafe(params.threadId) : null,
-  });
-  const { focusedThreadId } = useFocusedChatContext();
-  const threadId = focusedThreadId ?? routeThreadId;
-  const thread = useStore(useMemo(() => createThreadSelector(threadId), [threadId]));
-
-  if (!thread) return null;
-
-  const values = statusBarValuesForTest(thread);
-  if (!values) return null;
-
-  return (
-    <footer
-      data-testid="cedia-status-bar"
-      aria-label="Agent status"
-      className={cn(
-        "flex h-6 w-full shrink-0 items-center gap-4 overflow-hidden px-3 text-[11px] leading-none",
-        "border-t border-[var(--vscode-statusBar-border)]",
-        "bg-[var(--vscode-statusBar-background)] text-[var(--vscode-statusBar-foreground)]",
-        className,
-      )}
-    >
-      <span title="Host connection" data-testid="cedia-status-host">
-        <span className="opacity-70">host</span> · {values.host}
-      </span>
-      <span title="Active model" data-testid="cedia-status-model" className="truncate">
-        <span className="opacity-70">model</span> · {values.model}
-      </span>
-      {values.pending ? (
-        <span title="Model change held for the next turn" data-testid="cedia-status-pending" className="truncate">
-          <span className="opacity-70">model change</span> · {values.pending}
-        </span>
-      ) : null}
-      {values.queue ? (
-        <span title="Turns OMP is holding for this task" data-testid="cedia-status-queue" className="truncate">
-          <span className="opacity-70">queue</span> · {values.queue}
-        </span>
-      ) : null}
-      <span title="Session status" data-testid="cedia-status-session">
-        <span className="opacity-70">session</span> · {values.session}
-      </span>
-      <span title="Thread branch" data-testid="cedia-status-branch" className="truncate">
-        <span className="opacity-70">branch</span> · {values.branch}
-      </span>
-    </footer>
-  );
+  // Mockup cutover: the target layout has no footer status bar. Kept as a
+  // NO-OP (not deleted) so the _chat.tsx call site and the pure value-mapping
+  // test seams (statusBarValuesForTest et al.) keep working untouched.
+  void className;
+  return null;
 }

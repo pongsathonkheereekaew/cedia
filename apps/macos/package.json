@@ -468,6 +468,7 @@
     },
     "configurationDefaults": {
       "chat.disableAIFeatures": true,
+      "workbench.secondarySideBar.defaultVisibility": "visible",
       "workbench.startupEditor": "none"
     }
   },

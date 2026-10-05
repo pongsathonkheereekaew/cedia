@@ -117,9 +117,9 @@ it("drags the open dock wider and narrower through the real hit-test path", asyn
     dispatchPointer("pointermove", clientX + deltaX);
     dispatchPointer("pointerup", clientX + deltaX);
   };
-  dragRail(77, -100);
-  await expect.poll(gapWidth).toBe(440);
-  dragRail(78, 100);
+  dragRail(77, -88);
+  await expect.poll(gapWidth).toBe(488);
+  dragRail(78, 148);
   await expect.poll(gapWidth).toBe(340);
 });
 

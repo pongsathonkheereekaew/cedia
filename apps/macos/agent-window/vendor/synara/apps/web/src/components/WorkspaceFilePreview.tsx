@@ -612,6 +612,7 @@ export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
   const localPreviewGrantQuery = useQuery(
     projectLocalPreviewGrantQueryOptions({
       path: filePath,
+      cwd: props.workspaceRoot,
       enabled: fileNeedsLocalPreviewGrant,
     }),
   );

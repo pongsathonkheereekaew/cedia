@@ -54,6 +54,7 @@ import {
   serverQueryKeys,
   serverSettingsQueryOptions,
 } from "./lib/serverReactQuery";
+import { readNativeApi } from "./nativeApi";
 import {
   DEFAULT_UI_DENSITY,
   UI_DENSITY_MODES,
@@ -416,6 +417,67 @@ export interface AppModelOption extends ProviderModelOption {
 /** Exported so a non-React writer (Cedia's host preference sync) can start from the real defaults. */
 export const DEFAULT_APP_SETTINGS = AppSettingsSchema.makeUnsafe({});
 let serverSettingsMigrationInFlight = false;
+
+/**
+ * Cedia installs a small namespace beside the vendor NativeApi.  It is the only
+ * reliable renderer-side marker that the Cedia host owns this settings store;
+ * checking for it is side-effect free and keeps the vendor WebSocket path
+ * unchanged for non-Cedia builds.
+ */
+export function isCediaHostRuntime(api: unknown = readNativeApi()): boolean {
+  if (!api || typeof api !== "object" || Array.isArray(api)) return false;
+  const cedia = (api as { readonly cedia?: unknown }).cedia;
+  return (
+    typeof cedia === "object" &&
+    cedia !== null &&
+    !Array.isArray(cedia) &&
+    typeof (cedia as { readonly getCapabilities?: unknown }).getCapabilities === "function"
+  );
+}
+
+/**
+ * App-owned rows that Restore defaults is allowed to touch in Cedia.  Server
+ * settings such as provider paths, auth references, onboarding markers and the
+ * generic thread environment mode belong to another owner (or are legacy
+ * vendor fields), so a Cedia reset must leave them intact.
+ */
+export const CEDIA_LOCAL_RESET_KEYS = [
+  "uiDensity",
+  "chatWidth",
+  "chatFontSizePx",
+  "terminalFontSizePx",
+  "terminalFontFamily",
+  "confirmThreadDelete",
+  "confirmThreadArchive",
+  "confirmTerminalTabClose",
+  "diffWordWrap",
+  "showPullRequestDiffColors",
+  "showChatsSection",
+  "environmentPanelDefaultOpen",
+  "showEnvironmentRepository",
+  "showEnvironmentEditor",
+  "showEnvironmentPinned",
+  "showEnvironmentInstructions",
+  "showEnvironmentNotepad",
+  "followUpBehavior",
+  "enableAssistantStreaming",
+  "composerEffortSlider",
+  "autoOpenDevicePane",
+  "enableNativeFontSmoothing",
+  "enableTaskCompletionToasts",
+  "enableSystemTaskCompletionNotifications",
+  "timestampFormat",
+  "sidebarProjectSortOrder",
+  "sidebarThreadSortOrder",
+  "sidebarNavOrder",
+  "hiddenSidebarNavItems",
+] as const satisfies ReadonlyArray<keyof AppSettings>;
+
+export function cediaLocalResetPatch(defaults: AppSettings): Partial<AppSettings> {
+  return Object.fromEntries(
+    CEDIA_LOCAL_RESET_KEYS.map((key) => [key, defaults[key]]),
+  ) as Partial<AppSettings>;
+}
 
 const PROVIDER_CUSTOM_MODEL_CONFIG: Partial<Record<ProviderKind, ProviderCustomModelConfig>> = {
   codex: {
@@ -995,6 +1057,40 @@ export function normalizeStoredAppSettings(settings: AppSettings): AppSettings {
   };
 }
 
+/**
+ * Project a persisted renderer record with the connected server view. Cedia's
+ * server view is compatibility data only: the host preference bridge owns the
+ * renderer values, so it must never overwrite the local record in that runtime.
+ */
+export function projectAppSettingsForRuntime(
+  localSettings: AppSettings,
+  serverSettings: ServerSettingsView | undefined,
+  cediaHost: boolean,
+): AppSettings {
+  const normalizedLocalSettings = normalizeStoredAppSettings(localSettings);
+  return normalizeAppSettings(
+    cediaHost
+      ? normalizedLocalSettings
+      : {
+          ...normalizedLocalSettings,
+          ...(serverSettings ? serverSettingsToAppSettings(serverSettings) : {}),
+        },
+  );
+}
+
+/**
+ * Wait for the Cedia host-preference bridge to acknowledge a local write. The
+ * bridge is installed by the two Cedia bootstraps before the app bundle loads;
+ * keeping this optional preserves the vendor/browser test path and leaves the
+ * local projection usable while a bridge is unavailable.
+ */
+export async function flushCediaHostPreferences(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const flush = (window as Window & { __CEDIA_HOST_PREFERENCES_FLUSH__?: () => Promise<void> }).__CEDIA_HOST_PREFERENCES_FLUSH__;
+  if (!flush && isCediaHostRuntime()) throw new Error("Cedia preferences are not connected to the host yet.");
+  await flush?.();
+}
+
 export function applyLocalAppSettingsPatch(
   settings: AppSettings,
   patch: Partial<AppSettings>,
@@ -1375,6 +1471,7 @@ export function getCustomBinaryPathForProvider(
 export function useAppSettings() {
   const queryClient = useQueryClient();
   const serverSettingsQuery = useQuery(serverSettingsQueryOptions());
+  const cediaHost = isCediaHostRuntime();
   const [localSettings, setSettings] = useLocalStorage(
     APP_SETTINGS_STORAGE_KEY,
     DEFAULT_APP_SETTINGS,
@@ -1383,16 +1480,20 @@ export function useAppSettings() {
   const normalizedStoredSettingsRef = useRef(false);
   const serverSettingsMutationQueueRef = useRef<Promise<void>>(Promise.resolve());
 
-  const defaults = normalizeAppSettings({
-    ...DEFAULT_APP_SETTINGS,
-    ...serverSettingsToAppSettings(DEFAULT_SERVER_SETTINGS_VIEW),
-  });
+  // Cedia's adapter exposes a synthetic vendor settings view for compatibility,
+  // but its server.updateSettings route is deliberately unavailable. Keep the
+  // Cedia host-owned renderer preferences in the local/host-preference store;
+  // the vendor path retains the server projection below.
+  const defaults = normalizeAppSettings(
+    cediaHost
+      ? DEFAULT_APP_SETTINGS
+      : {
+          ...DEFAULT_APP_SETTINGS,
+          ...serverSettingsToAppSettings(DEFAULT_SERVER_SETTINGS_VIEW),
+        },
+  );
 
-  const normalizedLocalSettings = normalizeStoredAppSettings(localSettings);
-  const settings = normalizeAppSettings({
-    ...normalizedLocalSettings,
-    ...(serverSettingsQuery.data ? serverSettingsToAppSettings(serverSettingsQuery.data) : {}),
-  });
+  const settings = projectAppSettingsForRuntime(localSettings, serverSettingsQuery.data, cediaHost);
 
   useEffect(() => {
     if (normalizedStoredSettingsRef.current) {
@@ -1404,7 +1505,7 @@ export function useAppSettings() {
   }, [setSettings]);
 
   useEffect(() => {
-    if (!serverSettingsQuery.data || serverSettingsMigrationInFlight) {
+    if (cediaHost || !serverSettingsQuery.data || serverSettingsMigrationInFlight) {
       return;
     }
     if (globalThis.localStorage?.getItem(SERVER_SETTINGS_MIGRATION_STORAGE_KEY) === "1") {
@@ -1430,7 +1531,7 @@ export function useAppSettings() {
       .finally(() => {
         serverSettingsMigrationInFlight = false;
       });
-  }, [localSettings, queryClient, serverSettingsQuery.data]);
+  }, [cediaHost, localSettings, queryClient, serverSettingsQuery.data]);
 
   const refreshProvidersAfterEnablementChange = async () => {
     const api = ensureNativeApi();
@@ -1460,6 +1561,18 @@ export function useAppSettings() {
 
   const updateSettingsAndWait = async (patch: Partial<AppSettings>): Promise<void> => {
     setSettings((prev) => applyLocalAppSettingsPatch(prev, patch));
+    // The Cedia bootstrap bridge observes this local write and persists its
+    // host-owned subset with a revision. Calling the vendor mutation here would
+    // hit the adapter's unsupported server.updateSettings route.
+    if (cediaHost) {
+      // React commits the local-storage updater before the queued event reaches
+      // the bridge. Waiting one microtask makes the returned promise mean what
+      // its name says: the host has accepted the preference or reported that it
+      // could not do so.
+      await Promise.resolve();
+      await flushCediaHostPreferences();
+      return;
+    }
     await enqueueServerSettingsMutation(async () => {
       const currentServerSettings =
         queryClient.getQueryData<ServerSettingsView>(serverQueryKeys.settings()) ??
@@ -1500,6 +1613,15 @@ export function useAppSettings() {
   const resetSettings = async (): Promise<void> => {
     // "Restore defaults" resets preferences, not lifecycle markers: clearing the
     // onboarding completion timestamp would replay the first-run tour on the next launch.
+    if (cediaHost) {
+      setSettings((prev) =>
+        applyLocalAppSettingsPatch(prev, cediaLocalResetPatch(DEFAULT_APP_SETTINGS)),
+      );
+      await Promise.resolve();
+      await flushCediaHostPreferences();
+      return;
+    }
+
     const { onboardingCompletedAt: _keepOnboardingCompletedAt, ...resettableDefaults } = defaults;
     setSettings((prev) => ({
       ...DEFAULT_APP_SETTINGS,

@@ -3,10 +3,15 @@ import { watch, constants as fsConstants, type FSWatcher } from "node:fs";
 import { access, chmod, lstat, open, readdir, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { isSupportedLocalImagePath, lowerCaseExtensionOf } from "../agent-window/vendor/synara/packages/shared/src/localPreviewFiles.ts";
+
 /** IPC channel used by file-watch subscriptions in the Agent Window. */
 export const AGENT_FILES_EVENT_CHANNEL = "vscode:cediaAgentFiles";
 
 const DEFAULT_READ_FILE_MAX_BYTES = 1_000_000;
+const MAX_LOCAL_PREVIEW_BYTES = 8 * 1024 * 1024;
+const LOCAL_PREVIEW_GRANT_TTL_MS = 60_000;
+const MAX_LOCAL_PREVIEW_GRANTS = 256;
 const MAX_FILE_PATH_LENGTH = 2_048;
 const MAX_DIRECTORY_LIST_ENTRIES = 4_000;
 const MAX_WORKSPACE_INDEX_ENTRIES = 25_000;
@@ -83,6 +88,17 @@ interface FileEventRequest {
 	readonly sender?: FileEventSender;
 }
 
+interface LocalFilePreviewGrant {
+	readonly path: string;
+	readonly expiresAt: number;
+}
+
+interface LocalFilePreviewInput {
+	readonly path?: unknown;
+	readonly cwd?: unknown;
+	readonly grant?: unknown;
+}
+
 export interface AgentFilesService {
 	handle(event: unknown, method: string, input: unknown): Promise<unknown>;
 	dispose(): void;
@@ -111,6 +127,24 @@ function requiredString(value: unknown, name: string, maxLength = MAX_FILE_PATH_
 		throw new AgentFilesError(`Invalid ${name}.`);
 	}
 	return value;
+}
+
+function mimeTypeForLocalImage(filePath: string): string {
+	switch (lowerCaseExtensionOf(filePath)) {
+		case ".avif": return "image/avif";
+		case ".bmp": return "image/bmp";
+		case ".gif": return "image/gif";
+		case ".heic": return "image/heic";
+		case ".heif": return "image/heif";
+		case ".ico": return "image/x-icon";
+		case ".jpeg":
+		case ".jpg": return "image/jpeg";
+		case ".png": return "image/png";
+		case ".svg": return "image/svg+xml";
+		case ".tiff": return "image/tiff";
+		case ".webp": return "image/webp";
+		default: throw new AgentFilesError("This file type is not supported for image preview.", "AGENT_FILES_PREVIEW_TYPE");
+	}
 }
 
 function optionalPositiveInteger(value: unknown, name: string, fallback: number, max: number): number {
@@ -222,6 +256,26 @@ async function existingRealPathWithinRoot(root: string, absolutePath: string): P
 	}
 	if (!isContained(root, target)) throw new AgentFilesError("Path is outside the workspace.", "AGENT_FILES_PATH");
 	return target;
+}
+
+async function resolveLocalPreviewPath(input: LocalFilePreviewInput): Promise<{ real: string; mimeType: string; size: number }> {
+	const requested = requiredString(input.path, "path");
+	const workspace = await canonicalWorkspace(input.cwd);
+	let absolute: string;
+	if (isAbsolute(requested) || /^[A-Za-z]:[\\/]/.test(requested)) {
+		absolute = resolve(requested);
+	} else {
+		absolute = resolve(workspace.root, requested.replaceAll("\\", "/"));
+	}
+	const real = await realpath(absolute).catch((error) => {
+		throw new AgentFilesError(`Path is unavailable: ${error instanceof Error ? error.message : String(error)}`, "AGENT_FILES_PREVIEW_PATH");
+	});
+	if (!isContained(workspace.root, real)) throw new AgentFilesError("Image preview path is outside the workspace.", "AGENT_FILES_PREVIEW_PATH");
+	if (!isSupportedLocalImagePath(real)) throw new AgentFilesError("This file type is not supported for image preview.", "AGENT_FILES_PREVIEW_TYPE");
+	const info = await stat(real);
+	if (!info.isFile()) throw new AgentFilesError("Image preview path is not a regular file.", "AGENT_FILES_PREVIEW_PATH");
+	if (info.size > MAX_LOCAL_PREVIEW_BYTES) throw new AgentFilesError("Image preview is too large to load.", "AGENT_FILES_PREVIEW_CAPACITY");
+	return { real, mimeType: mimeTypeForLocalImage(real), size: info.size };
 }
 
 async function resolveWorkspacePath(
@@ -530,6 +584,7 @@ function senderFromEvent(event: unknown): FileEventSender {
 
 export function createAgentFilesService(): AgentFilesService {
 	const subscriptions = new Map<string, WatchSubscription>();
+	const previewGrants = new Map<string, LocalFilePreviewGrant>();
 	const owners = new WeakSet<FileEventSender>();
 	const cleanupSubscription = (id: string) => {
 		const subscription = subscriptions.get(id);
@@ -565,6 +620,44 @@ export function createAgentFilesService(): AgentFilesService {
 		watcher.on("error", () => cleanupSubscription(id));
 		return { subscriptionId: id };
 	};
+	const createLocalFilePreviewGrant = async (rawInput: RecordValue) => {
+		const resolved = await resolveLocalPreviewPath(rawInput);
+		const grant = randomUUID();
+		const expiresAt = Date.now() + LOCAL_PREVIEW_GRANT_TTL_MS;
+		for (const [key, value] of previewGrants) {
+			if (value.expiresAt <= Date.now()) previewGrants.delete(key);
+		}
+		while (previewGrants.size >= MAX_LOCAL_PREVIEW_GRANTS) {
+			const oldest = previewGrants.keys().next().value;
+			if (typeof oldest !== "string") break;
+			previewGrants.delete(oldest);
+		}
+		previewGrants.set(grant, { path: resolved.real, expiresAt });
+		return { grant, expiresAt: new Date(expiresAt).toISOString() };
+	};
+	const readLocalFilePreview = async (rawInput: RecordValue) => {
+		const grant = requiredString(rawInput.grant, "grant", 256);
+		const issued = previewGrants.get(grant);
+		if (!issued || issued.expiresAt <= Date.now()) {
+			previewGrants.delete(grant);
+			throw new AgentFilesError("The image preview grant has expired.", "AGENT_FILES_PREVIEW_GRANT");
+		}
+		const resolved = await resolveLocalPreviewPath(rawInput);
+		if (resolved.real !== issued.path) throw new AgentFilesError("The image preview grant does not match this file.", "AGENT_FILES_PREVIEW_GRANT");
+		const handle = await open(resolved.real, "r");
+		let bytes: Buffer;
+		try {
+			const info = await handle.stat();
+			if (!info.isFile()) throw new AgentFilesError("Image preview path is not a regular file.", "AGENT_FILES_PREVIEW_PATH");
+			if (info.size > MAX_LOCAL_PREVIEW_BYTES) throw new AgentFilesError("Image preview is too large to load.", "AGENT_FILES_PREVIEW_CAPACITY");
+			bytes = Buffer.alloc(info.size);
+			const result = await handle.read(bytes, 0, bytes.length, 0);
+			bytes = bytes.subarray(0, result.bytesRead);
+		} finally {
+			await handle.close();
+		}
+		return { path: resolved.real, mimeType: resolved.mimeType, dataBase64: bytes.toString("base64"), version: hashBytes(bytes) };
+	};
 	return {
 		handle: async (event, method, rawInput) => {
 			const input = isRecord(rawInput) ? rawInput : {};
@@ -574,6 +667,8 @@ export function createAgentFilesService(): AgentFilesService {
 				case "projects.searchLocalEntries": return searchLocalEntries(input);
 				case "projects.searchContent": return searchContent(input);
 				case "projects.readFile": return readFileContents(input);
+				case "projects.createLocalFilePreviewGrant": return createLocalFilePreviewGrant(input);
+				case "projects.readLocalFilePreview": return readLocalFilePreview(input);
 				case "projects.writeFile": {
 					// Item 63d: workspace writes go through OMP turns and the guarded
 					// editor bridge only. The bundle's direct file-write surface
@@ -593,6 +688,6 @@ export function createAgentFilesService(): AgentFilesService {
 				default: throw new AgentFilesError(`Unsupported Agent files method: ${method}`);
 			}
 		},
-		dispose: () => { for (const id of [...subscriptions.keys()]) cleanupSubscription(id); },
+		dispose: () => { for (const id of [...subscriptions.keys()]) cleanupSubscription(id); previewGrants.clear(); },
 	};
 }

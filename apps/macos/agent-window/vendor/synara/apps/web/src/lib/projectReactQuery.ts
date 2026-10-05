@@ -329,6 +329,7 @@ export function projectResolveOutOfRootFileReferenceQueryOptions(input: {
 
 export function projectLocalPreviewGrantQueryOptions(input: {
   path: string | null;
+  cwd?: string | null;
   enabled?: boolean;
   staleTime?: number;
 }) {
@@ -339,7 +340,15 @@ export function projectLocalPreviewGrantQueryOptions(input: {
       if (!input.path) {
         throw new Error("Local file preview grant is unavailable.");
       }
-      return api.projects.createLocalFilePreviewGrant({ path: input.path });
+      const embeddedCedia =
+        typeof window !== "undefined" &&
+        window.desktopBridge?.getWsUrl?.() === null &&
+        input.cwd;
+      return api.projects.createLocalFilePreviewGrant(
+        embeddedCedia
+          ? ({ path: input.path, cwd: input.cwd } as unknown as { path: string })
+          : { path: input.path },
+      );
     },
     enabled: (input.enabled ?? true) && input.path !== null,
     staleTime: input.staleTime ?? 60_000,

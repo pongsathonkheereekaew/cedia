@@ -15,5 +15,7 @@ declare global {
   interface Window {
     nativeApi?: NativeApi;
     desktopBridge?: DesktopBridge;
+    /** Resolves after Cedia's host-owned preference bridge accepts a local write. */
+    __CEDIA_HOST_PREFERENCES_FLUSH__?: () => Promise<void>;
   }
 }

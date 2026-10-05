@@ -7,11 +7,20 @@
 //        markdown variant (`GeneratedMarkdownImage`) composes the same hook and
 //        error card with its own inline frame/overlay rendering.
 
-import { type ImgHTMLAttributes, type MouseEvent, useState } from "react";
+import {
+  type ImgHTMLAttributes,
+  type MouseEvent,
+  useEffect,
+  useState,
+} from "react";
 
 import { downloadUrlAsBlob } from "~/lib/browserDownload";
 import { DownloadIcon, Loader2Icon, TriangleAlertIcon } from "~/lib/icons";
-import { buildLocalImageUrl, localImageFileName } from "~/lib/localImageUrls";
+import {
+  buildLocalImageUrl,
+  localImageFileName,
+  normalizeLocalImagePath,
+} from "~/lib/localImageUrls";
 import { cn } from "~/lib/utils";
 import { toastManager } from "./ui/toast";
 
@@ -33,6 +42,51 @@ export interface LocalImagePreviewState {
   imgProps: LocalImagePreviewImgProps;
 }
 
+interface CediaLocalImageApi {
+  createLocalFilePreviewGrant(input: {
+    path: string;
+    cwd: string;
+  }): Promise<{ grant: string; expiresAt: string }>;
+  readLocalFilePreview(input: {
+    path: string;
+    cwd: string;
+    grant: string;
+  }): Promise<{ mimeType: string; dataBase64: string }>;
+}
+
+interface CediaNativePreviewState {
+  key: string;
+  status: LocalImagePreviewStatus;
+  dataUrl?: string;
+}
+
+const NATIVE_PREVIEW_PLACEHOLDER =
+  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+
+function readCediaLocalImageApi(): CediaLocalImageApi | null {
+  if (
+    typeof window === "undefined" ||
+    !window.desktopBridge ||
+    !window.nativeApi
+  )
+    return null;
+  try {
+    // Cedia's embedded webview has no HTTP/WS origin for /api/local-image. Its
+    // scoped native bridge serves the same exact-path capability instead.
+    if (window.desktopBridge.getWsUrl() !== null) return null;
+  } catch {
+    return null;
+  }
+  const projects = window.nativeApi.projects as unknown as {
+    createLocalFilePreviewGrant?: CediaLocalImageApi["createLocalFilePreviewGrant"];
+    readLocalFilePreview?: CediaLocalImageApi["readLocalFilePreview"];
+  };
+  return typeof projects.createLocalFilePreviewGrant === "function" &&
+    typeof projects.readLocalFilePreview === "function"
+    ? (projects as CediaLocalImageApi)
+    : null;
+}
+
 export function useLocalImagePreview(input: {
   src: string;
   cwd: string | null | undefined;
@@ -42,6 +96,7 @@ export function useLocalImagePreview(input: {
   onPreviewError?: (() => void) | undefined;
 }): LocalImagePreviewState {
   const { src, cwd, previewGrant } = input;
+  const normalizedSrc = normalizeLocalImagePath(src);
   const previewUrl = buildLocalImageUrl({
     src,
     cwd: cwd ?? undefined,
@@ -55,6 +110,47 @@ export function useLocalImagePreview(input: {
     grant: previewGrant,
   });
   const fileName = localImageFileName(src);
+  const cediaImageApi = cwd ? readCediaLocalImageApi() : null;
+  const nativeKey = `${normalizedSrc}\0${cwd ?? ""}\0${previewGrant ?? ""}\0${input.cacheKey ?? ""}`;
+  const [nativePreview, setNativePreview] = useState<CediaNativePreviewState>(
+    () => ({
+      key: nativeKey,
+      status: cediaImageApi ? "loading" : "ready",
+    }),
+  );
+  useEffect(() => {
+    if (!cediaImageApi || !cwd) {
+      setNativePreview({ key: nativeKey, status: "ready" });
+      return;
+    }
+    let active = true;
+    setNativePreview({ key: nativeKey, status: "loading" });
+    const baseInput = { path: normalizedSrc, cwd };
+    void (async () => {
+      let grant = previewGrant;
+      if (!grant) {
+        grant = (await cediaImageApi.createLocalFilePreviewGrant(baseInput))
+          .grant;
+      }
+      const loaded = await cediaImageApi.readLocalFilePreview({
+        ...baseInput,
+        grant,
+      });
+      if (!active) return;
+      setNativePreview({
+        key: nativeKey,
+        // Keep the preview loading until Chromium decodes the returned data URL.
+        // A valid file can still be an unsupported/corrupt image payload.
+        status: "loading",
+        dataUrl: `data:${loaded.mimeType};base64,${loaded.dataBase64}`,
+      });
+    })().catch(() => {
+      if (active) setNativePreview({ key: nativeKey, status: "error" });
+    });
+    return () => {
+      active = false;
+    };
+  }, [cediaImageApi, cwd, input.cacheKey, nativeKey, normalizedSrc, previewGrant]);
   // A generation distinguishes separate visits to the same URL. This keeps an
   // A -> B -> A transition from reviving A's old error branch (which contains
   // no <img> and therefore cannot retry), and rejects stale image events.
@@ -66,10 +162,28 @@ export function useLocalImagePreview(input: {
   const load =
     storedLoad.url === previewUrl
       ? storedLoad
-      : { url: previewUrl, generation: storedLoad.generation + 1, status: "loading" as const };
+      : {
+          url: previewUrl,
+          generation: storedLoad.generation + 1,
+          status: "loading" as const,
+        };
   if (load !== storedLoad) {
     setStoredLoad(load);
   }
+
+  const currentNativePreview =
+    nativePreview.key === nativeKey ? nativePreview : null;
+  const nativeIsReady = currentNativePreview?.status === "ready";
+  const effectivePreviewUrl = cediaImageApi
+    ? (currentNativePreview?.dataUrl ?? NATIVE_PREVIEW_PLACEHOLDER)
+    : previewUrl;
+  const effectiveDownloadUrl =
+    cediaImageApi && currentNativePreview?.dataUrl
+      ? (currentNativePreview.dataUrl ?? downloadUrl)
+      : downloadUrl;
+  const status = cediaImageApi
+    ? (currentNativePreview?.status ?? "loading")
+    : load.status;
 
   const settleLoad = (status: Exclude<LocalImagePreviewStatus, "loading">) => {
     setStoredLoad((current) =>
@@ -80,26 +194,42 @@ export function useLocalImagePreview(input: {
   };
 
   const imgProps: LocalImagePreviewImgProps = {
-    src: previewUrl,
+    src: effectivePreviewUrl,
     loading: "lazy",
     decoding: "async",
     draggable: false,
     onLoad: () => {
+      if (cediaImageApi) {
+        if (!currentNativePreview?.dataUrl || nativeIsReady) return;
+        setNativePreview((current) =>
+          current.key === nativeKey ? { ...current, status: "ready" } : current,
+        );
+        input.onPreviewReady?.();
+        return;
+      }
       settleLoad("ready");
       input.onPreviewReady?.();
     },
     onError: () => {
+      if (cediaImageApi) {
+        if (!currentNativePreview?.dataUrl || currentNativePreview.status === "error") return;
+        setNativePreview((current) =>
+          current.key === nativeKey ? { ...current, status: "error" } : current,
+        );
+        input.onPreviewError?.();
+        return;
+      }
       settleLoad("error");
       input.onPreviewError?.();
     },
   };
 
   return {
-    previewUrl,
-    downloadUrl,
+    previewUrl: effectivePreviewUrl,
+    downloadUrl: effectiveDownloadUrl,
     fileName,
     downloadName: fileName || "",
-    status: load.status,
+    status,
     imgProps,
   };
 }
@@ -117,7 +247,9 @@ export function useLocalImageDownloadClick(input: {
     event.stopPropagation();
     void Promise.resolve()
       .then(async () => {
-        const url = input.resolveDownloadUrl ? await input.resolveDownloadUrl() : input.downloadUrl;
+        const url = input.resolveDownloadUrl
+          ? await input.resolveDownloadUrl()
+          : input.downloadUrl;
         await downloadUrlAsBlob({ url, filename: input.downloadName });
       })
       .catch((error: unknown) => {
@@ -125,7 +257,9 @@ export function useLocalImageDownloadClick(input: {
           type: "error",
           title: input.errorTitle ?? "Could not download image",
           description:
-            error instanceof Error ? error.message : "The file may have moved or be unavailable.",
+            error instanceof Error
+              ? error.message
+              : "The file may have moved or be unavailable.",
         });
       });
   };
@@ -146,7 +280,9 @@ export function LocalImageErrorCard(props: {
         <TriangleAlertIcon className="size-4" />
       </span>
       <span className="local-image-error__body">
-        <span className="local-image-error__title">Couldn’t open this image</span>
+        <span className="local-image-error__title">
+          Couldn’t open this image
+        </span>
         <span className="local-image-error__subtitle">
           The file may have moved or be unavailable.
         </span>
@@ -184,7 +320,10 @@ export function LocalImagePreview(props: {
     onPreviewReady: props.onPreviewReady,
     onPreviewError: props.onPreviewError,
   });
-  const handleDownloadClick = useLocalImageDownloadClick({ downloadUrl, downloadName });
+  const handleDownloadClick = useLocalImageDownloadClick({
+    downloadUrl,
+    downloadName,
+  });
 
   if (status === "error") {
     return (
@@ -198,7 +337,10 @@ export function LocalImagePreview(props: {
   }
 
   return (
-    <div className={cn("local-image-preview", props.className)} data-status={status}>
+    <div
+      className={cn("local-image-preview", props.className)}
+      data-status={status}
+    >
       {status === "loading" ? (
         <span className="local-image-preview__skeleton" aria-hidden="true">
           <Loader2Icon className="size-4 animate-spin opacity-60" />

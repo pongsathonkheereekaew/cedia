@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
-import { CEDIA_PROTOCOL_VERSION, parseOmpSettingsContext, parseOmpSettingsMutation, type CommandRequest, type HostLifecycleAdmissionReceipt, type HostLifecycleSnapshot, type HostLifecycleStatus, type HostOmpCapabilitySnapshot, type HostOmpSettingsAnswer, type OmpGoalCommandRequest, type OmpSettingsContext, type OmpSettingsKeysSnapshot, type OmpSettingsMutation, type OmpSettingsValue, type HostQuitReceipt, type UiResponseRequest } from "../../../packages/protocol/src/index.ts";
+import { CEDIA_PROTOCOL_VERSION, parseOmpSettingsContext, parseOmpSettingsMutation, type CommandRequest, type ForgeReviewDiffRequest, type ForgeReviewListRequest, type ForgeReviewProvider, type ForgeReviewRequest, type ForgeReviewWorkflowRequest, type ForgeReviewMutationRequest, type ForgeReviewMutationOperation, type HostLifecycleAdmissionReceipt, type HostLifecycleSnapshot, type HostLifecycleStatus, type HostOmpCapabilitySnapshot, type HostOmpSettingsAnswer, type OmpGoalCommandRequest, type OmpSettingsContext, type OmpSettingsKeysSnapshot, type OmpSettingsMutation, type OmpSettingsValue, type HostQuitReceipt, type UiResponseRequest } from "../../../packages/protocol/src/index.ts";
 import { isGitMethod } from "../../../packages/protocol/src/git.ts";
 import { OMP_BASELINE_VERSION } from "../../../packages/omp-adapter/src/types.ts";
 import { DeviceAuth } from "./auth.ts";
@@ -41,6 +41,8 @@ import { OmpOmfgValidationError, type OmpOmfgAbortCommandRequest, type OmpOmfgDr
 import type { OmpExtensionSetRequest, OmpToolActiveSetRequest, OmpToolRefreshRequest } from "./omp-management.ts";
 import type { OmpAgentConfigRequest, OmpAgentKillRequest, OmpAgentReviveRequest } from "./omp-agents.ts";
 import { OmpModelStateValidationError, type OmpAccountPinCommandRequest, type OmpRoleApplyCommandRequest, type OmpRoleSetCommandRequest, type OmpServiceTierCommandRequest } from "./omp-model-state.ts";
+import { ForgeReviewError, type ForgeReviewService } from "./forge-review.ts";
+import type { ForgeReviewWorkflowService } from "./forge-review-workflow.ts";
 
 export interface HostRequest { method: string; path: string; token?: string; body?: unknown }
 export interface HostResponse { status: number; body: unknown }
@@ -71,6 +73,69 @@ function integer(value: string | null, fallback: number): number {
   if (value === null) return fallback;
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw new HostError("invalid_cursor", "Invalid pagination", 400);
   return Number(value);
+}
+
+function forgeReviewProvider(value: unknown): ForgeReviewProvider {
+  if (value !== "github" && value !== "gitlab") throw new HostError("invalid_body", "Forge review provider must be github or gitlab", 400);
+  return value;
+}
+
+function forgeReviewRequest(value: Record<string, unknown>): ForgeReviewRequest {
+  for (const key of Object.keys(value)) if (!["projectId", "url"].includes(key)) throw new HostError("invalid_body", `Unsupported forge review field ${key}`, 400);
+  return { projectId: string(value.projectId, "projectId"), url: string(value.url, "url") };
+}
+
+function forgeReviewListRequest(value: Record<string, unknown>): ForgeReviewListRequest {
+  for (const key of Object.keys(value)) if (!["projectId", "url", "provider", "state", "limit", "bucket", "team", "cursor"].includes(key)) throw new HostError("invalid_body", `Unsupported forge review list field ${key}`, 400);
+  if (value.state !== undefined && value.state !== "open" && value.state !== "closed" && value.state !== "merged" && value.state !== "all") throw new HostError("invalid_body", "Forge review state must be open, closed, merged or all", 400);
+  if (value.bucket !== undefined && value.bucket !== "all" && value.bucket !== "authored" && value.bucket !== "needs_review" && value.bucket !== "team") throw new HostError("invalid_body", "Forge review bucket is invalid", 400);
+  if (value.bucket === "team" && value.team === undefined) throw new HostError("invalid_body", "The team bucket requires a team", 400);
+  if (value.team !== undefined) string(value.team, "team");
+  if (value.cursor !== undefined) string(value.cursor, "cursor");
+  if (value.limit !== undefined && (typeof value.limit !== "number" || !Number.isSafeInteger(value.limit) || value.limit < 1 || value.limit > 100)) throw new HostError("invalid_body", "Forge review limit must be between 1 and 100", 400);
+  return {
+    projectId: string(value.projectId, "projectId"),
+    ...(value.url === undefined ? {} : { url: string(value.url, "url") }),
+    ...(value.provider === undefined ? {} : { provider: forgeReviewProvider(value.provider) }),
+    ...(value.state === undefined ? {} : { state: value.state as ForgeReviewListRequest["state"] }),
+    ...(value.bucket === undefined ? {} : { bucket: value.bucket as ForgeReviewListRequest["bucket"] }),
+    ...(value.team === undefined ? {} : { team: string(value.team, "team") }),
+    ...(value.cursor === undefined ? {} : { cursor: string(value.cursor, "cursor") }),
+    ...(value.limit === undefined ? {} : { limit: value.limit as number }),
+  };
+}
+
+function forgeReviewDiffRequest(value: Record<string, unknown>): ForgeReviewDiffRequest {
+  for (const key of Object.keys(value)) if (!["projectId", "url", "headSha", "baseSha"].includes(key)) throw new HostError("invalid_body", `Unsupported forge review diff field ${key}`, 400);
+  const base = forgeReviewRequest({ projectId: value.projectId, url: value.url });
+  return {
+    ...base,
+    ...(value.headSha === undefined ? {} : { headSha: string(value.headSha, "headSha") }),
+    ...(value.baseSha === undefined ? {} : { baseSha: string(value.baseSha, "baseSha") }),
+  };
+}
+
+function forgeReviewWorkflowRequest(value: Record<string, unknown>): ForgeReviewWorkflowRequest {
+  for (const key of Object.keys(value)) if (!["projectId", "url", "section", "cursor", "limit", "threadId", "commentCursor"].includes(key)) throw new HostError("invalid_body", `Unsupported forge review workflow field ${key}`, 400);
+  if (value.section !== "overview" && value.section !== "activity" && value.section !== "threads") throw new HostError("invalid_body", "Forge review workflow section must be overview, activity or threads", 400);
+  if (value.cursor !== undefined) string(value.cursor, "cursor");
+  if (value.threadId !== undefined) string(value.threadId, "threadId");
+  if (value.commentCursor !== undefined) string(value.commentCursor, "commentCursor");
+  if (value.commentCursor !== undefined && value.threadId === undefined) throw new HostError("invalid_body", "commentCursor requires threadId", 400);
+  if (value.limit !== undefined && (typeof value.limit !== "number" || !Number.isSafeInteger(value.limit) || value.limit < 1 || value.limit > 100)) throw new HostError("invalid_body", "Forge review workflow limit must be between 1 and 100", 400);
+  return { projectId: string(value.projectId, "projectId"), url: string(value.url, "url"), section: value.section, ...(value.cursor === undefined ? {} : { cursor: value.cursor as string }), ...(value.limit === undefined ? {} : { limit: value.limit as number }), ...(value.threadId === undefined ? {} : { threadId: value.threadId as string }), ...(value.commentCursor === undefined ? {} : { commentCursor: value.commentCursor as string }) };
+}
+
+function forgeReviewMutationOperation(value: unknown): ForgeReviewMutationOperation {
+  const operation = record(value);
+  const allowed = ["issue_comment", "review", "reply", "resolve_thread", "edit", "reviewers", "draft", "state", "merge"];
+  if (typeof operation.kind !== "string" || !allowed.includes(operation.kind)) throw new HostError("invalid_body", "Unsupported forge review mutation", 400);
+  return operation as unknown as ForgeReviewMutationOperation;
+}
+
+function forgeReviewMutationRequest(value: Record<string, unknown>): ForgeReviewMutationRequest {
+  for (const key of Object.keys(value)) if (!["projectId", "url", "commandId", "expectedHeadSha", "operation"].includes(key)) throw new HostError("invalid_body", `Unsupported forge review mutation field ${key}`, 400);
+  return { projectId: string(value.projectId, "projectId"), url: string(value.url, "url"), commandId: string(value.commandId, "commandId"), expectedHeadSha: string(value.expectedHeadSha, "expectedHeadSha"), operation: forgeReviewMutationOperation(value.operation) };
 }
 
 function goalCommand(value: Record<string, unknown>): OmpGoalCommandRequest {
@@ -502,7 +567,7 @@ function gitFailure(error: unknown, runtimePaths: readonly string[]): HostError 
 }
 
 /** Identical authenticated application router for loopback HTTP and encrypted relay. */
-export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService; ompCapabilities?: (expectedRevision?: string) => Promise<HostOmpCapabilitySnapshot>; ompSettingsKeys?: () => Promise<HostOmpSettingsAnswer<OmpSettingsKeysSnapshot>>; ompSettingsValue?: (path: string) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>; ompSettingsWrite?: (request: { path: string; value: unknown; expectedRevision?: string }) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>;
+export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifacts?: ArtifactStore; remote?: RemoteConnection; editors?: EditorConnections; voice?: VoiceEndpoint; git?: HostGitService; forgeReview?: ForgeReviewService; forgeReviewWorkflow?: ForgeReviewWorkflowService; ompCapabilities?: (expectedRevision?: string) => Promise<HostOmpCapabilitySnapshot>; ompSettingsKeys?: () => Promise<HostOmpSettingsAnswer<OmpSettingsKeysSnapshot>>; ompSettingsValue?: (path: string) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>; ompSettingsWrite?: (request: { path: string; value: unknown; expectedRevision?: string }) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>;
       ompSettingsValueIn?: (path: string, context: OmpSettingsContext) => Promise<HostOmpSettingsAnswer<OmpSettingsValue>>;
       ompSettingsMutate?: (mutation: OmpSettingsMutation) => Promise<{ values: readonly OmpSettingsValue[]; scope: "global" | "project" }>;
       ompSettingsResetPreview?: (paths: string[]) => Promise<{ path: string; globalConfigured: boolean; current: OmpSettingsValue }[]>; /** Cedia's product-policy layer as the live runtime reports it (§2.8). */ ompPolicy?: () => Promise<HostOmpSettingsAnswer<OmpCreditPolicy>>; lifecycle?: { snapshot(): HostLifecycleSnapshot; identity(): unknown; adopt(input: unknown, stateDir: string, protocolVersion: number): HostLifecycleSnapshot; assertAccepting(): void; status?: () => HostLifecycleStatus; requestQuit?: () => HostLifecycleSnapshot; resume?: () => HostLifecycleSnapshot }; /** The selected remote path's local end, so the capability row reports whether it is up (§6.5). */ gateway?: () => { readonly url: string } | undefined; /** Issue one short-lived enrollment code into the gateway's own store (§6.5). */ issueRemoteEnrollment?: (name: string) => { readonly code: string; readonly pin: string; readonly expiresAt: string }; stateDir?: string; settings?: SettingsStore; drafts?: DraftStore } = {}): HostRouter {
@@ -1325,6 +1390,36 @@ export function createRouter(host: CediaHost, auth: DeviceAuth, extras: { artifa
           else if (stat.isFile() && stat.size <= 1024 * 1024) { const bytes = readFileSync(path); result = bytes.includes(0) ? { binary: true, size: stat.size } : { text: bytes.toString("utf8"), size: stat.size }; }
           else result = { binary: true, size: stat.size };
         } else throw new HostError("not_found", "Unknown task route", 404);
+      } else if (parts[1] === "forge-review") {
+        // Forge credentials stay inside the host's gh/glab process. The renderer receives only
+        // provider-neutral review data and immutable snapshot anchors. Workflow writes are
+        // explicit, revision-bound, durable-command operations owned by the host.
+        owner();
+        const workflowRoute = parts.length === 3 && (parts[2] === "workflow" || parts[2] === "mutate");
+        if (!extras.forgeReview && !workflowRoute) throw new HostError("forge_review_unavailable", "Code Review is not wired in this host", 503);
+        try {
+          if (parts.length === 3 && parts[2] === "workflow" && method === "POST") {
+            if (!extras.forgeReviewWorkflow) throw new HostError("forge_review_unavailable", "Code Review workflow is not wired in this host", 503);
+            result = await extras.forgeReviewWorkflow.workflow(forgeReviewWorkflowRequest(body()));
+          } else if (parts.length === 3 && parts[2] === "mutate" && method === "POST") {
+            if (!extras.forgeReviewWorkflow) throw new HostError("forge_review_unavailable", "Code Review workflow is not wired in this host", 503);
+            result = await extras.forgeReviewWorkflow.mutate(forgeReviewMutationRequest(body()));
+          } else if (parts.length === 3 && parts[2] === "capabilities" && method === "GET") {
+            if (url.search !== "" || request.body !== undefined) throw new HostError("invalid_request", "Forge review capabilities does not accept query or body fields", 400);
+            result = await extras.forgeReview!.capabilities();
+          } else if (parts.length === 3 && parts[2] === "list" && method === "POST") {
+            result = await extras.forgeReview!.list(forgeReviewListRequest(body()));
+          } else if (parts.length === 3 && parts[2] === "detail" && method === "POST") {
+            result = await extras.forgeReview!.detail(forgeReviewRequest(body()));
+          } else if (parts.length === 3 && parts[2] === "diff" && method === "POST") {
+            result = await extras.forgeReview!.diff(forgeReviewDiffRequest(body()));
+          } else if (parts.length === 3 && ["capabilities", "list", "detail", "diff", "workflow", "mutate"].includes(parts[2]!)) {
+            throw new HostError("method_not_allowed", "Unsupported Forge review method", 405);
+          } else throw new HostError("not_found", "Unknown Forge review route", 404);
+        } catch (error) {
+          if (error instanceof ForgeReviewError) throw new HostError(error.code, error.message, error.status);
+          throw error;
+        }
       } else if (parts[1] === "git" && extras.git) {
         // One git implementation behind three routes: a one-shot method, a streaming action, and
         // that action's poll. `path` is a working directory the host must already own, so the

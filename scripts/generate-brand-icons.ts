@@ -4,38 +4,34 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
-const brand = join(root, "assets/brand/cedia-terminal-d-v1");
+const brand = join(root, "assets/brand/bloub-nuage-v1");
 const iconset = join(brand, "cedia.iconset");
 const asset = (name: string) => join(brand, name);
 
 await mkdir(iconset, { recursive: true });
 
-// The owner's approved A reference is the geometry source. Remove its neutral
-// presentation field, then derive transparency from image luminance so the white
-// terminal glyphs become knockouts in the black silhouette.
-execFileSync("ffmpeg", [
-	"-y", "-i", asset("approved-reference-board.png"),
-	"-vf",
-		"crop=586:586:223:89,format=yuva444p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(lt(lum(X,Y),48),255,if(lt(lum(X,Y),115),(115-lum(X,Y))*3.805,0))',scale=1024:1024:flags=lanczos,format=rgba",
-	"-frames:v", "1", asset("cedia-mark.png"),
-] , { stdio: "ignore" });
-execFileSync("ffmpeg", [
-	"-y", "-i", asset("cedia-mark.png"),
-	"-vf", "lutrgb=r=255:g=255:b=255",
-	"-frames:v", "1", asset("cedia-mask.png"),
-], { stdio: "ignore" });
+// The bloub-nuage source (`source.png`, 1024 px, transparent background with dark
+// cloud body and white eyes) is already separated. `cedia-mark.png` (black) and
+// `cedia-mask.png` (white) are committed derivatives where the eyes are knocked
+// out to transparency, so regeneration starts from the committed mask and only
+// rebuilds SVGs, PNG masters, the iconset, the ICNS, and live app copies.
 
 const maskData = (await readFile(asset("cedia-mask.png"))).toString("base64");
 const maskedShape = (color: string) => `<defs><mask id="cedia-mark" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><image x="0" y="0" width="1024" height="1024" href="data:image/png;base64,${maskData}"/></mask></defs><rect width="1024" height="1024" fill="${color}" mask="url(#cedia-mark)"/>`;
+// The macOS tile uses a padded mask (blob scaled to 82% centered) so the white
+// rounded square keeps breathing room at Dock sizes; full-bleed light/dark/iOS
+// masters keep the unpadded mask.
+const macosMaskData = (await readFile(asset("cedia-mask-macos.png"))).toString("base64");
+const macosShape = `<defs><mask id="cedia-mark-macos" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><image x="0" y="0" width="1024" height="1024" href="data:image/png;base64,${macosMaskData}"/></mask></defs><rect width="1024" height="1024" fill="#000" mask="url(#cedia-mark-macos)"/>`;
 const page = (title: string, contents: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><title>${title}</title>${contents}</svg>\n`;
 
-await writeFile(asset("mark.svg"), page("Cedia A mark", maskedShape("#000")));
+await writeFile(asset("mark.svg"), page("Cedia bloub mark", maskedShape("#000")));
 await writeFile(asset("cedia.svg"), page("Cedia mark", maskedShape("currentColor")));
 await writeFile(asset("cedia-light.svg"), page("Cedia light mark", maskedShape("#000")));
 await writeFile(asset("cedia-dark.svg"), page("Cedia dark mark", maskedShape("#fff")));
 await writeFile(asset("app-light.svg"), page("Cedia light app icon", `<rect width="1024" height="1024" fill="#fff"/>${maskedShape("#000")}`));
 await writeFile(asset("app-dark.svg"), page("Cedia dark app icon", `<rect width="1024" height="1024" fill="#000"/>${maskedShape("#fff")}`));
-await writeFile(asset("app-macos.svg"), page("Cedia macOS app icon", `<rect x="64" y="64" width="896" height="896" rx="198" fill="#fff"/>${maskedShape("#000")}`));
+await writeFile(asset("app-macos.svg"), page("Cedia macOS app icon", `<rect x="64" y="64" width="896" height="896" rx="198" fill="#fff"/>${macosShape}`));
 
 function render(source: string, target: string, size = 1024): void {
 	execFileSync("sips", ["-s", "format", "png", "-z", String(size), String(size), source, "--out", target], { stdio: "ignore" });
@@ -89,4 +85,4 @@ for (const [target, source] of iconCopies) {
 	if (existsSync(target)) await cp(source, target);
 }
 
-console.log(`Generated Cedia A icons from ${asset("approved-reference-board.png")}`);
+console.log(`Generated Cedia bloub icons from ${asset("source.png")}`);

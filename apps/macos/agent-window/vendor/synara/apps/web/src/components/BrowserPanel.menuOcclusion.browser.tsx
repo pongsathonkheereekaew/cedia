@@ -27,8 +27,11 @@ import {
 const api = vi.hoisted(() => ({
   browser: {
     open: vi.fn<() => Promise<ThreadBrowserState>>(),
+    newTab: vi.fn(),
     hide: vi.fn(async () => {}),
-    setPanelBounds: vi.fn<(input: BrowserSetPanelBoundsInput) => Promise<void>>(async () => {}),
+    setPanelBounds: vi.fn<(input: BrowserSetPanelBoundsInput) => Promise<void>>(
+      async () => {},
+    ),
     onState: vi.fn(() => () => {}),
     onCopyLink: vi.fn(() => () => {}),
     detachWebview: vi.fn(async () => {}),
@@ -36,7 +39,10 @@ const api = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../nativeApi", () => ({ readNativeApi: () => api, ensureNativeApi: () => api }));
+vi.mock("../nativeApi", () => ({
+  readNativeApi: () => api,
+  ensureNativeApi: () => api,
+}));
 
 const SYNTHETIC_WEBVIEW_TAG = "synthetic-browser-webview";
 
@@ -53,7 +59,10 @@ if (!customElements.get(SYNTHETIC_WEBVIEW_TAG)) {
 
 const originalCreateElement = document.createElement.bind(document);
 document.createElement = (tagName: string, options?: ElementCreationOptions) =>
-  originalCreateElement(tagName === "webview" ? SYNTHETIC_WEBVIEW_TAG : tagName, options);
+  originalCreateElement(
+    tagName === "webview" ? SYNTHETIC_WEBVIEW_TAG : tagName,
+    options,
+  );
 
 const threadId = ThreadId.makeUnsafe("menu-occlusion-fixture");
 const state: ThreadBrowserState = {
@@ -117,7 +126,11 @@ function DockFixture({ onAdd }: { onAdd: (kind: string) => void }) {
         onOpenChange={() => {}}
         onAddPane={onAdd}
         renderPane={() => (
-          <BrowserPanel mode="sidebar" threadId={threadId} onClosePanel={() => {}} />
+          <BrowserPanel
+            mode="sidebar"
+            threadId={threadId}
+            onClosePanel={() => {}}
+          />
         )}
       />
     </div>
@@ -128,8 +141,20 @@ function FloatingFixture({ showMenu = true }: { showMenu?: boolean }) {
   const [selected, setSelected] = useState(false);
   return (
     <>
-      <div style={{ position: "fixed", left: 240, top: 120, width: 420, height: 380 }}>
-        <BrowserPanel mode="floating" threadId={threadId} onClosePanel={() => {}} />
+      <div
+        style={{
+          position: "fixed",
+          left: 240,
+          top: 120,
+          width: 420,
+          height: 380,
+        }}
+      >
+        <BrowserPanel
+          mode="floating"
+          threadId={threadId}
+          onClosePanel={() => {}}
+        />
       </div>
       {showMenu && (
         <div style={{ position: "fixed", left: 560, top: 170 }}>
@@ -140,7 +165,9 @@ function FloatingFixture({ showMenu = true }: { showMenu?: boolean }) {
               <MenuSub>
                 <MenuSubTrigger>More panels</MenuSubTrigger>
                 <MenuSubPopup>
-                  <MenuItem onClick={() => setSelected(true)}>Explorer</MenuItem>
+                  <MenuItem onClick={() => setSelected(true)}>
+                    Explorer
+                  </MenuItem>
                 </MenuSubPopup>
               </MenuSub>
             </MenuPopupBase>
@@ -173,13 +200,17 @@ describe("native browser menu occlusion", () => {
       tabs: [{ ...state.tabs[0]!, runtimeSurface: "renderer" }],
     };
     api.browser.open.mockResolvedValue(openerState);
-    useBrowserStateStore.setState({ threadStatesByThreadId: { [threadId]: openerState } });
+    useBrowserStateStore.setState({
+      threadStatesByThreadId: { [threadId]: openerState },
+    });
     const mounted = await render(
       <QueryClientProvider client={new QueryClient()}>
         <DockFixture onAdd={() => {}} />
       </QueryClientProvider>,
     );
-    await vi.waitFor(() => expect(document.querySelector(SYNTHETIC_WEBVIEW_TAG)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(document.querySelector(SYNTHETIC_WEBVIEW_TAG)).not.toBeNull(),
+    );
     const webview = document.querySelector(SYNTHETIC_WEBVIEW_TAG)!;
     const stage = webview.parentElement!;
     const sourceUrl = webview.getAttribute("src");
@@ -201,7 +232,9 @@ describe("native browser menu occlusion", () => {
     expect(webview.isConnected).toBe(true);
     expect(webview.getAttribute("src")).toBe(sourceUrl);
     expect(api.browser.detachWebview).not.toHaveBeenCalled();
-    useBrowserStateStore.getState().upsertThreadState({ ...openerState, version: 3 });
+    useBrowserStateStore
+      .getState()
+      .upsertThreadState({ ...openerState, version: 3 });
     await vi.waitFor(() => expect(stage.style.visibility).toBe("visible"));
     expect(document.querySelector(SYNTHETIC_WEBVIEW_TAG)).toBe(webview);
     expect(webview.getAttribute("src")).toBe(sourceUrl);
@@ -221,28 +254,41 @@ describe("native browser menu occlusion", () => {
       );
       await vi.waitFor(() => expect(lastBounds()?.width).toBeGreaterThan(0));
       const original = lastBounds();
-      const trigger = page.getByRole("button", { name: "Add panel", exact: true });
+      const trigger = page.getByRole("button", {
+        name: "Add panel",
+        exact: true,
+      });
       for (const dismissal of ["escape", "outside", "trigger", "selection"]) {
         await trigger.click();
         await expect
-          .element(page.getByRole("menuitem", { name: "Explorer", exact: true }))
+          .element(
+            page.getByRole("menuitem", { name: "Explorer", exact: true }),
+          )
           .toBeVisible();
         await vi.waitFor(() => expect(lastBounds()).toBeNull());
-        expect(api.browser.setPanelBounds.mock.lastCall?.[0].occluded).toBe(true);
+        expect(api.browser.setPanelBounds.mock.lastCall?.[0].occluded).toBe(
+          true,
+        );
         if (dismissal === "escape") await userEvent.keyboard("{Escape}");
         if (dismissal === "outside")
           await page.getByRole("button", { name: "Outside menu" }).click();
         if (dismissal === "trigger") await trigger.click();
         if (dismissal === "selection")
-          await page.getByRole("menuitem", { name: "Explorer", exact: true }).click();
+          await page
+            .getByRole("menuitem", { name: "Explorer", exact: true })
+            .click();
         await vi.waitFor(() => expect(lastBounds()).toEqual(original));
-        expect(api.browser.setPanelBounds.mock.lastCall?.[0].occluded).toBe(false);
+        expect(api.browser.setPanelBounds.mock.lastCall?.[0].occluded).toBe(
+          false,
+        );
       }
       expect(onAdd).toHaveBeenCalledExactlyOnceWith("explorer");
       expect(api.browser.open).toHaveBeenCalledOnce();
       expect(api.browser.hide).not.toHaveBeenCalled();
       expect(api.browser.detachWebview).not.toHaveBeenCalled();
-      expect(useBrowserStateStore.getState().threadStatesByThreadId[threadId]).toEqual(state);
+      expect(
+        useBrowserStateStore.getState().threadStatesByThreadId[threadId],
+      ).toEqual(state);
       await mounted.unmount();
     },
   );
@@ -269,7 +315,9 @@ describe("native browser menu occlusion", () => {
     expect(lastBounds()).toBeNull();
     await page.getByText("More panels", { exact: true }).hover();
     await page.getByRole("menuitem", { name: "Explorer", exact: true }).click();
-    await expect.element(page.getByText("Selected explorer", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("Selected explorer", { exact: true }))
+      .toBeVisible();
     await vi.waitFor(() => expect(lastBounds()).toEqual(original));
     await page.getByRole("button", { name: "Panel menu" }).click();
     await vi.waitFor(() => expect(lastBounds()).toBeNull());
@@ -283,4 +331,130 @@ describe("native browser menu occlusion", () => {
     expect(api.browser.detachWebview).not.toHaveBeenCalled();
     await mounted.unmount();
   });
+});
+
+it("hides a retained native guest when its dock is closed, then restores its bounds", async () => {
+  await page.viewport(1280, 900);
+  const client = new QueryClient();
+  const view = (visible: boolean) => (
+    <QueryClientProvider client={client}>
+      <div style={{ width: 600, height: 600 }}>
+        <BrowserPanel
+          mode="sidebar"
+          threadId={threadId}
+          onClosePanel={() => {}}
+          isVisible={visible}
+        />
+      </div>
+    </QueryClientProvider>
+  );
+  const mounted = await render(view(true));
+  await vi.waitFor(() => expect(lastBounds()).toBeTruthy());
+  await mounted.rerender(view(false));
+  await vi.waitFor(() => expect(lastBounds()).toBeNull());
+  await mounted.rerender(view(true));
+  await vi.waitFor(() => expect(lastBounds()).toBeTruthy());
+});
+
+it("waits for a dock clip reveal before showing the native guest", async () => {
+  await page.viewport(1280, 900);
+  function RevealFixture() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>Reveal guest</button>
+        <div
+          style={{
+            width: 600,
+            height: 600,
+            transition: "clip-path 800ms linear",
+            clipPath: open ? "inset(0)" : "inset(0 0 0 100%)",
+          }}
+        >
+          <BrowserPanel
+            mode="sidebar"
+            threadId={threadId}
+            onClosePanel={() => {}}
+            isVisible={open}
+          />
+        </div>
+      </>
+    );
+  }
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RevealFixture />
+    </QueryClientProvider>,
+  );
+  await vi.waitFor(() => expect(lastBounds()).toBeNull());
+  await page.getByRole("button", { name: "Reveal guest" }).click();
+  expect(lastBounds()).toBeNull();
+  await vi.waitFor(() => expect(lastBounds()).toBeTruthy(), { timeout: 2000 });
+});
+
+it("supports a top-level browser tab without rendering nested browser controls", async () => {
+  await page.viewport(1280, 900);
+  const onNewTab = vi.fn();
+  const onTitleChange = vi.fn();
+  const blankState: ThreadBrowserState = {
+    ...state,
+    version: 2,
+    tabs: [
+      {
+        ...state.tabs[0]!,
+        url: "about:blank",
+        title: "",
+        lastCommittedUrl: "about:blank",
+      },
+    ],
+  };
+  api.browser.open.mockResolvedValue(blankState);
+  useBrowserStateStore.setState({
+    threadStatesByThreadId: { [threadId]: blankState },
+    recentHistoryByThreadId: {},
+  });
+
+  const mounted = await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <BrowserPanel
+        mode="sidebar"
+        threadId={threadId}
+        onClosePanel={() => {}}
+        mainTab={{
+          onNewTab,
+          onTitleChange,
+          home: <div data-testid="main-tab-home">Main browser home</div>,
+        }}
+      />
+    </QueryClientProvider>,
+  );
+
+  await expect
+    .element(page.getByTestId("main-tab-home"))
+    .toBeVisible();
+  await vi.waitFor(() => expect(onTitleChange).toHaveBeenCalledWith("New tab"));
+  await expect.element(page.getByRole("textbox", { name: "Search or enter a URL" })).toHaveFocus();
+  expect(document.querySelector('[data-browser-agent-attach="true"]')).toBeNull();
+  expect(document.querySelector('[data-browser-tab-active="true"]')).toBeNull();
+
+  await page.getByRole("button", { name: "Browser actions" }).click();
+  await expect
+    .element(page.getByRole("menuitem", { name: "New tab", exact: true }))
+    .toBeVisible();
+  expect(
+    [...document.querySelectorAll('[role="menuitem"]')].some((item) =>
+      item.textContent?.includes("Capture screenshot"),
+    ),
+  ).toBe(false);
+  await page.getByRole("menuitem", { name: "New tab", exact: true }).click();
+  expect(onNewTab).toHaveBeenCalledOnce();
+  expect(api.browser.newTab).not.toHaveBeenCalled();
+
+  useBrowserStateStore.getState().upsertThreadState({
+    ...blankState,
+    version: 3,
+    tabs: [{ ...blankState.tabs[0]!, title: "Example page" }],
+  });
+  await vi.waitFor(() => expect(onTitleChange).toHaveBeenCalledWith("Example page"));
+  await mounted.unmount();
 });

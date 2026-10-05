@@ -121,20 +121,17 @@ export function SettingsSidebarNav(props: {
 
   return (
     <div className="px-1.5 py-1.5">
-      <div className="mb-3">
+      <div className="mb-3 flex items-center gap-1 px-1">
         <button
           type="button"
-          className={cn(
-            SETTINGS_SIDEBAR_ITEM_CLASS_NAME,
-            SETTINGS_SIDEBAR_ROW_FILL_HOVER_CLASS_NAME,
-          )}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--color-background-button-secondary-hover)] hover:text-foreground"
           onClick={props.onBack}
+          aria-label="Back to app"
+          title="Back to app"
         >
-          <SidebarLeadingIcon size="sm" tone="text-inherit">
-            <CentralIcon name="arrow-left" className={SETTINGS_SIDEBAR_ICON_CLASS_NAME} />
-          </SidebarLeadingIcon>
-          <span className={SETTINGS_SIDEBAR_ITEM_LABEL_CLASS_NAME}>Back to app</span>
+          <CentralIcon name="arrow-left" className={SETTINGS_SIDEBAR_ICON_CLASS_NAME} />
         </button>
+        <h1 className="font-display min-w-0 truncate text-[17px] text-foreground">Settings</h1>
       </div>
 
       <div className="mb-3 px-1">

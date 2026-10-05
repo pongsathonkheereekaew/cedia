@@ -47,16 +47,11 @@ export function SidebarHeaderNavigationControls() {
   }
 
   if (shellNavigationOwner) {
-    // The fixed shell owner renders the real button at the window edge. Keep a
-    // layout-only copy in closed desktop headers so titles/actions retain the
-    // same leading cluster width without introducing a second focusable button.
-    if (!isMobile && !open) {
-      return (
-        <div aria-hidden="true" className="pointer-events-none invisible shrink-0">
-          <SidebarLeadingControls />
-        </div>
-      );
-    }
+    // Cedia (item 71): toggle and arrows live only in the fixed shell, static
+    // in both states — mounting anything here at toggle time snapped the title
+    // while the geometry animated (flicker). The title clears the floating
+    // cluster with animated padding (see ChatHeader) instead of mount swaps.
+    // Mobile keeps the drawer pattern (null).
     return null;
   }
 

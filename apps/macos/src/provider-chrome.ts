@@ -107,7 +107,18 @@ export const chromeConcern: Partial<CediaTaskViewProviderApi> = {
 				// entry must still issue the hide commands instead of no-oping.
 				const from: "agents" | "ide" = this.agentsChromeApplied ? "agents" : "ide";
 				if (mode === "agents") await this.rememberIdeFolder();
-				if (mode === "agents" && from !== "agents") this.ideLayout = this.captureIdeLayout();
+				if (mode === "agents" && from !== "agents") {
+					// Native Code-OSS owns secondary-bar visibility. The user may have
+					// closed it since our last snapshot, so read the live part before
+					// Agents chrome hides it and persist exactly that choice.
+					let visible: boolean | undefined;
+					try {
+						visible = await vscode.commands.executeCommand<boolean>("cedia.internal.readAuxiliaryBarVisibility");
+					} catch {
+						// An older shell can still restore its previous snapshot.
+					}
+					this.ideLayout = this.captureIdeLayout(visible);
+				}
 				this.setState({ type: "workbench_mode", mode });
 				const switched = switchWorkbenchMode({ from, to: mode, ideLayout: this.ideLayout });
 				this.ideLayout = switched.ideLayout;
@@ -659,7 +670,7 @@ export const chromeConcern: Partial<CediaTaskViewProviderApi> = {
 				this.log.info(`startup view=${this.prefs.startupView} mode=${startup.mode} revealDock=${startup.revealDock}`);
 				void this.setWorkbenchMode(startup.mode)
 					.then(async () => {
-						if (!startup.revealDock) return;
+						if (!startup.revealDock || !this.ideLayout.auxiliaryBarVisible) return;
 						this.log.debug("revealing docked agent view");
 						// Coexistence default: keep the native IDE and put the agent beside
 						// it. Revealing the container must not steal the editor's focus, so
@@ -679,7 +690,7 @@ export const chromeConcern: Partial<CediaTaskViewProviderApi> = {
 					.catch(error => this.reportError(error));
 		},
 
-		captureIdeLayout(this: CediaTaskViewProviderApi): IdeLayoutSnapshot {
+		captureIdeLayout(this: CediaTaskViewProviderApi, auxiliaryBarVisible?: boolean): IdeLayoutSnapshot {
 				const editor = vscode.window.activeTextEditor;
 				const alreadyAgents = this.agentsChromeApplied;
 				const showTabs = vscode.workspace.getConfiguration("workbench.editor").get<string>("showTabs");
@@ -693,7 +704,7 @@ export const chromeConcern: Partial<CediaTaskViewProviderApi> = {
 				}
 				const captured = {
 					sidebarVisible: this.ideLayout.sidebarVisible !== false,
-					auxiliaryBarVisible: this.ideLayout.auxiliaryBarVisible === true,
+					auxiliaryBarVisible: auxiliaryBarVisible ?? this.ideLayout.auxiliaryBarVisible,
 					panelVisible: this.ideLayout.panelVisible !== false,
 					activeEditorUri: editor?.document.uri.toString() ?? this.ideLayout.activeEditorUri,
 					showTabs: showTabs ?? this.ideLayout.showTabs ?? "multiple",

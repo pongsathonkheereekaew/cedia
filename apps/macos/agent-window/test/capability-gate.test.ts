@@ -106,7 +106,7 @@ it("falls back out of a deep link into a destination the host reports as missing
   const missing = parseCapabilitySnapshot({ capabilities: [{ id: "omp.settings", availability: "integration_missing", reason: "not wired" }] });
   expect(resolveSettingsSection("omp", missing)).toBe("general");
   expect(resolveSettingsSection("omp", undefined)).toBe("omp");
-  expect(resolveSettingsSection("models", missing)).toBe("models");
+  expect(resolveSettingsSection("models", missing)).toBe("providers");
   expect(resolveSettingsSection("not-a-section", missing)).toBe("general");
 });
 

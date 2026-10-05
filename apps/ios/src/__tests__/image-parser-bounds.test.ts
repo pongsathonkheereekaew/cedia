@@ -28,7 +28,7 @@ test("malformed ICNS and JXL containers terminate within a bounded subprocess", 
 
 test("the backport remains idempotent and reads the production app PNG", () => {
   execFileSync("node", [resolve(root, "scripts/patch-image-size.mjs")]);
-  const size = require("image-size")(resolve(root, "../../assets/brand/cedia-terminal-d-v1/app-macos.png"));
+  const size = require("image-size")(resolve(root, "../../assets/brand/bloub-nuage-v1/app-macos.png"));
   expect(size.width).toBe(1024);
   expect(size.height).toBe(1024);
 });

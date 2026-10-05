@@ -60,7 +60,15 @@ async function boot(): Promise<void> {
 	// restart agree on the same record instead of each keeping a private copy.
 	const { installHostPreferenceSync } = await import("../vendor/synara/apps/web/src/hostPreferences");
 	const hostPreferences = installHostPreferenceSync(preload.ipcRenderer);
-	void hostPreferences.hydrate();
+	const hostPreferencesReady = hostPreferences.hydrate();
+	window.__CEDIA_HOST_PREFERENCES_FLUSH__ = async () => {
+		await hostPreferencesReady;
+		await hostPreferences.flush();
+		const unsaved = hostPreferences.unsaved();
+		if (hostPreferences.status() !== "ready" || unsaved.length > 0) {
+			throw new Error(`Cedia preferences were not acknowledged${unsaved.length ? ` (${unsaved.join(", ")})` : ""}.`);
+		}
+	};
 	const openInEditor = nativeApi.shell.openInEditor;
 	nativeApi.shell.openInEditor = async (target: string, editor: string) => {
 		await sharedDraftBridge.flush();
@@ -145,6 +153,7 @@ async function boot(): Promise<void> {
 		void hostPreferences.flush();
 		sharedDraftBridge.dispose();
 		hostPreferences.dispose();
+		delete window.__CEDIA_HOST_PREFERENCES_FLUSH__;
 		delete window.__CEDIA_DRAFT_FLUSH__;
 		window.removeEventListener("hashchange", onHashChange);
 		disposeMenuZoom();

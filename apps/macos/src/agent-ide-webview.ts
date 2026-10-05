@@ -22,6 +22,9 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
   private draftSessionId: string | undefined;
   private draftRevision = 0;
   private draftSync: Promise<void> | undefined;
+  private contextSync: { generation: number; promise: Promise<void> } | undefined;
+  private pendingContext: { generation: number; cwd: string; sessionId: string } | undefined;
+  private viewGeneration = 0;
   private disposed = false;
   private ready = false;
   private pendingActions: unknown[] = [];
@@ -62,6 +65,8 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
 
   async resolveWebviewView(view: vscode.WebviewView): Promise<void> {
     this.view = view;
+    const generation = ++this.viewGeneration;
+    this.pendingContext = undefined;
     this.ready = false;
     const assetRoot = vscode.Uri.joinPath(this.context.extensionUri, "agent-ui");
     view.webview.options = { enableScripts: true, localResourceRoots: [assetRoot] };
@@ -106,6 +111,7 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
       if (row.type === "cedia-agent-ready") {
         this.ready = true;
         for (const action of this.pendingActions.splice(0)) await view.webview.postMessage(action);
+        await this.flushPendingContext(view, generation).catch(error => console.error("Cedia IDE context handoff failed", error));
         return;
       }
       if (row.type !== "cedia-agent-request" || typeof row.id !== "string" || row.id.length > 128) return;
@@ -135,16 +141,29 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
         } else {
           result = await handler(view, row.input);
           if (input?.kind === "bootstrap") {
-            await this.readContext(false);
             result = { ...(result as object), cwd: this.cwd(), sessionId: this.sessionId };
           }
         }
         await view.webview.postMessage({ type: "cedia-agent-response", id: row.id, result });
+        // A bootstrap response must not wait for the host/session handoff. The
+        // webview needs this reply before it can finish loading the shared UI;
+        // readContext stages the valid handoff and flushes it after `ready`.
+        if (input?.kind === "bootstrap") {
+          void this.readContext().catch(error => console.error("Cedia IDE handoff failed", error));
+        }
       } catch (error) {
         await view.webview.postMessage({ type: "cedia-agent-response", id: row.id, error: error instanceof Error ? error.message : String(error) });
       }
     });
-    view.onDidDispose(() => { messages.dispose(); if (this.view === view) this.view = undefined; });
+    view.onDidDispose(() => {
+      messages.dispose();
+      if (this.view === view) {
+        this.view = undefined;
+        this.ready = false;
+        this.pendingContext = undefined;
+        this.viewGeneration += 1;
+      }
+    });
     try {
       let html = await readFile(join(this.context.extensionPath, "agent-ui", "ide.html"), "utf8");
       html = html.replace(/(?:src|href)="(\.\/[^\"]+)"/g, (match, relative: string) => match.replace(relative, escapeAttribute(view.webview.asWebviewUri(vscode.Uri.joinPath(assetRoot, relative.slice(2))).toString())));
@@ -153,7 +172,7 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
       html = html.replace("<head>", `<head><meta name="cedia-public-asset-base" content="${escapeAttribute(publicAssetBase)}"><meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">`);
       view.webview.html = html;
       this.timer ??= setInterval(() => {
-        void this.readContext(true).catch(error => console.error("Cedia IDE handoff failed", error));
+        void this.readContext().catch(error => console.error("Cedia IDE handoff failed", error));
         void this.syncDraft().catch(error => console.error("Cedia IDE draft sync failed", error));
       }, 750);
     } catch (error) {
@@ -162,24 +181,69 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
     }
   }
 
-  private async readContext(notify: boolean): Promise<void> {
-    const cwd = this.cwd();
-    if (!cwd) return;
-    const handoff = await readIdeHandoff(this.stateDir, cwd);
-    if (!handoff || handoff.revision === this.revision) return;
-    const session = await resolveAgentUiThread(this.stateDir, handoff.sessionId, async path => (await this.ensureClient()).requestApplication("GET", path));
-    if (resolve(session.cwd) !== resolve(cwd)) throw new Error("IDE handoff workspace mismatch");
-    if (session.durable) {
-      await this.onSession(session.id);
-      this.syncedSessionId = session.id;
+  private async flushPendingContext(view: vscode.WebviewView, generation: number): Promise<void> {
+    const pending = this.pendingContext;
+    if (!pending || pending.generation !== generation || !this.ready || this.disposed || this.view !== view || this.viewGeneration !== generation) return;
+    this.pendingContext = undefined;
+    try {
+      view.show(true);
+      await view.webview.postMessage({ type: "cedia-agent-context", cwd: pending.cwd, sessionId: pending.sessionId });
+    } catch (error) {
+      // Keep a failed handoff retryable, but never replace a newer handoff that
+      // may have arrived while the webview was posting this message.
+      if (!this.pendingContext && !this.disposed && this.view === view && this.viewGeneration === generation) this.pendingContext = pending;
+      throw error;
     }
-    this.selectDraftSession(session.id);
-    this.revision = handoff.revision;
-    this.sessionId = session.id;
-    if (notify && this.view) {
-      this.view.show(true);
-      await this.view.webview.postMessage({ type: "cedia-agent-context", cwd, sessionId: session.id });
+  }
+
+  private readContext(): Promise<void> {
+    const view = this.view;
+    const generation = this.viewGeneration;
+    if (!view || this.disposed) return Promise.resolve();
+    const existing = this.contextSync;
+    if (existing?.generation === generation) {
+      return existing.promise;
     }
+
+    const run = async (): Promise<void> => {
+      const isCurrent = (): boolean => !this.disposed && this.view === view && this.viewGeneration === generation;
+      const cwd = this.cwd();
+      if (!cwd || !isCurrent()) return;
+      const handoff = await readIdeHandoff(this.stateDir, cwd);
+      if (!isCurrent() || !handoff) return;
+      if (handoff.revision === this.revision) {
+        if (this.ready) await this.flushPendingContext(view, generation);
+        return;
+      }
+      const session = await resolveAgentUiThread(this.stateDir, handoff.sessionId, async path => (await this.ensureClient()).requestApplication("GET", path));
+      if (!isCurrent()) return;
+      if (resolve(session.cwd) !== resolve(cwd)) throw new Error("IDE handoff workspace mismatch");
+      if (session.durable) {
+        await this.onSession(session.id);
+        if (!isCurrent()) return;
+        this.syncedSessionId = session.id;
+      }
+      if (!isCurrent()) return;
+      this.selectDraftSession(session.id);
+      this.revision = handoff.revision;
+      this.sessionId = session.id;
+      this.pendingContext = { generation, cwd, sessionId: session.id };
+      // Bootstrap may finish before the shared UI emits `ready`, while a poll
+      // may finish after it. Either path flushes only when the current view is
+      // ready, so the context event cannot be lost before main is installed.
+      if (this.ready) await this.flushPendingContext(view, generation);
+    };
+
+    const state: { generation: number; promise: Promise<void> } = {
+      generation,
+      promise: Promise.resolve(),
+    };
+    const pending = run();
+    state.promise = pending.finally(() => {
+      if (this.contextSync === state) this.contextSync = undefined;
+    });
+    this.contextSync = state;
+    return state.promise;
   }
 
   private selectDraftSession(sessionId: string): void {
@@ -241,5 +305,13 @@ export class CediaIdeAgentProvider implements vscode.WebviewViewProvider, vscode
     }
   }
 
-  dispose(): void { this.disposed = true; if (this.timer) clearInterval(this.timer); this.files.dispose(); this.git.dispose(); this.view = undefined; }
+  dispose(): void {
+    this.disposed = true;
+    this.viewGeneration += 1;
+    if (this.timer) clearInterval(this.timer);
+    this.files.dispose();
+    this.git.dispose();
+    this.view = undefined;
+    this.ready = false;
+  }
 }

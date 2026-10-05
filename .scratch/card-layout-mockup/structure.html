@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Agent window — layout structure</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#3a3a3e;font-family:-apple-system,"SF Pro Text",monospace;color:#1c1c1e;
+display:flex;flex-direction:column;align-items:center;padding:22px;min-height:100vh}
+h1{color:#fff;font-size:15px;margin-bottom:4px;font-family:-apple-system,"SF Pro Text",sans-serif}
+.sub{color:#b0b0b5;font-size:12px;margin-bottom:14px;font-family:-apple-system,"SF Pro Text",sans-serif}
+.win{width:1160px;background:#f5f5f6;border-radius:14px;padding:10px}
+.box{border:1.5px solid;border-radius:10px;padding:8px;position:relative}
+.tag{font-size:10.5px;font-weight:700;display:block;margin-bottom:2px}
+.file{font-size:9.5px;opacity:.75;display:block;font-weight:400}
+.sz{font-size:9.5px;display:block;margin-top:2px;font-weight:700}
+.root{border-color:#7a7a80;background:#ececf0}
+.row{display:flex;gap:8px;margin-top:8px}
+.col{flex:1;display:flex;flex-direction:column;gap:6px}
+.col.mid{flex:1.4}
+.left{border-color:#0a84ff;background:#e8f1fc}
+.center{border-color:#30b455;background:#e9f7ee}
+.right{border-color:#c47b1a;background:#fdf3e3}
+.shell{border-color:#8e8e93;background:rgba(255,255,255,.6);border-style:dashed}
+.inner{border-color:#55555a;background:#fff}
+.legend{display:flex;gap:14px;margin-top:12px;font-size:11px;color:#fff;font-family:-apple-system,"SF Pro Text",sans-serif}
+.legend i{width:12px;height:12px;border-radius:4px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.note{color:#d8d8dc;font-size:11px;margin-top:10px;max-width:1160px;font-family:-apple-system,"SF Pro Text",sans-serif}
+</style></head><body>
+<h1>Agent window — ไม่ใช่การ์ดชิ้นเดียว แต่ละก้อนประกอบจากหลายชิ้นซ้อนกัน 3 ชั้น</h1>
+<div class="sub">กล่อง = component จริงในโค้ด · ชั้นนอกคุม state/ตำแหน่ง ชั้นในสุดคุมผิว (จะทำมุมมนแตะชั้นใน + gap)</div>
+<div class="win">
+<div class="box root"><span class="tag">SidebarProvider (backdrop  riskiทั้งจอ + drag region 46px)</span>
+<span class="file">routes/_chat.tsx — ChatRouteLayout</span>
+<div class="row">
+<div class="col"><div class="box left"><span class="tag">① Sidebar ← rail 48 + panel 256 อยู่ใน component เดียวกัน</span>
+<span class="file">components/Sidebar.tsx (default export)</span>
+<div class="box shell" style="margin-top:6px"><span class="tag">ui/sidebar Sidebar — gap + fixed container (คุมกว้าง/สไลด์)</span>
+<span class="file">components/ui/sidebar.tsx</span>
+<div class="box inner" style="margin-top:6px"><span class="tag">inner surface — ผิวที่เห็น (จุดทำมุมมน/ขอบ)</span>
+<span class="sz">rail 48 (ปุ่ม 32/ช่อง 4/ไอคอน 18) + panel 256</span></div></div></div></div>
+<div class="col mid"><div class="box center"><span class="tag">② Center — 4 components แยกกัน ไม่มีแม่ร่วม</span>
+<span class="file">ChatView.tsx + outlet</span>
+<div class="box inner" style="margin-top:6px"><span class="tag">ChatHeader — 46px</span><span class="file">chat/ChatHeader.tsx</span></div>
+<div class="box inner" style="margin-top:6px"><span class="tag">Transcript / hero / composer — คนละชิ้นกัน</span><span class="file">chat/ChatTranscriptPane.tsx · ChatComposerFooter.tsx</span></div>
+<div class="box inner" style="margin-top:6px"><span class="tag">CediaStatusBar — 24px</span><span class="file">components/cediaStatusBar.tsx</span></div>
+</div></div>
+<div class="col"><div class="box right"><span class="tag">③ RightDock + RightToolRail — คนละ component วางข้างกัน</span>
+<span class="file">chat/RightDock.tsx · chat/RightToolRail.tsx</span>
+<div class="box shell" style="margin-top:6px"><span class="tag">own SidebarProvider + Sidebar offcanvas (gap+container)</span>
+<span class="file">components/ui/sidebar.tsx ( reuse อันเดียวกับซ้าย )</span>
+<div class="box inner" style="margin-top:6px"><span class="tag">tab strip 46 + panes (default 448/min 320)</span></div></div>
+<div class="box inner" style="margin-top:6px"><span class="tag">RightToolRail — 48 (ปุ่ม 32/ไอคอน 18)</span></div>
+</div></div>
+</div></div></div>
+<div class="legend"><span><i style="background:#0a84ff"></i>ซ้าย</span>
+<span><i style="background:#30b455"></i>กลาง</span><span><i style="background:#c47b1a"></i>ขวา</span>
+<span><i style="background:#8e8e93"></i>shell (ตำแหน่ง/สไลด์ — ห้ามแตะ)</span><span><i style="background:#fff;border:1px solid #888"></i>surface (ผิว — ทำการ์ดตรงนี้)</span></div>
+<div class="note">สรุป: ทำการ์ด = แตะผิว inner 3 จุด (Sidebar inner, dock inner, แถว center) + ช่อง gap/ขนาด ไม่ใช่ไฟล์เดียว และการ์ดกลางไม่มี container ของตัวเอง ต้องห่อใหม่หรือใช้พื้นหลังเดิมเป็นขอบ</div>
+</body></html>

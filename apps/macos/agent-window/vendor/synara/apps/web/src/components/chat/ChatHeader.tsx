@@ -42,6 +42,7 @@ import {
   SurfaceChipIcon,
   SurfaceTabChip,
 } from "./chatHeaderControls";
+import { TaskTabStrip, useTaskTabs } from "./TaskTabs";
 import { DiffStat } from "../ui/diff-stat";
 import { IconButton } from "../ui/icon-button";
 import { Badge } from "../ui/badge";
@@ -50,9 +51,9 @@ import { ComposerPickerMenuPopup } from "./ComposerPickerMenuPopup";
 import { OpenInPicker } from "./OpenInPicker";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarHeaderNavigationControls } from "../SidebarHeaderNavigationControls";
+import { useSidebar } from "../ui/sidebar";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { Toggle } from "../ui/toggle";
-import { useSidebar } from "../ui/sidebar";
 import { useAppSettings } from "../../appSettings";
 import { useStore } from "../../store";
 import {
@@ -229,7 +230,6 @@ export function ChatHeader({
     openInTarget,
   });
   const PrimaryEditorIcon = editorLaunchers.primaryOption?.Icon ?? DeviceLaptopIcon;
-  const { isMobile, state } = useSidebar();
   const headerRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
   const {
@@ -255,6 +255,27 @@ export function ChatHeader({
   const threadIconKind = resolveChatHeaderThreadIconKind(activeThreadEntryPoint, activeThreadTitle);
   const showSidechatTitleChip = isSidechat && compact;
   const ideEmbedded = isIdeEmbeddedRuntime();
+  // Cedia (item 71): the shell owns one fixed toggle+arrows cluster, static in
+  // both states. Only the title glides with the sidebar width. Clearance is
+  // driven by open state (not peer CSS — the header is nested deep inside the
+  // content column, never a direct peer sibling, so peer-data never matched
+  // and the title slid under the fixed arrows). 56px clears the floating
+  // cluster on top of the outer 90px traffic-light gutter (total ~146px).
+  const { open: sidebarOpen, isMobile: sidebarIsMobile, shellNavigationOwner } = useSidebar();
+  const needsFixedClusterClearance =
+    shellNavigationOwner && !sidebarIsMobile && !sidebarOpen && !ideEmbedded;
+  const taskTabs = useTaskTabs(activeThreadId);
+  // Cedia task tabs (§3.E): while the thread panel is closed the header shows
+  // state-derived cross-project tabs instead of the thread name, so running
+  // work and pending answers stay reachable. Open panel, IDE dock, mobile and
+  // sidechat keep the title; an empty strip falls back to the title too.
+  const showTaskTabs =
+    !ideEmbedded &&
+    !sidebarIsMobile &&
+    !sidebarOpen &&
+    !minimalChrome &&
+    !isSidechat &&
+    taskTabs.length > 0;
   // Dock thread switcher (embedded only): the dock has no thread sidebar, so the
   // header carries recent threads of the active thread's project (Cursor's history
   // pattern, our styling). New tasks and the Agents window already have buttons.
@@ -278,10 +299,26 @@ export function ChatHeader({
     window.dispatchEvent(new CustomEvent("cedia:ide-action", { detail: { action } }));
   };
 
+  // Cedia (item 71 wobble fix): freeze the compact breakpoint while the sidebar
+  // animates. The content column gains ~208px during the 300ms icon-rail slide and
+  // crosses the 700px threshold mid-flight; flipping Hand off/IDE labels there
+  // resized the header mid-slide and shook the thread title. Hold the last value
+  // until the slide settles.
+  const [sidebarAnimating, setSidebarAnimating] = useState(false);
+  useEffect(() => {
+    setSidebarAnimating(true);
+    const timer = window.setTimeout(() => setSidebarAnimating(false), 320);
+    return () => window.clearTimeout(timer);
+  }, [sidebarOpen]);
+  const sidebarAnimatingRef = useRef(sidebarAnimating);
+  sidebarAnimatingRef.current = sidebarAnimating;
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const measure = () => setCompact(isSplitPane || el.clientWidth < HEADER_COMPACT_BREAKPOINT);
+    const measure = () => {
+      if (sidebarAnimatingRef.current && !isSplitPane) return;
+      setCompact(isSplitPane || el.clientWidth < HEADER_COMPACT_BREAKPOINT);
+    };
     measure();
     const observer = new ResizeObserver(() => measure());
     observer.observe(el);
@@ -299,9 +336,11 @@ export function ChatHeader({
     );
   };
 
-  // Single-chat surfaces render the right-dock toggle at the shell edge so its
-  // hit target stays fixed while the dock changes the chat column width. Hosts
-  // without a shell-level dock toggle (split/editor surfaces) keep the legacy
+  // Single-chat surfaces own one fixed corner toggle above the right rail
+  // (mirroring the left shell cluster above the left rail): far-right and
+  // stable across dock open/close and content resizes. It flips the dock
+  // through an atomic store toggle, sharing no layout with the header flow.
+  // Hosts without that corner slot (split/editor surfaces) keep the legacy
   // in-flow diff toggle here.
   const togglesRightDock = onToggleRightDock !== undefined;
   const rightPanelToggleControl = showDiffToggle && !togglesRightDock ? (
@@ -350,23 +389,44 @@ export function ChatHeader({
       </TooltipPopup>
     </Tooltip>
   ) : null;
-
   return (
-    <div ref={headerRef} className={cn("flex min-w-0 flex-1 items-center gap-2", className)}>
+    <div ref={headerRef} className={cn("flex min-h-0 min-w-0 flex-1 items-center gap-2", className)}>
       <div
         className={cn(
           "flex min-w-0 flex-1 items-center",
           "overflow-hidden",
-          !isMobile && state === "collapsed" ? "gap-4" : "gap-2 sm:gap-3",
+          // Reserve visible task navigation before shrinking the action strip.
+          // Include the fixed navigation cluster clearance in this minimum.
+          showTaskTabs && (needsFixedClusterClearance ? "min-w-[7.5rem]" : "min-w-16"),
+          // Cedia (item 71): one gap in both sidebar states, plus 56px
+          // clearance for the fixed toggle+arrows while collapsed (outer
+          // header supplies the 90px traffic-light gutter). Driven by open
+          // state on the sidebar's own 300ms soft-drawer curve (see
+          // SIDEBAR_OFFCANVAS_MOTION_CLASS in ui/sidebar.tsx), so the title
+          // glides in lockstep with the panel instead of snapping or
+          // wobbling: controls stay static, only the title moves.
+          "gap-2 sm:gap-3",
+          "transition-[padding-inline-start] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          needsFixedClusterClearance && "md:ps-14",
+          // Cedia window header: hideSidebarControls means the title row is
+          // foreign-owned (route header above the cards): the in-card surface
+          // needs no leading-cluster clearance there.
+          hideSidebarControls && "md:ps-0!",
         )}
       >
-        {hideSidebarControls ? null : <SidebarHeaderNavigationControls />}
         <div
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2",
             minimalChrome && "hidden",
           )}
         >
+          {showTaskTabs ? (
+            <TaskTabStrip
+              tabs={taskTabs}
+              activeThreadId={activeThreadId}
+              onSelect={onNavigateToThread}
+            />
+          ) : (
           <div
             className={cn(
               "flex min-w-0 flex-1 flex-col",
@@ -472,14 +532,15 @@ export function ChatHeader({
               ) : null}
             </div>
           </div>
+          )}
         </div>
       </div>
       <div
         className={cn(
-          "flex shrink-0 items-center gap-2 [-webkit-app-region:no-drag]",
-          // The shell toggle is pinned 8px from the edge. Reserve its width plus
-          // an 8px gap, accounting for the header’s responsive outer padding.
-          togglesRightDock && !rightDockOpen && "pr-8 sm:pr-6",
+          "flex items-center gap-2 [-webkit-app-region:no-drag]",
+          // A wide tool panel must not clip the selected task out of its header.
+          // Keep actions reachable by scrolling and keyboard focus at tight widths.
+          showTaskTabs ? "min-w-0 overflow-x-auto" : "shrink-0",
         )}
       >
         {!minimalChrome && !hideHandoffControls && !environment ? (

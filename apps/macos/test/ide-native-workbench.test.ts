@@ -385,6 +385,12 @@ describe("ide-native workbench surface", () => {
 	});
 	it("opens a plain IDE window on full chrome by default, keeping agents in their own window", async () => {
 		await activateAndSettle();
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+			contributes: { configurationDefaults: Record<string, unknown> };
+		};
+		// Code-OSS owns first-open and persisted visibility; the extension supplies
+		// the product default without reopening a bar the user later closed.
+		expect(manifest.contributes.configurationDefaults["workbench.secondarySideBar.defaultVisibility"]).toBe("visible");
 		const startup = stubState.executed.map(entry => entry.id);
 		// Native world (plan section 2): a plain window is an IDE window, so
 		// startup must not strip Code-OSS chrome. The agent lives in the base
@@ -402,6 +408,21 @@ describe("ide-native workbench surface", () => {
 		expect(stubState.executed.map(entry => entry.id)).not.toContain("workbench.action.closeSidebar");
 		expect(stubState.config.get("workbench.activityBar.location")).not.toBe("hidden");
 		expect(stubState.config.get("workbench.statusBar.visible")).not.toBe(false);
+	});
+	it("records a user-closed native Agent dock before leaving the IDE", async () => {
+		await activateAndSettle();
+		const controller = ensureLegacyController();
+		const execute = vscodeApi.commands.executeCommand;
+		vscodeApi.commands.executeCommand = (id: string, ...args: unknown[]) =>
+			id === "cedia.internal.readAuxiliaryBarVisibility" ? Promise.resolve(false) : execute(id, ...args);
+		try {
+			await controller.setWorkbenchMode("agents");
+			expect(controller.ideLayout.auxiliaryBarVisible).toBe(false);
+			await controller.setWorkbenchMode("ide");
+			expect(stubState.executed.map(entry => entry.id)).not.toContain("workbench.action.focusAuxiliaryBar");
+		} finally {
+			vscodeApi.commands.executeCommand = execute;
+		}
 	});
 	it("keeps the user's own theme in the Agents window instead of painting its own", async () => {
 		// The editor and the agent window are the same application, so one theme is

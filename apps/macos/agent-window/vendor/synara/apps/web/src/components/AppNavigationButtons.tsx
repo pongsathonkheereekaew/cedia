@@ -23,6 +23,9 @@ export function AppNavigationButtons({ className }: { className?: string }) {
   return (
     <div
       className={cn(
+        // Cedia (item 71): the toggle + route arrows stay together as one fixed
+        // cluster in every state — never hide the arrows on the rail. The shell
+        // owns one static cluster, so hiding here would unbalance it.
         "-ms-1 flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]",
         className,
       )}

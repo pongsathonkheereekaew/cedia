@@ -21,13 +21,21 @@ import { useStore } from "~/store";
 import { createAllThreadsMessagelessSelector, createThreadShellsSelector } from "~/storeSelectors";
 import { useSettingsRestoreSignal } from "./SettingControls";
 import { SettingsRow, SettingsSection } from "./SettingsPanelPrimitives";
+import { isCediaHostRuntime } from "~/appSettings";
 
 export function AdvancedSettingsPanel(props: {
   active: boolean;
   resetEpoch: number;
 }) {
   const configQuery = useQuery(serverConfigQueryOptions());
-  const authSessionQuery = useQuery(serverAuthSessionQueryOptions());
+  const cediaHost = isCediaHostRuntime();
+  const authSessionQuery = useQuery({
+    ...serverAuthSessionQueryOptions(),
+    // Cedia owns pairing/provider auth through its own namespaces. The vendor
+    // browser-session endpoint is intentionally unsupported and must not be
+    // queried just to render a dead Sign out row.
+    enabled: !cediaHost,
+  });
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   // Keep these subscriptions inside the only panel that uses recovery eligibility.
   const threadShells = useStore(useMemo(() => createThreadShellsSelector(), []));
@@ -135,7 +143,7 @@ export function AdvancedSettingsPanel(props: {
 
   return (
     <div className="space-y-6">
-      {authSessionQuery.data?.authenticated ? (
+      {!cediaHost && authSessionQuery.data?.authenticated ? (
         <SettingsSection title="Session">
           <SettingsRow
             title="This browser"

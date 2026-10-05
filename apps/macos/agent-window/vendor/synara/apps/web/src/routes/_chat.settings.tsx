@@ -21,18 +21,17 @@ import {
   normalizeTerminalFontFamily,
   normalizeTerminalFontSizePx,
   isGitTextGenerationSettingsDirty,
+  isCediaHostRuntime,
   TERMINAL_FONT_FAMILY_SUGGESTIONS,
   useAppSettings,
 } from "../appSettings";
 import { AdvancedSettingsPanel } from "~/components/settings/AdvancedSettingsPanel";
 import { ArchivedSettingsPanel } from "~/components/settings/ConversationStorageSettingsPanels";
 import { NotificationsSettingsPanel } from "~/components/settings/DesktopSettingsPanels";
-import { ModelsSettingsPanel } from "~/components/settings/ModelsSettingsPanel";
 import {
   isProviderInstallSettingsDirty,
   ProvidersSettingsPanel,
 } from "~/components/settings/ProvidersSettingsPanel";
-import { ProfileSettingsPanel } from "../components/settings/ProfileSettingsPanel";
 import { KeyboardShortcutsSettingsPanel } from "../components/settings/KeyboardShortcutsSettingsPanel";
 import { CapabilityStatusPanel } from "../components/CapabilityStatusPanel";
 import { OmpSettingsPanel } from "../components/settings/OmpSettingsPanel";
@@ -53,8 +52,8 @@ import {
   CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME,
 } from "../components/chat/composerPickerStyles";
 import {
-  CHAT_SURFACE_HEADER_HEIGHT_CLASS,
   CHAT_SURFACE_HEADER_PADDING_X_CLASS,
+  CHAT_SURFACE_HEADER_ROW_CLASS_NAME,
 } from "../components/chat/chatHeaderControls";
 import {
   Autocomplete,
@@ -172,6 +171,7 @@ type BooleanSettingKey = {
 function SettingsRouteView() {
   const routeSearch = useSearch({ strict: false }) as Record<string, unknown>;
   const capabilitiesQuery = useQuery(serverCapabilitiesQueryOptions());
+  const cediaHost = isCediaHostRuntime();
   // A stored deep link must not reopen a destination the host reports as not implemented (§3.B):
   // the id still normalizes, and the capability rule then falls back to the first backed section.
   const activeSection = resolveSettingsSection(routeSearch.section, capabilitiesQuery.data);
@@ -197,15 +197,22 @@ function SettingsRouteView() {
     );
   }, [settings.terminalFontFamily]);
 
-  const isGitTextGenerationModelDirty = isGitTextGenerationSettingsDirty(settings, defaults);
-  const isInstallSettingsDirty = isProviderInstallSettingsDirty(settings, defaults);
-  const hiddenProviderCount = new Set(settings.hiddenProviders).size;
-  const isProviderOrderDirty = !sameProviderOrder(settings.providerOrder, defaults.providerOrder);
-  const isProviderActivityDirty =
-    settings.disabledProviders.length !== defaults.disabledProviders.length ||
-    settings.disabledProviders.some(
-      (provider, index) => provider !== defaults.disabledProviders[index],
-    );
+  const isGitTextGenerationModelDirty = cediaHost
+    ? false
+    : isGitTextGenerationSettingsDirty(settings, defaults);
+  const isInstallSettingsDirty = cediaHost
+    ? false
+    : isProviderInstallSettingsDirty(settings, defaults);
+  const hiddenProviderCount = cediaHost ? 0 : new Set(settings.hiddenProviders).size;
+  const isProviderOrderDirty = cediaHost
+    ? false
+    : !sameProviderOrder(settings.providerOrder, defaults.providerOrder);
+  const isProviderActivityDirty = cediaHost
+    ? false
+    : settings.disabledProviders.length !== defaults.disabledProviders.length ||
+      settings.disabledProviders.some(
+        (provider, index) => provider !== defaults.disabledProviders[index],
+      );
 
   // Deep links and sidebar search targets all resolve to stable DOM ids in the active panel.
   useEffect(() => {
@@ -217,8 +224,10 @@ function SettingsRouteView() {
     });
   });
   const changedSettingLabels = [
-    ...(settings.defaultProvider !== defaults.defaultProvider ? ["Default provider"] : []),
-    ...(settings.defaultThreadEnvMode !== defaults.defaultThreadEnvMode
+    ...(!cediaHost && settings.defaultProvider !== defaults.defaultProvider
+      ? ["Default provider"]
+      : []),
+    ...(!cediaHost && settings.defaultThreadEnvMode !== defaults.defaultThreadEnvMode
       ? ["New thread mode"]
       : []),
     ...(settings.sidebarProjectSortOrder !== defaults.sidebarProjectSortOrder
@@ -228,7 +237,7 @@ function SettingsRouteView() {
       ? ["Thread sort order"]
       : []),
     ...(settings.showChatsSection !== defaults.showChatsSection ? ["Chats section"] : []),
-    ...(settings.showAutomationRunThreads !== defaults.showAutomationRunThreads
+    ...(!cediaHost && settings.showAutomationRunThreads !== defaults.showAutomationRunThreads
       ? ["Automation runs"]
       : []),
     ...(settings.uiDensity !== defaults.uiDensity ? ["UI density"] : []),
@@ -256,12 +265,14 @@ function SettingsRouteView() {
     ...(settings.autoOpenDevicePane !== defaults.autoOpenDevicePane
       ? ["Automatically open simulator"]
       : []),
-    ...(settings.enableAppSnap !== defaults.enableAppSnap ? ["AppSnap"] : []),
-    ...(!sameAppSnapShortcut(settings.appSnapShortcut, defaults.appSnapShortcut)
+    ...(!cediaHost && settings.enableAppSnap !== defaults.enableAppSnap ? ["AppSnap"] : []),
+    ...(!cediaHost && !sameAppSnapShortcut(settings.appSnapShortcut, defaults.appSnapShortcut)
       ? ["AppSnap shortcut"]
       : []),
-    ...(settings.appSnapPlaySound !== defaults.appSnapPlaySound ? ["AppSnap capture sound"] : []),
-    ...(settings.enableProviderUpdateChecks !== defaults.enableProviderUpdateChecks
+    ...(!cediaHost && settings.appSnapPlaySound !== defaults.appSnapPlaySound
+      ? ["AppSnap capture sound"]
+      : []),
+    ...(!cediaHost && settings.enableProviderUpdateChecks !== defaults.enableProviderUpdateChecks
       ? ["Provider update checks"]
       : []),
     ...(settings.diffWordWrap !== defaults.diffWordWrap ? ["Diff line wrapping"] : []),
@@ -278,14 +289,14 @@ function SettingsRouteView() {
       ? ["Terminal close confirmation"]
       : []),
     ...(isGitTextGenerationModelDirty ? ["Git writing model"] : []),
-    ...(settings.customCodexModels.length > 0 ||
+    ...(!cediaHost && (settings.customCodexModels.length > 0 ||
     settings.customClaudeModels.length > 0 ||
     settings.customCursorModels.length > 0 ||
     settings.customAntigravityModels.length > 0 ||
     settings.customGrokModels.length > 0 ||
     settings.customDroidModels.length > 0 ||
     settings.customOpenCodeModels.length > 0 ||
-    settings.customPiModels.length > 0
+    settings.customPiModels.length > 0)
       ? ["Custom models"]
       : []),
     ...(isInstallSettingsDirty ? ["Provider installs"] : []),
@@ -351,53 +362,45 @@ function SettingsRouteView() {
 
   const renderGeneralPanel = () => (
     <div className="space-y-6">
-      <SettingsSection title="Permissions">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          What the agent may do without asking. Bound to the live OMP approval settings.
-        </p>
-        <OmpSettingsSubset active paths={["tools.approvalMode", "tools.approval"]} />
-      </SettingsSection>
-      <SettingsSection title="Power">
-        <OmpSettingsSubset active paths={["power.sleepPrevention"]} />
-      </SettingsSection>
-
-      <SettingsSection title="Core defaults">
-        <SettingsRow
-          title="New threads"
-          description="Pick the default workspace mode for newly created draft threads."
-          resetAction={
-            settings.defaultThreadEnvMode !== defaults.defaultThreadEnvMode ? (
-              <SettingResetButton
-                label="new threads"
-                onClick={() =>
+      <SettingsSection title="Everyday defaults">
+        {!cediaHost ? (
+          <SettingsRow
+            title="New threads"
+            description="Pick the default workspace mode for newly created draft threads."
+            resetAction={
+              settings.defaultThreadEnvMode !== defaults.defaultThreadEnvMode ? (
+                <SettingResetButton
+                  label="new threads"
+                  onClick={() =>
+                    updateSettings({
+                      defaultThreadEnvMode: defaults.defaultThreadEnvMode,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <SettingsSelectControl
+                value={settings.defaultThreadEnvMode}
+                onValueChange={(value) => {
+                  if (value !== "local" && value !== "worktree") return;
                   updateSettings({
-                    defaultThreadEnvMode: defaults.defaultThreadEnvMode,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <SettingsSelectControl
-              value={settings.defaultThreadEnvMode}
-              onValueChange={(value) => {
-                if (value !== "local" && value !== "worktree") return;
-                updateSettings({
-                  defaultThreadEnvMode: value,
-                });
-              }}
-              ariaLabel="Default thread mode"
-              valueContent={settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
-            >
-              <SelectItem hideIndicator value="local">
-                Local
-              </SelectItem>
-              <SelectItem hideIndicator value="worktree">
-                New worktree
-              </SelectItem>
-            </SettingsSelectControl>
-          }
-        />
+                    defaultThreadEnvMode: value,
+                  });
+                }}
+                ariaLabel="Default thread mode"
+                valueContent={settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
+              >
+                <SelectItem hideIndicator value="local">
+                  Local
+                </SelectItem>
+                <SelectItem hideIndicator value="worktree">
+                  New worktree
+                </SelectItem>
+              </SettingsSelectControl>
+            }
+          />
+        ) : null}
 
         <SettingsRow
           title="Welcome tour"
@@ -502,14 +505,16 @@ function SettingsRouteView() {
           ariaLabel: "Show the Chats section in the sidebar",
         })}
 
-        {renderBooleanSettingRow({
-          settingKey: "showAutomationRunThreads",
-          title: "Automation runs",
-          description:
-            "Show the thread each standalone automation run creates. Runs stay listed on the automation's page either way; threads owned by dedicated or heartbeat automations always stay visible.",
-          resetLabel: "automation runs",
-          ariaLabel: "Show automation run threads in the sidebar",
-        })}
+        {!cediaHost
+          ? renderBooleanSettingRow({
+              settingKey: "showAutomationRunThreads",
+              title: "Automation runs",
+              description:
+                "Show the thread each standalone automation run creates. Runs stay listed on the automation's page either way; threads owned by dedicated or heartbeat automations always stay visible.",
+              resetLabel: "automation runs",
+              ariaLabel: "Show automation run threads in the sidebar",
+            })
+          : null}
       </SettingsSection>
 
       <div id={SETTINGS_TARGETS.environmentPanel} className="space-y-6">
@@ -525,31 +530,35 @@ function SettingsRouteView() {
         </SettingsSection>
 
         <SettingsSection title="Code and status">
-          {renderBooleanSettingRow({
-            settingKey: "showEnvironmentUsage",
-            title: "Usage",
-            description: "Show the provider usage row in the chat Environment panel.",
-            resetLabel: "usage section",
-            ariaLabel: "Show the Usage section in the Environment panel",
-          })}
+          {!cediaHost
+            ? renderBooleanSettingRow({
+                settingKey: "showEnvironmentUsage",
+                title: "Usage",
+                description: "Show the provider usage row in the chat Environment panel.",
+                resetLabel: "usage section",
+                ariaLabel: "Show the Usage section in the Environment panel",
+              })
+            : null}
 
           {renderBooleanSettingRow({
             settingKey: "showEnvironmentRepository",
             title: "Repository",
             description:
-              "Show the GitHub repository link in the chat Environment panel. The git block (Changes, Worktree, branch, Commit and Push) always stays visible.",
+              "Show repository metadata when the current project has a remote. The git block (Changes, Worktree, branch, Commit and Push) always stays visible.",
             resetLabel: "repository section",
             ariaLabel: "Show the Repository section in the Environment panel",
           })}
 
-          {renderBooleanSettingRow({
-            settingKey: "showEnvironmentPullRequest",
-            title: "Pull request",
-            description:
-              "Show the open pull request (CI checks and review comments) for the current branch in the chat Environment panel.",
-            resetLabel: "pull request section",
-            ariaLabel: "Show the Pull request section in the Environment panel",
-          })}
+          {!cediaHost
+            ? renderBooleanSettingRow({
+                settingKey: "showEnvironmentPullRequest",
+                title: "Pull request",
+                description:
+                  "Show the open pull request (CI checks and review comments) for the current branch in the chat Environment panel.",
+                resetLabel: "pull request section",
+                ariaLabel: "Show the Pull request section in the Environment panel",
+              })
+            : null}
 
           {renderBooleanSettingRow({
             settingKey: "showEnvironmentEditor",
@@ -562,13 +571,15 @@ function SettingsRouteView() {
         </SettingsSection>
 
         <SettingsSection title="Context and notes">
-          {renderBooleanSettingRow({
-            settingKey: "showEnvironmentRecap",
-            title: "Recap",
-            description: "Show the auto-generated chat recap in the Environment panel.",
-            resetLabel: "recap section",
-            ariaLabel: "Show the Recap section in the Environment panel",
-          })}
+          {!cediaHost
+            ? renderBooleanSettingRow({
+                settingKey: "showEnvironmentRecap",
+                title: "Recap",
+                description: "Show the auto-generated chat recap in the Environment panel.",
+                resetLabel: "recap section",
+                ariaLabel: "Show the Recap section in the Environment panel",
+              })
+            : null}
 
           {renderBooleanSettingRow({
             settingKey: "showEnvironmentPinned",
@@ -595,6 +606,17 @@ function SettingsRouteView() {
           })}
         </SettingsSection>
       </div>
+
+      <SettingsSection title="Permissions">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          What the agent may do without asking. Bound to the live OMP approval settings.
+        </p>
+        <OmpSettingsSubset active paths={["tools.approvalMode", "tools.approval"]} />
+      </SettingsSection>
+
+      <SettingsSection title="Power">
+        <OmpSettingsSubset active paths={["power.sleepPrevention"]} />
+      </SettingsSection>
     </div>
   );
 
@@ -1012,8 +1034,6 @@ function SettingsRouteView() {
         return renderBehaviorPanel();
       case "shortcuts":
         return <KeyboardShortcutsSettingsPanel />;
-      case "profile":
-        return <ProfileSettingsPanel />;
       case "status":
         return <CapabilityStatusPanel />;
       case "omp":
@@ -1044,28 +1064,28 @@ function SettingsRouteView() {
           content (hence absolute, not a layout-occupying header row). The strip stays a
           drag-region so the Windows frameless window can be moved by its top edge; the
           caption buttons themselves are a separate fixed cluster (see root route). */}
-        <div
+        <header
           className={cn(
-            "drag-region absolute inset-x-0 top-0 z-10 flex items-center",
+            CHAT_SURFACE_HEADER_ROW_CLASS_NAME,
+            "cedia-chrome-header drag-region",
             CHAT_SURFACE_HEADER_PADDING_X_CLASS,
-            CHAT_SURFACE_HEADER_HEIGHT_CLASS,
             desktopTopBarTrafficLightGutterClassName,
           )}
         >
           <div className="pointer-events-auto">
             <SidebarHeaderNavigationControls />
           </div>
-        </div>
-        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        </header>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto">
             <div
               className={cn(
-                "mx-auto w-full px-6 py-8",
+                "mx-auto w-full px-6 py-7 sm:px-8 sm:py-8",
                 activeSection === "profile" ? "max-w-3xl" : "max-w-2xl",
               )}
             >
               {activeSection !== "profile" ? (
-                <div className="mb-8 flex items-start justify-between gap-4">
+                <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0">
                     <h1 className="text-xl font-medium tracking-tight text-foreground">
                       {activeSectionItem.label}
@@ -1077,7 +1097,7 @@ function SettingsRouteView() {
                   <Button
                     size="xs"
                     variant="outline"
-                    className="shrink-0"
+                    className="self-start sm:shrink-0"
                     disabled={changedSettingLabels.length === 0}
                     onClick={() => void restoreDefaults()}
                   >
@@ -1098,13 +1118,6 @@ function SettingsRouteView() {
                   updateSettings={updateSettings}
                 />
                 <ArchivedSettingsPanel active={activeSection === "archived"} />
-                <ModelsSettingsPanel
-                  active={activeSection === "models"}
-                  settings={settings}
-                  defaults={defaults}
-                  updateSettings={updateSettings}
-                  resetEpoch={resetEpoch}
-                />
                 <ProvidersSettingsPanel
                   active={activeSection === "providers"}
                   settings={settings}

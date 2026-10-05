@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">CEDIA split compass concept</title>
+  <g fill="none" stroke="#111" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M128 33 57 76c-16 10-24 27-24 52s8 42 24 52l71 43"/>
+    <path d="m128 33 71 43c16 10 24 27 24 52s-8 42-24 52l-71 43"/>
+    <path d="m86 128 42-27 42 27-42 27-42-27Z"/>
+  </g>
+</svg>

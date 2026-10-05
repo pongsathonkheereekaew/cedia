@@ -127,6 +127,7 @@ import { useThreadHandoff } from "../hooks/useThreadHandoff";
 import { useThreadUnblock } from "../hooks/useThreadUnblock";
 import { useThreadWorkspaceHandoff } from "../hooks/useThreadWorkspaceHandoff";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
+import { turnQueueSummary } from "../lib/turnQueue";
 import { formatShortcutLabel, shortcutLabelForCommand } from "../keybindings";
 import { isHomeChatContainerProject } from "../lib/chatProjects";
 import { appendComposerPromptText } from "../lib/chatReferences";
@@ -255,7 +256,7 @@ import TerminalWorkspaceTabs from "./TerminalWorkspaceTabs";
 import { ThreadWorktreeHandoffDialog } from "./ThreadWorktreeHandoffDialog";
 import { ChatComposerFooter } from "./chat/ChatComposerFooter";
 import { ChatHeader } from "./chat/ChatHeader";
-import { ChatSurfaceHeader } from "./chat/ChatSurfaceHeader";
+import { CediaChatHeaderPortal } from "../cediaChatHeaderSlot";
 import { useAsyncUserInputResponse } from "./chat/useAsyncUserInputResponse";
 import { ChatTranscriptPane } from "./chat/ChatTranscriptPane";
 import { ComposerActiveTaskListCard } from "./chat/ComposerActiveTaskListCard";
@@ -1798,8 +1799,34 @@ export default function ChatView({
     }, THREAD_DETAIL_SYNC_WATCHDOG_MS);
     return () => clearTimeout(timer);
   }, [threadId, threadDetailHydration]);
-  // Stable identity: this element is forwarded to the memoized MessagesTimeline, so
-  // building it inline in JSX would defeat its `memo()` on every keystroke.
+  // Agent-run overlays (Arc-style per-turn timeline rows): derived from existing
+  // seams only — no new store paths. Active turn keyed by latestTurnId; state from
+  // latestTurnState; the queue line from turnQueueSummary(session.turns); approval
+  // mapped to the active turn (PendingApproval carries no turnId; the composer
+  // card already only shows the latest request); file count from turnDiffSummaries.
+  const agentRunPendingApprovalByTurnId = useMemo(() => {
+    if (!activePendingApproval || !activeLatestTurnId) return undefined;
+    return new Map([[activeLatestTurnId as string, activePendingApproval]]);
+  }, [activePendingApproval, activeLatestTurnId]);
+  const agentRunTurnStateByTurnId = useMemo(() => {
+    if (!activeLatestTurnId) return undefined;
+    const state = activeLatestTurnState;
+    const mapped =
+      state === "running"
+        ? "running"
+        : state === "interrupted" || state === "error"
+          ? "outcome_unknown"
+          : "settled";
+    return new Map([[activeLatestTurnId as string, mapped as "running" | "settled" | "needs_continue" | "outcome_unknown"]]);
+  }, [activeLatestTurnId, activeLatestTurnState]);
+  const agentRunQueueLineByTurnId = useMemo(() => {
+    if (!activeLatestTurnId || activeThread?.session === undefined) return undefined;
+    const line = turnQueueSummary(activeThread?.session?.turns ?? null);
+    if (!line) return undefined;
+    return new Map([[activeLatestTurnId as string, line]]);
+  }, [activeLatestTurnId, activeThread?.session]);
+  // NOTE: turnDiffSummaries is declared below via useTurnDiffSummaries; the file
+  // count map is derived there instead — see agentRunFileCountByTurnId below.
   const transcriptEmptyStateContent = useMemo((): ReactNode => {
     if (threadDetailHydration !== "ready") {
       return (
@@ -1844,6 +1871,15 @@ export default function ChatView({
       messages: messagesForDiffAnchoring,
     });
   }, [inferredCheckpointTurnCountByTurnId, turnDiffSummaries, timelineMessages]);
+  // Per-turn settled file counts for the agent-run result fold (Arc result row).
+  const agentRunFileCountByTurnId = useMemo(() => {
+    const byTurn = new Map<string, number>();
+    for (const summary of turnDiffSummaries) {
+      const files = Array.isArray(summary.files) ? summary.files.length : 0;
+      if (files > 0) byTurn.set(summary.turnId as string, files);
+    }
+    return byTurn.size > 0 ? byTurn : undefined;
+  }, [turnDiffSummaries]);
   const revertTurnCountByUserMessageId = useMemo(() => {
     const byUserMessageId = new Map<MessageId, number>();
     for (let index = 0; index < timelineEntries.length; index += 1) {
@@ -2749,7 +2785,10 @@ export default function ChatView({
   // Temporary threads are visually identical to regular chats — they use the same
   // Environment panel + header controls. "Temporary" is purely a sidebar badge +
   // auto-delete-on-leave concern, never a stripped-down chat UI.
-  const environmentEnabled = !hideHeader;
+  // Cedia single header: hideHeader hides the surface title row only — the
+  // Environment panel + header controls still resolve (the header portal
+  // renders them in the route window header).
+  const environmentEnabled = true;
   const environmentUsesFloatingOverlay =
     isTerminalEnvironmentContext || isMobileViewport || rightDockOpen || surfaceMode === "split";
   const environmentDefaultOpen = resolveDefaultEnvironmentPanelOpen({
@@ -4793,6 +4832,7 @@ export default function ChatView({
         {isElectron && (
           <div
             className={cn(
+              !isIdeEmbeddedRuntime() && "cedia-chrome-header",
               CHAT_SURFACE_HEADER_ROW_CLASS_NAME,
               "drag-region px-5",
               desktopTopBarTrafficLightGutterClassName,
@@ -5672,92 +5712,91 @@ export default function ChatView({
           isDragOverComposer ? "opacity-100" : "opacity-0",
         )}
       />
-      <ChatSurfaceHeader
-        hidden={hideHeader}
-        className={cn(
-          CHAT_SURFACE_HEADER_DIVIDER_CLASS_NAME,
-          CHAT_SURFACE_HEADER_PADDING_X_CLASS,
-          "flex items-center",
-          CHAT_SURFACE_HEADER_HEIGHT_CLASS,
-          isElectron && "drag-region",
-          desktopTopBarTrafficLightGutterClassName,
-          desktopTopBarWindowControlsGutterClassName,
-        )}
-      >
-        <ChatHeader
-          activeThreadId={activeThread.id}
-          activeThreadTitle={activeThreadDisplayTitle}
-          activeThreadEntryPoint={terminalState.entryPoint}
-          activeProvider={activeThread.session?.provider ?? activeThread.modelSelection.provider}
-          activeProjectName={activeProjectDisplayName}
-          workspaceIdentityLabel={workspaceIdentityLabel}
-          threadBreadcrumbs={threadBreadcrumbs}
-
-          isSidechat={Boolean(activeThread.sidechatSourceThreadId)}
-          hideHandoffControls={terminalWorkspaceTerminalTabActive}
-          minimalChrome={isCenteredEmptyLanding}
-          isGitRepo={isGitRepo}
-          openInTarget={threadWorkspaceCwd}
-          activeProjectScripts={activeProjectScripts}
-          preferredScriptId={
-            activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
-          }
-          keybindings={keybindings}
-          availableEditors={availableEditors}
-          diffToggleShortcutLabel={diffPanelShortcutLabel}
-          handoffBadgeLabel={handoffBadgeLabel}
-          handoffActionLabel={handoffActionLabel}
-          handoffDisabled={handoffDisabled}
-          handoffActionTargetProviders={handoffTargetProviders}
-          handoffBadgeSourceProvider={handoffBadgeSourceProvider}
-          handoffBadgeTargetProvider={handoffBadgeTargetProvider}
-          gitCwd={threadWorkspaceCwd}
-          diffTotals={repoDiffTotals}
-          showGitActions={showGitActions}
-          diffOpen={resolvedDiffOpen}
-          diffDisabledReason={diffDisabledReason}
-          rightDockOpen={rightDockOpen}
-          {...(onToggleRightDock ? { onToggleRightDock } : {})}
-          environment={environmentHeaderState}
-          surfaceMode={surfaceMode}
-          chatLayoutAction={
-            surfaceMode === "single" && onSplitSurface
-              ? {
-                  kind: "split",
-                  label: "Split chat",
-                  shortcutLabel: chatSplitShortcutLabel,
-                  onClick: onSplitSurface,
+      {/* Cedia single header: ChatHeader renders in the route-level window
+          header (see _chat.tsx data-cedia-window-header), never in the center
+          card. The element publishes through CediaChatHeaderPortal; the route
+          slot mounts it above the cards. IDE-embedded keeps its own header. */}
+      <CediaChatHeaderPortal
+        node={
+          // hideHeader suppresses the in-card row in the standalone single-chat
+          // surface; its header still belongs in the route-level chrome.
+          isIdeEmbeddedRuntime() ? null : (
+            <ChatHeader
+                activeThreadId={activeThread.id}
+                activeThreadTitle={activeThreadDisplayTitle}
+                activeThreadEntryPoint={terminalState.entryPoint}
+                activeProvider={activeThread.session?.provider ?? activeThread.modelSelection.provider}
+                activeProjectName={activeProjectDisplayName}
+                workspaceIdentityLabel={workspaceIdentityLabel}
+                threadBreadcrumbs={threadBreadcrumbs}
+            // Cedia single header: window header owns the leading cluster.
+                hideSidebarControls={!isIdeEmbeddedRuntime()}
+                hideHandoffControls={terminalWorkspaceTerminalTabActive}
+                minimalChrome={isCenteredEmptyLanding}
+                isGitRepo={isGitRepo}
+                openInTarget={threadWorkspaceCwd}
+                activeProjectScripts={activeProjectScripts}
+                preferredScriptId={
+                  activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
                 }
-              : surfaceMode === "split" && isFocusedPane && onMaximizeSurface
-                ? {
-                    kind: "maximize",
-                    label: "Expand this chat",
-                    shortcutLabel: null,
-                    onClick: onMaximizeSurface,
-                  }
-                : null
-          }
-          changeThreadAction={
-            surfaceMode === "split" && isFocusedPane && onChangeThreadInSplitPane
-              ? {
-                  label: "Change thread",
-                  onClick: onChangeThreadInSplitPane,
+                keybindings={keybindings}
+                availableEditors={availableEditors}
+                diffToggleShortcutLabel={diffPanelShortcutLabel}
+                handoffBadgeLabel={handoffBadgeLabel}
+                handoffActionLabel={handoffActionLabel}
+                handoffDisabled={handoffDisabled}
+                handoffActionTargetProviders={handoffTargetProviders}
+                handoffBadgeSourceProvider={handoffBadgeSourceProvider}
+                handoffBadgeTargetProvider={handoffBadgeTargetProvider}
+                gitCwd={threadWorkspaceCwd}
+                diffTotals={repoDiffTotals}
+                showGitActions={showGitActions}
+                diffOpen={resolvedDiffOpen}
+                diffDisabledReason={diffDisabledReason}
+                rightDockOpen={rightDockOpen}
+                {...(onToggleRightDock ? { onToggleRightDock } : {})}
+                environment={environmentHeaderState}
+                surfaceMode={surfaceMode}
+                chatLayoutAction={
+                  surfaceMode === "single" && onSplitSurface
+                    ? {
+                        kind: "split",
+                        label: "Split chat",
+                        shortcutLabel: chatSplitShortcutLabel,
+                        onClick: onSplitSurface,
+                      }
+                    : surfaceMode === "split" && isFocusedPane && onMaximizeSurface
+                      ? {
+                          kind: "maximize",
+                          label: "Expand this chat",
+                          shortcutLabel: null,
+                          onClick: onMaximizeSurface,
+                        }
+                      : null
                 }
-              : null
-          }
-          onRunProjectScript={onRunProjectScriptFromHeader}
-          onAddProjectScript={saveProjectScript}
-          onUpdateProjectScript={updateProjectScript}
-          onDeleteProjectScript={deleteProjectScript}
-          onToggleDiff={onToggleDiff}
-          onRegisterCommitAndPushTrigger={onRegisterCommitAndPushTrigger}
-          onCreateHandoff={onCreateHandoffThread}
-          onNavigateToThread={onNavigateToThread}
-          onRenameThread={() => setRenameDialogOpen(true)}
-          moreMenuItems={moreMenuItems}
-          {...(onCloseThreadPane ? { onCloseThreadPane } : {})}
-        />
-      </ChatSurfaceHeader>
+                changeThreadAction={
+                  surfaceMode === "split" && isFocusedPane && onChangeThreadInSplitPane
+                    ? {
+                        label: "Change thread",
+                        onClick: onChangeThreadInSplitPane,
+                      }
+                    : null
+                }
+                onRunProjectScript={onRunProjectScriptFromHeader}
+                onAddProjectScript={saveProjectScript}
+                onUpdateProjectScript={updateProjectScript}
+                onDeleteProjectScript={deleteProjectScript}
+                onToggleDiff={onToggleDiff}
+                onRegisterCommitAndPushTrigger={onRegisterCommitAndPushTrigger}
+                onCreateHandoff={onCreateHandoffThread}
+                onNavigateToThread={onNavigateToThread}
+                onRenameThread={() => setRenameDialogOpen(true)}
+                moreMenuItems={moreMenuItems}
+                {...(onCloseThreadPane ? { onCloseThreadPane } : {})}
+            />
+          )
+        }
+      />
 
       {/* Floating find panel — a root-level overlay so it sits on top of the
           header and the docked Environment panel at the pane's top-right. */}
@@ -5907,8 +5946,8 @@ export default function ChatView({
             ) : null}
 
             {shouldRenderChatPaneContent && !isCenteredEmptyLanding ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden pb-40">
                   <ChatTranscriptPane
                     activeThreadId={activeThread.id}
                     activeTurnId={activeTurnIdForTranscript}
@@ -5948,6 +5987,11 @@ export default function ChatView({
                     messageChangeSignal={timelineMessages}
                     turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
                     onOpenTurnDiff={onOpenTurnDiff}
+                    {...(agentRunPendingApprovalByTurnId ? { pendingApprovalByTurnId: agentRunPendingApprovalByTurnId } : {})}
+                    {...(agentRunTurnStateByTurnId ? { turnStateByTurnId: agentRunTurnStateByTurnId } : {})}
+                    {...(agentRunQueueLineByTurnId ? { turnQueueLineByTurnId: agentRunQueueLineByTurnId } : {})}
+                    {...(agentRunFileCountByTurnId ? { turnFileCountByTurnId: agentRunFileCountByTurnId } : {})}
+                    onRespondToAgentRunApproval={onRespondToApproval}
                     onOpenThread={onNavigateToThread}
                     onOpenAutomation={onOpenAutomation}
                     revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
@@ -5994,12 +6038,13 @@ export default function ChatView({
                   />
                 </div>
 
-                {/* Keep the composer below the transcript so neither transcript rows nor
-                    runtime controls can appear behind its input surface. */}
-                <div className="relative z-10 w-full shrink-0">
+                {/* Mockup cutover: the composer floats as a pill over the transcript —
+                    the transcript scrolls under it (bottom inset via
+                    contentInsetBottomPx) so last rows clear the pill. */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 w-full">
                   <div
                     className={cn(
-                      "w-full overflow-visible",
+                      "pointer-events-auto w-full overflow-visible",
                       ENVIRONMENT_CONTENT_INSET_MOTION_CLASS,
                       CHAT_COLUMN_GUTTER_CLASS_NAME,
                     )}
@@ -6013,14 +6058,9 @@ export default function ChatView({
                   >
                     {composerSection}
                   </div>
-                  {/* A trailing BranchToolbar only renders for legacy git threads; otherwise the
-                      composer is the last element, so give it a comfortable bottom margin. */}
-                  <div
-                    className={cn(isGitRepo && !environmentEnabled ? "pt-0.5" : "pt-3 sm:pt-4")}
-                  />
                   {secondaryChromeReady &&
                   ((isGitRepo && !environmentEnabled) || relocateComposerLeadingControls) ? (
-                    <div className={CHAT_COLUMN_GUTTER_CLASS_NAME}>
+                    <div className={cn(CHAT_COLUMN_GUTTER_CLASS_NAME, "pointer-events-auto")}>
                       <div className={COMPOSER_COLUMN_FRAME_CLASS_NAME}>
                         <div className="flex w-full items-center gap-1">
                           {relocateComposerLeadingControls ? (

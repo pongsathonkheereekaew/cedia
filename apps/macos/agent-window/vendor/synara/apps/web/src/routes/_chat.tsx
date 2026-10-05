@@ -10,7 +10,7 @@ import {
 } from "../appNavigation";
 import ShortcutsDialog from "../components/ShortcutsDialog";
 import { RecentViewSwitcher } from "../components/RecentViewSwitcher";
-import { CediaStatusBar } from "../components/cediaStatusBar";
+import { CediaLeftIconRail } from "../components/Sidebar";
 import { shouldRenderTerminalWorkspace } from "../components/ChatView.logic";
 import ThreadSidebar from "../components/Sidebar";
 import {
@@ -55,10 +55,15 @@ import {
 } from "~/components/ui/sidebar";
 import { SidebarLeadingControls } from "~/components/SidebarHeaderNavigationControls";
 import { DESKTOP_TOP_BAR_TRAFFIC_LIGHT_GUTTER_CLASS } from "~/hooks/useDesktopTopBarGutter";
-import { CHAT_SURFACE_HEADER_HEIGHT_CLASS } from "~/components/chat/chatHeaderControls";
 import type { SidebarResizableOptions } from "~/components/ui/sidebar";
 import { cn, getNavigatorPlatform, isMacPlatform } from "~/lib/utils";
 import { isIdeEmbeddedRuntime } from "../ide-mode";
+import { useFocusedChatContext } from "../focusedChatContext";
+import { selectRightDockState, useRightDockStore } from "../rightDockStore";
+import { useCediaChatHeaderSlot } from "../cediaChatHeaderSlot";
+import { FolderClosed } from "../components/FolderClosed";
+import { SidebarToggleIcon } from "../components/SidebarToggleIcon";
+import { IconButton } from "../components/ui/icon-button";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
@@ -511,6 +516,74 @@ const SIDEBAR_GAP_CLASS =
  *  A sidebar border here draws a full-height vertical line through the titlebar seam. */
 const SIDEBAR_INNER_CLASS = "app-sidebar-surface";
 
+// Cedia single header: the ONLY title row in the standalone window. ChatView
+// (inside <Outlet />) publishes its real ChatHeader element here on every
+// render — same props it would render in-card, zero duplication. Falls back to
+// the minimal title + search + dock toggle while no pane has registered
+// (route transitions, empty landing). Slot store lives in
+// ../cediaChatHeaderSlot (not here): ChatView importing this route file would
+// be a component/route cycle.
+
+function CediaWindowHeaderTitle() {
+  const { activeThread, activeProject } = useFocusedChatContext();
+  const projectName = activeProject?.folderName ?? activeProject?.name ?? null;
+  const threadTitle = activeThread?.title?.trim() ? activeThread.title : "Thread Name";
+  return (
+    <div className="flex min-w-0 shrink-0 items-center gap-2 [-webkit-app-region:no-drag]">
+      {projectName ? (
+        <span className="inline-flex min-w-0 max-w-56 shrink items-center gap-2 overflow-hidden rounded-full px-2 py-1 text-muted-foreground">
+          <FolderClosed className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate text-[11px]">{projectName}</span>
+        </span>
+      ) : null}
+      <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{threadTitle}</span>
+    </div>
+  );
+}
+function CediaWindowHeaderDockToggle() {
+  const { focusedThreadId } = useFocusedChatContext();
+  const dockState = useRightDockStore(
+    useMemo(() => selectRightDockState(focusedThreadId), [focusedThreadId]),
+  );
+  const dockOpen = dockState.open;
+  const toggleDockOpen = useRightDockStore((store) => store.toggleDockOpen);
+  return (
+    <IconButton
+      label="Toggle right sidebar"
+      tooltip={dockOpen ? "Close right sidebar" : "Open right sidebar"}
+      tooltipSide="bottom"
+      aria-pressed={dockOpen}
+      disabled={focusedThreadId === null}
+      className="size-7 shrink-0 [-webkit-app-region:no-drag]"
+      onClick={() => {
+        if (focusedThreadId !== null) toggleDockOpen(focusedThreadId);
+      }}
+    >
+      <SidebarToggleIcon side="right" open={dockOpen} />
+    </IconButton>
+  );
+}
+function CediaChatHeaderFallback() {
+  // Fallback = title only; the route header always owns the dock toggle. NO search pill: the thread-search
+  // entry lives in the left thread card (next to Cedia, per Synara upstream),
+  // and the window header must not carry a second search that reads as
+  // global/command search.
+  return (
+    <>
+      <CediaWindowHeaderTitle />
+      <div className="min-w-0 flex-1" />
+    </>
+  );
+}
+function CediaChatHeaderSlot() {
+  const node = useCediaChatHeaderSlot();
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2">
+      {node ?? <CediaChatHeaderFallback />}
+    </div>
+  );
+}
+
 function ChatRouteLayout() {
   // The IDE embeds the chat surface in a compact dock. The host sets this flag
   // before importing the web bundle, so the first render can omit the standalone
@@ -547,10 +620,15 @@ function ChatRouteLayout() {
   const resolvedSidebarOpen = isIdeEmbedded ? false : sidebarOpen;
 
   // The thread sidebar always lives on the left; the right dock is a separate surface.
+  // Cedia icon rail (item 71): collapse to the 48px rail instead of sliding
+  // off-canvas; drag snaps on the content-seam rail.
   const sidebarElement = isIdeEmbedded ? null : (
     <Sidebar
       side="left"
-      collapsible="offcanvas"
+      collapsible="icon"
+      // Cedia card layout: the container insets 4px and the inner surface
+      // draws the floating card. Rail/panel geometry and resize are untouched.
+      variant="floating"
       // Match the right dock's soft drawer slide (shared token) instead of the
       // shell's default `ease-linear`. Applied to the container + gap in lockstep.
       className={cn(
@@ -560,16 +638,21 @@ function ChatRouteLayout() {
         // would stack with the content card's seam shadow into a dark edge; drop it and
         // let the seam carry the divider alone. Dark keeps the existing edge.
         resolvedTheme === "dark" ? null : "group-data-[side=left]:border-r-0",
+        // Collapsed icon widths go to 0 (not the icon slot): the 48px rail lives
+        // outside <Sidebar>, so any reserved slot would be an empty card. Width
+        // animates via the shared drawer token — no display:none on this path.
+        "group-data-[collapsible=icon]:w-0!",
       )}
       gapClassName={cn(
         SIDEBAR_GAP_CLASS,
         sidebarMotionClass,
-        // The panel slides on the compositor thread while the gap/content resize on the
-        // main thread: under load the content trails a few frames and the vacated strip
-        // goes see-through (dark flicker). In light mode the gap carries the solid
-        // sidebar token so the strip stays painted through the whole transition; dark
-        // keeps the glass gap. (Cedia addition.)
-        resolvedTheme === "dark" ? null : "bg-sidebar",
+        // Cedia card layout: the gap stays transparent so the shell background
+        // shows between the floating cards (4px gaps on a 4px shell). The
+        // provider shell is opaque (bg-background in light, app-shell in dark),
+        // so the vacated strip stays painted through the transition without a
+        // solid sidebar fill hiding the card separation.
+        // Zero when collapsed (see container note) so the row closes fully.
+        "group-data-[collapsible=icon]:w-0!",
       )}
       innerClassName={cn(
         SIDEBAR_INNER_CLASS,
@@ -578,6 +661,11 @@ function ChatRouteLayout() {
         // the surface is opaque anyway, so the blur is pure cost plus flicker risk: drop
         // it there and keep the glass in dark mode. (Cedia addition.)
         resolvedTheme === "dark" ? null : "[backdrop-filter:none] [-webkit-backdrop-filter:none]",
+        // Collapsed at w-0: neutralize the card chrome so no pill sliver paints
+        // in the 4px seam. Content itself hides via ThreadSidebar.
+        "group-data-[collapsible=icon]:border-0!",
+        "group-data-[collapsible=icon]:shadow-none!",
+        "group-data-[collapsible=icon]:bg-transparent!",
       )}
       transparentSurface={resolvedTheme === "dark"}
       resizable={THREAD_SIDEBAR_RESIZABLE}
@@ -601,7 +689,7 @@ function ChatRouteLayout() {
   const mainContentShell = (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       {isIdeEmbedded ? null : (
-        <SidebarInstanceProvider side="left" resizable={THREAD_SIDEBAR_RESIZABLE}>
+        <SidebarInstanceProvider side="left" resizable={THREAD_SIDEBAR_RESIZABLE} collapsible="icon">
           <SidebarRail placement="content-seam" />
         </SidebarInstanceProvider>
       )}
@@ -609,26 +697,43 @@ function ChatRouteLayout() {
     </div>
   );
 
-  // Keep one sidebar trigger in the fixed route shell. The trigger must not live
-  // inside the sliding sidebar: doing so makes it travel a full sidebar width
-  // during the off-canvas transition and creates a duplicate when the host header
-  // takes over in the closed state. The gutter is zoom-aware and keeps it clear of
-  // macOS traffic lights at the same x-coordinate in both states.
-  const shellNavigationControls = (
+  // Cedia single header: ONE full-width h-46px row ABOVE the cards carrying
+  // the real ChatHeader (title + provider + Hand off + actions + IDE +
+  // environment + diff/dock toggles). The ChatView pane (inside <Outlet />)
+  // registers its per-thread header props here; the route renders them in this
+  // row instead of inside the center card, so there is exactly one header.
+  const windowHeaderRow = (
     <div
-      className={cn(
-        "pointer-events-none fixed inset-x-0 top-0 z-[70] hidden items-center md:flex",
-        CHAT_SURFACE_HEADER_HEIGHT_CLASS,
-      )}
+      data-cedia-window-header
+      className={cn("flex h-[46px] w-full shrink-0 items-center gap-2 px-3", isElectron && "drag-region")}
     >
       <SidebarLeadingControls
-        className={cn(
-          "pointer-events-auto",
-          DESKTOP_TOP_BAR_TRAFFIC_LIGHT_GUTTER_CLASS,
-        )}
+        className={cn("pointer-events-auto", DESKTOP_TOP_BAR_TRAFFIC_LIGHT_GUTTER_CLASS)}
       />
+      <CediaChatHeaderSlot />
+      <CediaWindowHeaderDockToggle />
     </div>
   );
+
+  if (isIdeEmbedded) {
+    return (
+      <SidebarProvider
+        defaultOpen
+        open={resolvedSidebarOpen}
+        onOpenChange={handleSidebarOpenChange}
+        shellNavigationOwner={isElectron}
+        className={cn("bg-background", "gap-1 p-1")}
+        data-sidebar-side="left"
+      >
+        <ThreadRetentionMaintenanceToast />
+        <ChatRouteGlobalShortcuts />
+        {sidebarElement}
+        <div className="cedia-center-card relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
+          {mainContentShell}
+        </div>
+      </SidebarProvider>
+    );
+  }
 
   return (
     <SidebarProvider
@@ -641,19 +746,40 @@ function ChatRouteLayout() {
       // glass window; in Cedia's opaque window any pixel it leaves uncovered paints
       // black, which flashed on every sidebar close in light mode. Opaque in light,
       // glass in dark. (Cedia addition.)
-      // Cedia §10 item 55: the bundle-drawn status bar lives at the foot of this
-      // column so it spans the content width under every route; hidden in the IDE
-      className={resolvedTheme === "dark" ? "bg-[var(--app-shell-background)]" : "bg-background"}
+      className={cn(
+        // Cedia card layout: the shell is the gray stage, cards are the light
+        // surfaces (target.html). Measured at runtime every solid surface token
+        // resolves to white (--background/--sidebar/--card all #ffffff) and the
+        // window backing is black, so translucent washes (--muted/--secondary)
+        // stage black, not gray. The shell mixes an opaque stage from the same
+        // tokens instead (≈#f6f6f6, the mockup's #f5f5f6): opaque in every mode,
+        // still inside the host token family. The IDE dock keeps the flat surface.
+        resolvedTheme === "dark"
+          ? "bg-[var(--app-shell-background)]"
+          : "bg-[color-mix(in_srgb,var(--card)_96%,var(--foreground)_4%)]",
+        // 4px shell margins with 4px gaps live on the inner column below
+        // (header row + cards row), not on the provider wrapper itself.
+        "flex-col gap-0 p-0",
+      )}
       data-sidebar-side="left"
     >
       <ThreadRetentionMaintenanceToast />
       <ChatRouteGlobalShortcuts />
-      {sidebarElement}
-      <div className="flex h-svh min-h-0 min-w-0 flex-1 flex-col">
-        {mainContentShell}
-        {isIdeEmbedded ? null : <CediaStatusBar />}
+      <div className="flex h-svh min-h-0 w-full flex-col">
+        {windowHeaderRow}
+        {/* Stage owns ALL insets: 4px on every side (p-1 = mockup gaps) so
+            card surfaces share one top/bottom equation with the header row. */}
+        <div className="flex min-h-0 w-full flex-1 gap-1 p-1">
+          <CediaLeftIconRail />
+          {sidebarElement}
+          <div className="cedia-center-card relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
+            {mainContentShell}
+          </div>
+          {/* Task-2 dock paints absolute inside this outlet; relative keeps it in the row so the in-flow gap reserves dock width and center shrinks. */}
+          <div data-right-cards-outlet className="relative flex min-h-0 shrink-0">
+          </div>
+        </div>
       </div>
-      {isElectron && !isIdeEmbedded ? shellNavigationControls : null}
     </SidebarProvider>
   );
 }

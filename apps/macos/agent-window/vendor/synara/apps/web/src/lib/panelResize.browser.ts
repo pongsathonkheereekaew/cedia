@@ -6,7 +6,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SINGLE_CHAT_PANE_SCOPE_ID, dockSidechatPaneScopeId } from "./chatPaneScope";
-import { canComposerHandlePanelWidth } from "./panelResize";
+import {
+  canComposerHandlePanelWidth,
+  createComposerWidthResizeSession,
+} from "./panelResize";
 
 interface MountedComposer {
   viewport: HTMLDivElement;
@@ -112,5 +115,43 @@ describe("canComposerHandlePanelWidth", () => {
     expect(accepted).toBe(true);
     expect(sidechatComposer.viewport.style.width).toBe("520px");
     expect(singleComposer.viewport.style.width).toBe("520px");
+  });
+
+  it("projects the dock drag against a single layout snapshot", () => {
+    mountComposer({
+      scopeId: SINGLE_CHAT_PANE_SCOPE_ID,
+      widthPx: 520,
+      rightActionsWidthPx: 48,
+    });
+
+    const session = createComposerWidthResizeSession({
+      currentPanelWidth: 400,
+      paneScopeId: SINGLE_CHAT_PANE_SCOPE_ID,
+    });
+
+    // 520px viewport - (600px - 400px) = 320px, enough for the fixed controls.
+    expect(session.shouldAcceptWidth(600)).toBe(true);
+    // 520px viewport - (705px - 400px) = 215px, below 160 + 48 + 8.
+    expect(session.shouldAcceptWidth(705)).toBe(false);
+    expect(session.clampWidth?.(705)).toBe(704);
+  });
+
+  it("does not pin widening when the full right-actions row is wider than its compact tier", () => {
+    mountComposer({
+      scopeId: SINGLE_CHAT_PANE_SCOPE_ID,
+      widthPx: 692,
+      rightActionsWidthPx: 640,
+    });
+
+    const session = createComposerWidthResizeSession({
+      currentPanelWidth: 479,
+      paneScopeId: SINGLE_CHAT_PANE_SCOPE_ID,
+    });
+
+    // The visible row is intentionally wide in the heavy-diff state. The
+    // footer demotes its labels during the drag, so that transient width must
+    // not make every wider candidate fail and leave the divider at 961px.
+    expect(session.shouldAcceptWidth(800)).toBe(true);
+    expect(session.clampWidth?.(800)).toBe(800);
   });
 });

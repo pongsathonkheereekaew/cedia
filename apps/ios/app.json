@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Cedia",
-    "icon": "../../assets/brand/cedia-terminal-d-v1/app-light.png",
+    "icon": "../../assets/brand/bloub-nuage-v1/app-light.png",
     "slug": "cedia",
     "version": "0.1.0",
     "orientation": "default",
@@ -10,8 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "icon": {
-        "light": "../../assets/brand/cedia-terminal-d-v1/app-light.png",
-        "dark": "../../assets/brand/cedia-terminal-d-v1/app-dark.png"
+        "light": "../../assets/brand/bloub-nuage-v1/app-light.png",
+        "dark": "../../assets/brand/bloub-nuage-v1/app-dark.png"
       },
       "supportsTablet": true,
       "bundleIdentifier": "com.cedia.app",

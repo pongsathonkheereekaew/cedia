@@ -40,6 +40,19 @@ describe("Agent ↔ IDE workbench mode", () => {
 		expect(next.commands).not.toContain("workbench.action.closeSidebar");
 	});
 
+	it("opens the Agent auxiliary bar for a fresh IDE and preserves an explicit close", () => {
+		expect(DEFAULT_IDE_LAYOUT.auxiliaryBarVisible).toBe(true);
+		// A pre-auxiliary-bar snapshot has no field, so it follows the fresh-window
+		// default instead of silently restoring a closed dock.
+		expect(normalizeIdeLayout({ sidebarVisible: true, panelVisible: true }).auxiliaryBarVisible).toBe(true);
+		expect(normalizeIdeLayout({ sidebarVisible: true }, { ...DEFAULT_IDE_LAYOUT, auxiliaryBarVisible: false }).auxiliaryBarVisible).toBe(false);
+		// Once the user closes the dock, the recorded boolean is authoritative.
+		expect(normalizeIdeLayout({ auxiliaryBarVisible: false }).auxiliaryBarVisible).toBe(false);
+		expect(normalizeIdeLayout({ auxiliaryBarVisible: true }).auxiliaryBarVisible).toBe(true);
+		expect(switchWorkbenchMode({ from: "agents", to: "ide", ideLayout: DEFAULT_IDE_LAYOUT }).commands).toContain("workbench.action.focusAuxiliaryBar");
+		expect(switchWorkbenchMode({ from: "agents", to: "ide", ideLayout: { ...DEFAULT_IDE_LAYOUT, auxiliaryBarVisible: false } }).commands).not.toContain("workbench.action.focusAuxiliaryBar");
+	});
+
 	it("keeps drafts when switching A → B → A without changing session ownership fields", () => {
 		const a = session("task-a", "proj-1");
 		const b = session("task-b", "proj-1");

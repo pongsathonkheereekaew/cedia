@@ -1,0 +1,482 @@
+diff --git a/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css b/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css
+index 568a7212980..2038eeb479c 100644
+--- a/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css
++++ b/src/vs/workbench/browser/parts/activitybar/media/activitybarpart.css
+@@ -72,3 +72,61 @@
+ 	width: 100%;
+ 	height: 35px;
+ }
++
++/* Mirror the Agents window's 48px icon rail: one quiet seam, 32px hit areas
++ * on a 36px pitch with 18px glyphs. Upstream drag behaviour is untouched. */
++.monaco-workbench.cedia-workbench .part.activitybar {
++	background-color: var(--vscode-activityBar-background);
++	box-shadow: none;
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar.left {
++	border-right: 1px solid var(--vscode-activityBar-border, var(--vscode-panel-border));
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar.right {
++	border-left: 1px solid var(--vscode-activityBar-border, var(--vscode-panel-border));
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-label {
++	width: 32px;
++	height: 32px;
++	margin: 2px 8px;
++	border-radius: 8px;
++	transition-property: background-color, color;
++	transition-duration: 120ms;
++	transition-timing-function: ease;
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-item:hover .action-label,
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-item:focus-visible .action-label {
++	background-color: var(--vscode-toolbar-hoverBackground);
++}
++
++@media (prefers-reduced-motion: reduce) {
++	.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-label {
++		transition: none;
++	}
++}
++
++/* Agent-rail geometry: 18px glyphs on the 32px hit area, badge tucked to the
++ * smaller box. Item pitch becomes 36px (32 + 2 + 2), matching the Agent
++ * rail's 32px buttons on 4px gaps. The first item still starts flush below
++ * the 46px title bar, like the rail's first button. */
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-label.codicon {
++	font-size: 18px;
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-label:not(.codicon) {
++	font-size: 14px;
++	line-height: 32px;
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .badge .badge-content {
++	top: 14px;
++	right: 6px;
++}
++
++.monaco-workbench.cedia-workbench .part.activitybar > .content :not(.monaco-menu) > .monaco-action-bar .profile-badge .profile-text-overlay {
++	top: 14px;
++}
+diff --git a/src/vs/workbench/browser/parts/auxiliarybar/auxiliaryBarActions.ts b/src/vs/workbench/browser/parts/auxiliarybar/auxiliaryBarActions.ts
+index 1ffa4871293..c04220432f4 100644
+--- a/src/vs/workbench/browser/parts/auxiliarybar/auxiliaryBarActions.ts
++++ b/src/vs/workbench/browser/parts/auxiliarybar/auxiliaryBarActions.ts
+@@ -73,6 +73,18 @@ export class ToggleAuxiliaryBarAction extends Action2 {
+ 
+ registerAction2(ToggleAuxiliaryBarAction);
+ 
++// The Cedia extension saves IDE chrome before switching to the Agents view.
++// Read the native part rather than guessing from its previous snapshot: a user
++// can close the secondary bar with the workbench title control at any time.
++registerAction2(class extends Action2 {
++	constructor() {
++		super({ id: 'cedia.internal.readAuxiliaryBarVisibility', title: localize2('cediaReadAuxiliaryBarVisibility', 'Read secondary side bar visibility') });
++	}
++	run(accessor: ServicesAccessor): boolean {
++		return accessor.get(IWorkbenchLayoutService).isVisible(Parts.AUXILIARYBAR_PART);
++	}
++});
++
+ MenuRegistry.appendMenuItem(MenuId.AuxiliaryBarTitle, {
+ 	command: {
+ 		id: ToggleAuxiliaryBarAction.ID,
+diff --git a/src/vs/workbench/browser/parts/auxiliarybar/media/auxiliaryBarPart.css b/src/vs/workbench/browser/parts/auxiliarybar/media/auxiliaryBarPart.css
+index c94d7e903ce..418bc28cfc6 100644
+--- a/src/vs/workbench/browser/parts/auxiliarybar/media/auxiliaryBarPart.css
++++ b/src/vs/workbench/browser/parts/auxiliarybar/media/auxiliaryBarPart.css
+@@ -110,3 +110,41 @@
+ .monaco-workbench .auxiliarybar.pane-composite-part > .title.has-composite-bar > .title-actions .monaco-action-bar .action-item {
+ 	max-width: 150px;
+ }
++
++/* Keep the IDE's secondary rail on the same opaque surface as the Agents
++ * window. Native layout owns its header height, content and resize sash. */
++.monaco-workbench.cedia-workbench .part.auxiliarybar {
++	background-color: var(--vscode-sideBar-background);
++	box-shadow: none;
++}
++
++.monaco-workbench.cedia-workbench .part.auxiliarybar > .title {
++	box-sizing: border-box;
++	background-color: var(--vscode-sideBar-background);
++	border-bottom: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border));
++}
++
++.monaco-workbench.cedia-workbench .part.auxiliarybar > .title .action-label {
++	border-radius: 8px;
++	transition-property: background-color, color;
++	transition-duration: 120ms;
++	transition-timing-function: ease;
++}
++
++.monaco-workbench.cedia-workbench .part.auxiliarybar > .title .action-item:hover .action-label,
++.monaco-workbench.cedia-workbench .part.auxiliarybar > .title .action-item:focus-visible .action-label {
++	background-color: var(--vscode-toolbar-hoverBackground);
++}
++
++@media (prefers-reduced-motion: reduce) {
++	.monaco-workbench.cedia-workbench .part.auxiliarybar > .title .action-label {
++		transition: none;
++	}
++}
++
++/* Agent-rail geometry for panel chrome: 32px hit area with 18px glyphs. */
++..monaco-workbench.cedia-workbench .part.auxiliarybar > .title .action-label {
++	width: 32px;
++	height: 32px;
++	font-size: 18px;
++}
+\ No newline at end of file
+diff --git a/src/vs/workbench/browser/parts/panel/media/panelpart.css b/src/vs/workbench/browser/parts/panel/media/panelpart.css
+index e1c147d8e88..4ad555bebf7 100644
+--- a/src/vs/workbench/browser/parts/panel/media/panelpart.css
++++ b/src/vs/workbench/browser/parts/panel/media/panelpart.css
+@@ -98,3 +98,39 @@
+ 	display: inline-block;
+ 	transform: rotate(180deg);
+ }
++
++/* Keep the IDE's bottom panel on the same opaque surface as the Agents
++ * window. Native layout owns its position, height and sash. */
++.monaco-workbench.cedia-workbench .part.panel {
++	background-color: var(--vscode-panel-background);
++	box-shadow: none;
++}
++
++.monaco-workbench.cedia-workbench .part.panel > .title {
++	background-color: var(--vscode-panel-background);
++}
++
++.monaco-workbench.cedia-workbench .part.panel > .title .action-label {
++	border-radius: 8px;
++	transition-property: background-color, color;
++	transition-duration: 120ms;
++	transition-timing-function: ease;
++}
++
++.monaco-workbench.cedia-workbench .part.panel > .title .action-item:hover .action-label,
++.monaco-workbench.cedia-workbench .part.panel > .title .action-item:focus-visible .action-label {
++	background-color: var(--vscode-toolbar-hoverBackground);
++}
++
++@media (prefers-reduced-motion: reduce) {
++	.monaco-workbench.cedia-workbench .part.panel > .title .action-label {
++		transition: none;
++	}
++}
++
++/* Agent-rail geometry for panel chrome: 32px hit area with 18px glyphs. */
++..monaco-workbench.cedia-workbench .part.panel > .title .action-label {
++	width: 32px;
++	height: 32px;
++	font-size: 18px;
++}
+\ No newline at end of file
+diff --git a/src/vs/workbench/browser/parts/sidebar/media/sidebarpart.css b/src/vs/workbench/browser/parts/sidebar/media/sidebarpart.css
+index decb51aba55..bae3bbb291d 100644
+--- a/src/vs/workbench/browser/parts/sidebar/media/sidebarpart.css
++++ b/src/vs/workbench/browser/parts/sidebar/media/sidebarpart.css
+@@ -124,3 +124,42 @@
+ .monaco-workbench .sidebar.pane-composite-part > .title.has-composite-bar > .title-actions .monaco-action-bar .action-item {
+ 	max-width: 150px;
+ }
++
++/* Keep the IDE's Explorer sidebar on the same opaque surface as the Agents
++ * window. Native layout owns its width, sash and view content. */
++.monaco-workbench.cedia-workbench .part.sidebar {
++	background-color: var(--vscode-sideBar-background);
++	box-shadow: none;
++	border-right: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border));
++}
++
++.monaco-workbench.cedia-workbench .part.sidebar > .title {
++	box-sizing: border-box;
++	background-color: var(--vscode-sideBar-background);
++	border-bottom: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border));
++}
++
++.monaco-workbench.cedia-workbench .part.sidebar > .title .action-label {
++	border-radius: 8px;
++	transition-property: background-color, color;
++	transition-duration: 120ms;
++	transition-timing-function: ease;
++}
++
++.monaco-workbench.cedia-workbench .part.sidebar > .title .action-item:hover .action-label,
++.monaco-workbench.cedia-workbench .part.sidebar > .title .action-item:focus-visible .action-label {
++	background-color: var(--vscode-toolbar-hoverBackground);
++}
++
++@media (prefers-reduced-motion: reduce) {
++	.monaco-workbench.cedia-workbench .part.sidebar > .title .action-label {
++		transition: none;
++	}
++}
++
++/* Agent-rail geometry for panel chrome: 32px hit area with 18px glyphs. */
++..monaco-workbench.cedia-workbench .part.sidebar > .title .action-label {
++	width: 32px;
++	height: 32px;
++	font-size: 18px;
++}
+\ No newline at end of file
+diff --git a/src/vs/workbench/browser/parts/statusbar/media/statusbarpart.css b/src/vs/workbench/browser/parts/statusbar/media/statusbarpart.css
+index 6fc44ed872a..3e2988e0503 100644
+--- a/src/vs/workbench/browser/parts/statusbar/media/statusbarpart.css
++++ b/src/vs/workbench/browser/parts/statusbar/media/statusbarpart.css
+@@ -241,3 +241,11 @@
+ 	color: var(--vscode-statusBarItem-offlineHoverForeground);
+ 	background-color: var(--vscode-statusBarItem-offlineHoverBackground) !important;
+ }
++
++/* Keep the IDE's status bar on the same opaque surface as the Agents
++ * window's slim bottom bar. The workbench owns its entries and the native
++ * top-seam mechanism; only pin the surface and remove translucency. */
++.monaco-workbench.cedia-workbench .part.statusbar {
++	background-color: var(--vscode-statusBar-background);
++	box-shadow: none;
++}
+diff --git a/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css b/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
+index 16d2fa44996..ed85c152476 100644
+--- a/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
++++ b/src/vs/workbench/browser/parts/titlebar/media/titlebarpart.css
+@@ -279,6 +279,45 @@
+ 	display: none;
+ }
+ 
++/* Cedia keeps the IDE's native titlebar controls and editor actions, while
++ * matching the 46px chrome rhythm used by the Agents window.  Scope this to
++ * the product class so upstream and user supplied workbench themes keep their
++ * normal titlebar geometry. */
++.monaco-workbench.cedia-workbench .part.titlebar {
++	background-color: var(--vscode-titleBar-activeBackground);
++	border-bottom: 1px solid var(--vscode-titleBar-border, var(--vscode-panel-border));
++	box-shadow: none;
++}
++
++.monaco-workbench.cedia-workbench .part.titlebar.inactive {
++	background-color: var(--vscode-titleBar-inactiveBackground);
++}
++
++.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container,
++.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container > .titlebar-left,
++.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container > .titlebar-center,
++.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container > .titlebar-right {
++	min-height: 46px;
++}
++
++.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container .monaco-toolbar .action-label {
++	border-radius: 8px;
++	transition-property: background-color, color;
++	transition-duration: 120ms;
++	transition-timing-function: ease;
++}
++
++.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container .monaco-toolbar .action-label:focus-visible {
++	outline: 1px solid var(--vscode-focusBorder);
++	outline-offset: -1px;
++}
++
++@media (prefers-reduced-motion: reduce) {
++	.monaco-workbench.cedia-workbench .part.titlebar > .titlebar-container .monaco-toolbar .action-label {
++		transition: none;
++	}
++}
++
+ /* App Icon */
+ .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .window-appicon {
+ 	width: 35px;
+diff --git a/src/vs/workbench/browser/parts/titlebar/titlebarPart.ts b/src/vs/workbench/browser/parts/titlebar/titlebarPart.ts
+index de431e18ec3..1c675f25627 100644
+--- a/src/vs/workbench/browser/parts/titlebar/titlebarPart.ts
++++ b/src/vs/workbench/browser/parts/titlebar/titlebarPart.ts
+@@ -58,6 +58,7 @@ import { safeIntl } from '../../../../base/common/date.js';
+ import { IsCompactTitleBarContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
+ import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
+ import { WORKBENCH_MENU_MOTION_CLASS, workbenchMenuCloseAnimation } from '../../actions/menuMotion.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
+ 
+ export interface ITitleVariable {
+ 	readonly name: string;
+@@ -225,6 +226,7 @@ export class BrowserTitleService extends MultiWindowParts<BrowserTitlebarPart> i
+ }
+ 
+ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
++	private static readonly CEDIA_TITLEBAR_HEIGHT = 46;
+ 
+ 	//#region IView
+ 
+@@ -237,6 +239,9 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
+ 		if (wcoEnabled) {
+ 			value = Math.max(value, getWCOTitlebarAreaRect(getWindow(this.element))?.height ?? 0);
+ 		}
++		if (this.isCedia) {
++			value = Math.max(value, BrowserTitlebarPart.CEDIA_TITLEBAR_HEIGHT);
++		}
+ 
+ 		return value / (this.preventZoom ? getZoomFactor(getWindow(this.element)) : 1);
+ 	}
+@@ -297,6 +302,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
+ 	private activeWindowId: number | undefined;
+ 
+ 	private readonly isAuxiliary: boolean;
++	protected readonly isCedia: boolean;
+ 	private isCompact = false;
+ 
+ 	private readonly isCompactContextKey: IContextKey<boolean>;
+@@ -321,7 +327,8 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
+ 		@IEditorService editorService: IEditorService,
+ 		@IMenuService private readonly menuService: IMenuService,
+ 		@IKeybindingService private readonly keybindingService: IKeybindingService,
+-		@IActionViewItemService private readonly actionViewItemService: IActionViewItemService
++		@IActionViewItemService private readonly actionViewItemService: IActionViewItemService,
++		@IProductService productService: IProductService
+ 	) {
+ 		super(id, { hasTitle: false }, themeService, storageService, layoutService);
+ 
+@@ -331,6 +338,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
+ 		)));
+ 
+ 		this.isAuxiliary = targetWindow.vscodeWindowId !== mainWindow.vscodeWindowId;
++		this.isCedia = productService.nameShort === 'Cedia';
+ 
+ 		this.isCompactContextKey = IsCompactTitleBarContext.bindTo(this.contextKeyService);
+ 
+@@ -1019,8 +1027,9 @@ export class MainBrowserTitlebarPart extends BrowserTitlebarPart {
+ 		@IMenuService menuService: IMenuService,
+ 		@IKeybindingService keybindingService: IKeybindingService,
+ 		@IActionViewItemService actionViewItemService: IActionViewItemService,
++		@IProductService productService: IProductService,
+ 	) {
+-		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService, actionViewItemService);
++		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService, actionViewItemService, productService);
+ 	}
+ }
+ 
+@@ -1055,9 +1064,10 @@ export class AuxiliaryBrowserTitlebarPart extends BrowserTitlebarPart implements
+ 		@IMenuService menuService: IMenuService,
+ 		@IKeybindingService keybindingService: IKeybindingService,
+ 		@IActionViewItemService actionViewItemService: IActionViewItemService,
++		@IProductService productService: IProductService,
+ 	) {
+ 		const id = AuxiliaryBrowserTitlebarPart.COUNTER++;
+-		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService, actionViewItemService);
++		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService, actionViewItemService, productService);
+ 	}
+ 
+ 	override get preventZoom(): boolean {
+diff --git a/src/vs/workbench/browser/workbench.ts b/src/vs/workbench/browser/workbench.ts
+index 10e2c3edace..2f8773059d9 100644
+--- a/src/vs/workbench/browser/workbench.ts
++++ b/src/vs/workbench/browser/workbench.ts
+@@ -50,6 +50,7 @@ import { AccessibleViewRegistry } from '../../platform/accessibility/browser/acc
+ import { NotificationAccessibleView } from './parts/notifications/notificationAccessibleView.js';
+ import { IMarkdownRendererService } from '../../platform/markdown/browser/markdownRenderer.js';
+ import { EditorMarkdownCodeBlockRenderer } from '../../editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js';
++import { IProductService } from '../../platform/product/common/productService.js';
+ 
+ export interface IWorkbenchOptions {
+ 
+@@ -146,6 +147,7 @@ export class Workbench extends Layout {
+ 				const dialogService = accessor.get(IDialogService);
+ 				const notificationService = accessor.get(INotificationService) as NotificationService;
+ 				const markdownRendererService = accessor.get(IMarkdownRendererService);
++				const productService = accessor.get(IProductService);
+ 
+ 				// Set code block renderer for markdown rendering
+ 				markdownRendererService.setDefaultCodeBlockRenderer(instantiationService.createInstance(EditorMarkdownCodeBlockRenderer));
+@@ -169,7 +171,7 @@ export class Workbench extends Layout {
+ 				this.registerListeners(lifecycleService, storageService, configurationService, hostService, dialogService);
+ 
+ 				// Render Workbench
+-				this.renderWorkbench(instantiationService, notificationService, storageService, configurationService);
++				this.renderWorkbench(instantiationService, notificationService, storageService, configurationService, productService);
+ 
+ 				// Workbench Layout
+ 				this.createWorkbenchLayout();
+@@ -317,7 +319,7 @@ export class Workbench extends Layout {
+ 		}
+ 	}
+ 
+-	private renderWorkbench(instantiationService: IInstantiationService, notificationService: NotificationService, storageService: IStorageService, configurationService: IConfigurationService): void {
++	private renderWorkbench(instantiationService: IInstantiationService, notificationService: NotificationService, storageService: IStorageService, configurationService: IConfigurationService, productService: IProductService): void {
+ 
+ 		// ARIA & Signals
+ 		setARIAContainer(this.mainContainer);
+@@ -327,6 +329,7 @@ export class Workbench extends Layout {
+ 		const platformClass = isWindows ? 'windows' : isLinux ? 'linux' : 'mac';
+ 		const workbenchClasses = coalesce([
+ 			'monaco-workbench',
++			productService.nameShort === 'Cedia' ? 'cedia-workbench' : undefined,
+ 			platformClass,
+ 			isWeb ? 'web' : undefined,
+ 			isChrome ? 'chromium' : isFirefox ? 'firefox' : isSafari ? 'safari' : undefined,
+diff --git a/src/vs/workbench/electron-browser/parts/titlebar/titlebarPart.ts b/src/vs/workbench/electron-browser/parts/titlebar/titlebarPart.ts
+index 9fd23700423..d67d2d5291b 100644
+--- a/src/vs/workbench/electron-browser/parts/titlebar/titlebarPart.ts
++++ b/src/vs/workbench/electron-browser/parts/titlebar/titlebarPart.ts
+@@ -29,6 +29,7 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
+ import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+ import { CodeWindow, mainWindow } from '../../../../base/browser/window.js';
+ import { IsWindowAlwaysOnTopContext } from '../../../common/contextkeys.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
+ 
+ export class NativeTitlebarPart extends BrowserTitlebarPart {
+ 
+@@ -38,6 +39,9 @@ export class NativeTitlebarPart extends BrowserTitlebarPart {
+ 		if (!isMacintosh) {
+ 			return super.minimumHeight;
+ 		}
++		if (this.isCedia) {
++			return super.minimumHeight;
++		}
+ 
+ 		return (this.isCommandCenterVisible ? DEFAULT_CUSTOM_TITLEBAR_HEIGHT : this.macTitlebarSize) / (this.preventZoom ? getZoomFactor(getWindow(this.element)) : 1);
+ 	}
+@@ -78,9 +82,10 @@ export class NativeTitlebarPart extends BrowserTitlebarPart {
+ 		@IEditorService editorService: IEditorService,
+ 		@IMenuService menuService: IMenuService,
+ 		@IKeybindingService keybindingService: IKeybindingService,
+-		@IActionViewItemService actionViewItemService: IActionViewItemService
++		@IActionViewItemService actionViewItemService: IActionViewItemService,
++		@IProductService productService: IProductService
+ 	) {
+-		super(id, targetWindow, editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService, actionViewItemService);
++		super(id, targetWindow, editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService, actionViewItemService, productService);
+ 
+ 		this.tahoeOrNewer = isTahoeOrNewer(environmentService.os.release);
+ 
+@@ -303,9 +308,10 @@ export class MainNativeTitlebarPart extends NativeTitlebarPart {
+ 		@IEditorService editorService: IEditorService,
+ 		@IMenuService menuService: IMenuService,
+ 		@IKeybindingService keybindingService: IKeybindingService,
+-		@IActionViewItemService actionViewItemService: IActionViewItemService
++		@IActionViewItemService actionViewItemService: IActionViewItemService,
++		@IProductService productService: IProductService
+ 	) {
+-		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService, actionViewItemService);
++		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService, actionViewItemService, productService);
+ 	}
+ }
+ 
+@@ -333,10 +339,11 @@ export class AuxiliaryNativeTitlebarPart extends NativeTitlebarPart implements I
+ 		@IEditorService editorService: IEditorService,
+ 		@IMenuService menuService: IMenuService,
+ 		@IKeybindingService keybindingService: IKeybindingService,
+-		@IActionViewItemService actionViewItemService: IActionViewItemService
++		@IActionViewItemService actionViewItemService: IActionViewItemService,
++		@IProductService productService: IProductService
+ 	) {
+ 		const id = AuxiliaryNativeTitlebarPart.COUNTER++;
+-		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService, actionViewItemService);
++		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService, actionViewItemService, productService);
+ 	}
+ 
+ 	override get preventZoom(): boolean {

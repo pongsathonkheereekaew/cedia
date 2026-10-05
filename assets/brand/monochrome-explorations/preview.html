@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CEDIA — monochrome icon explorations</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e9e9e7; color: #151515; }
+    main { max-width: 1280px; margin: auto; padding: 48px 24px 72px; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px,4vw,44px); letter-spacing: -.04em; }
+    p { margin: 0 0 30px; color: #555; line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+    article { background: #fff; border: 1px solid #d6d6d4; border-radius: 20px; overflow: hidden; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; }
+    .sample { aspect-ratio: 1; display: grid; place-items: center; }
+    .light { background: #fff; }
+    .dark { background: #111; }
+    .sample img { width: 76%; height: 76%; }
+    .dark img { filter: invert(1); }
+    .meta { border-top: 1px solid #e4e4e4; padding: 17px 20px 19px; }
+    .meta strong { font-size: 17px; }
+    .meta p { margin: 6px 0 12px; font-size: 13px; min-height: 40px; }
+    .small { display: flex; align-items: center; gap: 9px; font-size: 11px; color: #777; }
+    .small img { width: 32px; height: 32px; }
+    .small img:last-of-type { width: 16px; height: 16px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+    @media (max-width: 520px) { main { padding: 28px 12px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>CEDIA / six marks</h1>
+  <p>Original monochrome explorations. Compare light, dark, 32 px and 16 px before selecting a direction.</p>
+  <div class="grid">
+    <article><div class="pair"><div class="sample light"><img src="01-open-channel.svg" alt="Open channel, black on white"></div><div class="sample dark"><img src="01-open-channel.svg" alt="Open channel, white on black"></div></div><div class="meta"><strong>01 / Open channel</strong><p>Two opposing paths leave a deliberate passage through the center.</p><div class="small"><img src="01-open-channel.svg" alt=""><img src="01-open-channel.svg" alt="">32 / 16 px</div></div></article>
+    <article><div class="pair"><div class="sample light"><img src="02-dual-bridge.svg" alt="Dual bridge, black on white"></div><div class="sample dark"><img src="02-dual-bridge.svg" alt="Dual bridge, white on black"></div></div><div class="meta"><strong>02 / Dual bridge</strong><p>Two sides and two crossings express human and agent collaboration.</p><div class="small"><img src="02-dual-bridge.svg" alt=""><img src="02-dual-bridge.svg" alt="">32 / 16 px</div></div></article>
+    <article><div class="pair"><div class="sample light"><img src="03-three-currents.svg" alt="Three currents, black on white"></div><div class="sample dark"><img src="03-three-currents.svg" alt="Three currents, white on black"></div></div><div class="meta"><strong>03 / Three currents</strong><p>Parallel flows suggest a continuous task moving across surfaces.</p><div class="small"><img src="03-three-currents.svg" alt=""><img src="03-three-currents.svg" alt="">32 / 16 px</div></div></article>
+    <article><div class="pair"><div class="sample light"><img src="04-four-gates.svg" alt="Four gates, black on white"></div><div class="sample dark"><img src="04-four-gates.svg" alt="Four gates, white on black"></div></div><div class="meta"><strong>04 / Four gates</strong><p>Four open corners frame a forward path and a central prompt.</p><div class="small"><img src="04-four-gates.svg" alt=""><img src="04-four-gates.svg" alt="">32 / 16 px</div></div></article>
+    <article><div class="pair"><div class="sample light"><img src="05-folded-route.svg" alt="Folded route, black on white"></div><div class="sample dark"><img src="05-folded-route.svg" alt="Folded route, white on black"></div></div><div class="meta"><strong>05 / Folded route</strong><p>Angular nested paths turn toward a shared destination.</p><div class="small"><img src="05-folded-route.svg" alt=""><img src="05-folded-route.svg" alt="">32 / 16 px</div></div></article>
+    <article><div class="pair"><div class="sample light"><img src="06-split-compass.svg" alt="Split compass, black on white"></div><div class="sample dark"><img src="06-split-compass.svg" alt="Split compass, white on black"></div></div><div class="meta"><strong>06 / Split compass</strong><p>Two separate arcs guide work around a precise central focus.</p><div class="small"><img src="06-split-compass.svg" alt=""><img src="06-split-compass.svg" alt="">32 / 16 px</div></div></article>
+  </div>
+</main>
+</body>
+</html>

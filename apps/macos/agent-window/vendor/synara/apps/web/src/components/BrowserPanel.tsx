@@ -6,7 +6,14 @@
 // Note: raw <button>s for autocomplete-suggestion rows and tab-title activate
 // regions are intentional — list-row and tab semantics, not shadcn Buttons.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -99,12 +106,25 @@ import { Skeleton } from "./ui/skeleton";
 import { toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
+export interface BrowserPanelMainTab {
+  onNewTab: () => void;
+  onTitleChange?: (title: string) => void;
+  home?: ReactNode;
+}
+
 interface BrowserPanelProps {
   mode: DiffPanelMode;
   threadId: ThreadId;
   onClosePanel: () => void;
   runtimeMode?: DockPaneRuntimeMode;
+  isVisible?: boolean;
   onRequestLive?: () => void;
+  /**
+   * Adapts the panel into a top-level browser tab. The owning tab surface keeps
+   * its own tab strip; this component continues to own the native browser lease
+   * and browser chrome for the tab's thread-local state.
+   */
+  mainTab?: BrowserPanelMainTab;
 }
 
 const BROWSER_BOUNDS_SYNC_BURST_FRAMES = 30;
@@ -210,6 +230,7 @@ interface BrowserWebviewElement extends HTMLElement {
 }
 
 const VIEWPORT_TRANSITION_PROPERTIES = new Set([
+  "clip-path",
   "transform",
   "translate",
   "scale",
@@ -344,6 +365,17 @@ function hasTopLayerDomObstruction(element: HTMLElement): boolean {
 }
 
 function hasNativeBrowserObscuringOverlay(element: HTMLElement): boolean {
+  // Native guests cannot inherit the dock's DOM clip during its reveal.
+  for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    if (ancestor.getAnimations().some((animation) =>
+      animation instanceof CSSTransition &&
+      animation.transitionProperty === "clip-path" &&
+      (animation.playState === "running" || animation.pending)
+    )) {
+      return true;
+    }
+  }
+
   const candidates = document.querySelectorAll<HTMLElement>(
     NATIVE_BROWSER_OBSCURING_OVERLAY_SELECTOR,
   );
@@ -602,12 +634,19 @@ export function BrowserPanel({
   threadId,
   onClosePanel,
   runtimeMode: runtimeModeProp,
+  isVisible: isVisibleProp,
   onRequestLive,
+  mainTab,
 }: BrowserPanelProps) {
   // Defaults belong in the body, never in the destructuring pattern: React Compiler cannot lower an
   // AssignmentPattern there and silently drops the whole component's memoization.
   const runtimeMode = runtimeModeProp ?? "live";
+  const isVisible = isVisibleProp ?? true;
   const isFloatingMode = mode === "floating";
+  const isMainTab = mainTab !== undefined;
+  const mainTabOnNewTab = mainTab?.onNewTab;
+  const mainTabOnTitleChange = mainTab?.onTitleChange;
+  const mainTabHome = mainTab?.home;
   const { resolvedTheme } = useTheme();
   const browserDark = resolvedTheme === "dark";
   const api = readNativeApi();
@@ -651,6 +690,7 @@ export function BrowserPanel({
   const lastMeasuredBoundsKeyRef = useRef<string | null>(null);
   const lastOverlayObscuredRef = useRef(false);
   const isAddressEditingRef = useRef(false);
+  const lastReportedMainTabTitleRef = useRef<string | null>(null);
   const resizeFrameRef = useRef<number | null>(null);
   const boundsBurstFrameRef = useRef<number | null>(null);
   const burstFramesRemainingRef = useRef(0);
@@ -694,6 +734,18 @@ export function BrowserPanel({
   const loading = activeTab?.isLoading ?? false;
   const activeTabIsBlank = isBlankBrowserTabUrl(activeTab);
   const showLocalServersHome = isLiveRuntime && workspaceReady && (!activeTab || activeTabIsBlank);
+  // Main-window tabs are created by their shared header, bypassing the
+  // dock's onCreateTab handler. Transfer keyboard focus once the blank tab is
+  // visible and ready so typing immediately after + edits its address.
+  useEffect(() => {
+    if (!isMainTab || !isVisible || !showLocalServersHome || !activeTabId) return;
+    const frame = window.requestAnimationFrame(() => {
+      setAddressSuggestionsSuppressed(true);
+      addressInputRef.current?.focus();
+      addressInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMainTab, isVisible, showLocalServersHome, activeTabId]);
   const localServersQuery = useQuery(serverLocalServersQueryOptions(showLocalServersHome));
   const activeTabStatus = activeTab?.status ?? "suspended";
   const browserChromeStatus = resolveBrowserChromeStatus({
@@ -723,11 +775,30 @@ export function BrowserPanel({
     activeTabId,
     browserStateVersion: threadBrowserState?.version ?? 0,
     enabled:
-      isElectron && isLiveRuntime && workspaceReady && activeTab !== null && !showLocalServersHome,
+      isElectron &&
+      !isMainTab &&
+      isLiveRuntime &&
+      workspaceReady &&
+      activeTab !== null &&
+      !showLocalServersHome,
     annotations: browserAnnotations,
     addAnnotation: addBrowserAnnotation,
     onError: setLocalError,
   });
+
+  useEffect(() => {
+    if (!mainTabOnTitleChange) {
+      lastReportedMainTabTitleRef.current = null;
+      return;
+    }
+
+    const title = activeTab?.title?.trim() || "New tab";
+    if (lastReportedMainTabTitleRef.current === title) {
+      return;
+    }
+    lastReportedMainTabTitleRef.current = title;
+    mainTabOnTitleChange(title);
+  }, [activeTab?.title, mainTabOnTitleChange]);
 
   const requestLiveRuntime = useCallback(() => {
     onRequestLive?.();
@@ -1165,6 +1236,7 @@ export function BrowserPanel({
       // trusting the obscuring-overlay heuristic. The native/inline webview otherwise paints
       // about:blank white over our dark DOM home — the "always white" empty state.
       const obscuredByOverlay =
+        !isVisible ||
         (!isFloatingMode || usesNativeRuntime) &&
         (browserPageError !== null ||
           shouldOccludeBrowserWebview({
@@ -1337,6 +1409,7 @@ export function BrowserPanel({
     api,
     browserActionsMenuOpen,
     browserPageError,
+    isVisible,
     isLiveRuntime,
     isFloatingMode,
     showLocalServersHome,
@@ -1904,17 +1977,19 @@ export function BrowserPanel({
               : undefined
           }
         />
-        <BrowserAnnotationButton
-          controller={annotationController}
-          disabled={
-            !isLiveRuntime ||
-            !isElectron ||
-            !workspaceReady ||
-            !activeTab ||
-            showLocalServersHome ||
-            !annotationMethods
-          }
-        />
+        {!isMainTab ? (
+          <BrowserAnnotationButton
+            controller={annotationController}
+            disabled={
+              !isLiveRuntime ||
+              !isElectron ||
+              !workspaceReady ||
+              !activeTab ||
+              showLocalServersHome ||
+              !annotationMethods
+            }
+          />
+        ) : null}
         <Button
           ref={copyScreenshotButtonRef}
           type="button"
@@ -1961,18 +2036,23 @@ export function BrowserPanel({
             side="bottom"
             className={BROWSER_ACTION_MENU_PANEL_CLASS_NAME}
           >
-            <MenuItem className={BROWSER_ACTION_MENU_ITEM_CLASS_NAME} onClick={onCreateTab}>
+            <MenuItem
+              className={BROWSER_ACTION_MENU_ITEM_CLASS_NAME}
+              onClick={mainTabOnNewTab ?? onCreateTab}
+            >
               <BrowserActionMenuIcon icon={PlusIcon} />
               <span>New tab</span>
             </MenuItem>
-            <MenuItem
-              className={BROWSER_ACTION_MENU_ITEM_CLASS_NAME}
-              disabled={!activeTab}
-              onClick={onCaptureScreenshot}
-            >
-              <BrowserActionMenuIcon icon={CameraIcon} />
-              <span>Capture screenshot</span>
-            </MenuItem>
+            {!isMainTab ? (
+              <MenuItem
+                className={BROWSER_ACTION_MENU_ITEM_CLASS_NAME}
+                disabled={!activeTab}
+                onClick={onCaptureScreenshot}
+              >
+                <BrowserActionMenuIcon icon={CameraIcon} />
+                <span>Capture screenshot</span>
+              </MenuItem>
+            ) : null}
             <MenuItem
               className={BROWSER_ACTION_MENU_ITEM_CLASS_NAME}
               disabled={!activeTab}
@@ -2010,7 +2090,7 @@ export function BrowserPanel({
     <div className="contents" data-browser-panel="true">
       <DiffPanelShell mode={mode} header={isFloatingMode ? null : header}>
         <div className="flex min-h-0 flex-1 flex-col">
-          {!isFloatingMode ? (
+          {!isFloatingMode && !isMainTab ? (
             <BrowserTabStrip
               tabs={threadBrowserState?.tabs ?? []}
               activeTabId={activeTabId}
@@ -2021,7 +2101,7 @@ export function BrowserPanel({
               onCreateTab={onCreateTab}
             />
           ) : null}
-          {!isFloatingMode ? (
+          {!isFloatingMode && !isMainTab ? (
             <BrowserAgentAttachBar threadId={threadId} activeTabId={activeTabId} />
           ) : null}
           <div className="relative min-h-0 flex-1 bg-transparent">
@@ -2059,16 +2139,20 @@ export function BrowserPanel({
                 className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
               />
             ) : null}
-            {showLocalServersHome ? (
-              <BrowserLocalServersHome
-                activeTabId={activeTab?.id ?? null}
-                dark={browserDark}
-                loading={localServersQuery.isLoading || localServersQuery.isFetching}
-                onNavigate={onOpenLocalServer}
-                onRefresh={() => void localServersQuery.refetch()}
-                servers={localServersQuery.data?.servers ?? []}
-              />
-            ) : null}
+            {showLocalServersHome
+              ? mainTabHome !== undefined
+                ? mainTabHome
+                : (
+                  <BrowserLocalServersHome
+                    activeTabId={activeTab?.id ?? null}
+                    dark={browserDark}
+                    loading={localServersQuery.isLoading || localServersQuery.isFetching}
+                    onNavigate={onOpenLocalServer}
+                    onRefresh={() => void localServersQuery.refetch()}
+                    servers={localServersQuery.data?.servers ?? []}
+                  />
+                )
+              : null}
           </div>
         </div>
       </DiffPanelShell>

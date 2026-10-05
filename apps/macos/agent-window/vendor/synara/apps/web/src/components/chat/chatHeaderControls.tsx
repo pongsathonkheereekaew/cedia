@@ -153,41 +153,13 @@ export const CHAT_HEADER_TOGGLE_CLASS_NAME = cn(
  *  touch more breathing room than the symmetric chip base. */
 export const DOCK_TAB_CHIP_CLASS_NAME = cn(
   CHAT_SURFACE_CHIP_CLASS_NAME,
-  "inline-flex min-w-0 items-center pr-2.5",
+  // Shrink inside a narrow tab strip: the chip yields (min-w-0 + truncated
+  // label) instead of forcing the strip wider than the card allows.
+  "inline-flex min-w-0 max-w-full shrink items-center pr-2.5",
 );
 
-/** Icon slot for dock tabs — bare larger icon at rest; on hover a circular disc + X appears.
- *  Color is muted while the tab (not the close button) is hovered and brightens to full
- *  foreground on direct hover of the close button so the X reads as interactive. */
-export const DOCK_TAB_ICON_SLOT_CLASS_NAME =
-  "relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-[var(--color-text-foreground-secondary)] transition-colors group-hover/dock-tab:bg-[var(--color-background-button-secondary-hover)] group-focus-within/dock-tab:bg-[var(--color-background-button-secondary-hover)] hover:bg-[var(--color-background-button-secondary)] hover:text-[var(--color-text-foreground)]";
-
-/** Dock-only extra: fade the resting glyph out so the hover X can swap in.
- *  Layered on top of {@link SurfaceChipIcon}'s shared size/strength. */
-export const DOCK_TAB_ICON_HOVER_HIDE_CLASS_NAME =
-  "transition-opacity group-hover/dock-tab:opacity-0 group-focus-within/dock-tab:opacity-0";
-
-/** Hover glyph: thicker X centered inside the disc. */
-export const DOCK_TAB_CLOSE_GLYPH_CLASS_NAME =
-  "absolute size-3.5 shrink-0 opacity-0 transition-opacity group-hover/dock-tab:opacity-100 group-focus-within/dock-tab:opacity-100";
-
-/**
- * Shared flat tab chip for every chat surface that renders a row of closable tabs —
- * the right-dock tab strip and both terminal tab bars (pane-local tabs + workspace
- * group tabs). At rest the chip shows {@link icon}; hovering or focusing within the
- * chip fades that glyph out and reveals a circular close affordance, but only when
- * an {@link onClose} handler is supplied (tabs that can't be closed render a static
- * icon slot instead).
- *
- * The icon→close-X reveal is driven entirely by the `group/dock-tab` named group
- * the chip declares here, so the hover wiring lives in exactly one place. Call
- * sites that hand-rolled the chip previously drifted to a mismatched group name
- * (`group/tab`), which silently broke the reveal — funneling them through this
- * component makes that class of bug unrepresentable.
- *
- * `leading`/`trailing` flank the truncating label (e.g. an activity indicator or a
- * tab count badge); `labelClassName` lets a call site cap the label width.
- */
+/** Shared closable tab for dock and terminal surfaces. Keep the identity icon
+ * leading and the close action trailing, including single-tab hosts. */
 export function SurfaceTabChip({
   icon,
   label,
@@ -216,33 +188,15 @@ export function SurfaceTabChip({
   return (
     <div
       className={cn(
-        "group/dock-tab",
         DOCK_TAB_CHIP_CLASS_NAME,
         active && CHAT_SURFACE_CONTROL_ACTIVE_CLASS_NAME,
+        // Never force the strip wider than the card: the chip caps at full
+        // strip width and the label truncates (the "leak and lap" overlap).
+        "max-w-full overflow-hidden",
         className,
       )}
     >
-      {onClose ? (
-        <button
-          type="button"
-          className={DOCK_TAB_ICON_SLOT_CLASS_NAME}
-          aria-label={closeLabel}
-          title={closeLabel}
-          onClick={(event) => {
-            event.stopPropagation();
-            onClose();
-          }}
-        >
-          <span
-            className={cn("flex items-center justify-center", DOCK_TAB_ICON_HOVER_HIDE_CLASS_NAME)}
-          >
-            {icon}
-          </span>
-          <CentralIcon name="cross-small" className={DOCK_TAB_CLOSE_GLYPH_CLASS_NAME} />
-        </button>
-      ) : (
-        <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
-      )}
+      <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
       {onSelect ? (
         <button
           type="button"
@@ -271,6 +225,20 @@ export function SurfaceTabChip({
           {trailing}
         </span>
       )}
+      {onClose ? (
+        <button
+          type="button"
+          aria-label={closeLabel}
+          title={closeLabel}
+          className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+        >
+          <CentralIcon name="cross-small" className="size-3" />
+        </button>
+      ) : null}
     </div>
   );
 }

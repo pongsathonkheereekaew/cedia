@@ -91,6 +91,10 @@ requirements change, this file changes; supporting records do not become another
 - Revision: 2026-10-02 (settings implementation planning: §6.4.1 specifies the complete
   OMP settings destination, included/excluded surfaces and remaining ownership gaps;
   §8.3 defines execution packets tracked under item 70. Documentation only, no runtime acceptance).
+- Revision: 2026-10-04 (IDE and Agent windows share CEDIA shell geometry and visual tokens;
+  the IDE keeps native editor, Explorer, terminal and auxiliary Agent dock behavior. The dock
+  opens in a fresh IDE layout and honors a saved closed state in that workbench;
+  see [packaged native verification](evidence/ide-shell-alignment-2026-10-04/findings.md)).
 - Repository: `/Users/pond/cedia` on branch `main`. Layout is one repo; `apps/*` and
   `packages/*` are module boundaries, not remotes.
 - Language rule: **every document in this repository is written in English.** No `.th.md`
@@ -647,7 +651,9 @@ preserves inspectable output; it does not assume an empty catalog means “every
 | Window | status bar | present; carries `cedia.showAgents` plus host/model/session status entries | extension status bar |
 | Window | chrome policy | zoom, traffic lights, title bar and menu policy come from one main-process module shared with the agent window | §10 item 55 |
 | Layout | workbench parts | Explorer / editor / panel / debug as Code-OSS; both splitters carry accessible names | patches `0036`/`0037` |
+| Layout | shared shell geometry | IDE title bar aligns to the Agent window's 46px top region and its 48px activity rail uses the shared border, hover and focus language; the IDE remains editor-first with native Code-OSS sidebars and panel, not an Agent-window replica | desktop shell patch and native layout |
 | Dock | `cediaComposerDock` | **compact form of §3.B's surface**: same bundle (`agent-ui/ide.html`), routes, components and tokens; responsive rules only (thread sidebar hidden via `isIdeEmbeddedRuntime`, header compact <700px, tour insets collapse). No second chat UI; the webview task shell must be gone (§10 items 10, 63) | `agent-ide-webview.ts` + `ide-bootstrap.ts` |
+| Dock | IDE default visibility | show the native right Agent auxiliary bar in a fresh IDE layout; a saved explicit close persists across that workbench's reload and same-window Agent↔IDE mode switch. A separately opened IDE window owns its own native layout state. The native grid owns width, sash dragging and keyboard behavior. | `workbench-mode.ts` + Code-OSS auxiliary bar |
 | Dock/inline | selection actions, inline edit, focus/prefill handoffs | reach the host through the guarded `sendCommand` path; a refusal is shown as a warning, never silent | §10 item 63 |
 | Models | selection state of record | one state: `GET /v1/models` → session `set_model` (+ `set_thinking_level`); the control drawn anywhere is the bundle's picker | §10 item 56 (retires the workbench LM-picker path) |
 | Projects | creation flow | one flow: host `POST /v1/projects` (+ `/v1/workspace-suggestion`); IDE entry points register through it when a Cedia surface needs the project | §10 item 59 |
@@ -792,6 +798,105 @@ Cursor Agents (window)
 | Composer | toolbar | agents/context/tools, reasoning, voice input, send/stop by state |
 | Recommendation rows | idea rows + Dismiss | create a draft from the text; dismiss per row |
 | Panels | Changes · Files · Browser · Terminal · preview/artifacts | per task, carrying workspace identity |
+
+### 3.E Agent-window rail and task-tab layout (owner decisions 2026-10-02)
+
+This amendment supersedes the Agent-window sidebar composition in §3.B/§3.D and the
+collapsed-only rail direction recorded in item 71. It is a design decision, not an
+implementation or runtime acceptance receipt. The owner's supplied sketch defines the
+regions, not placeholder cards or additional product capabilities.
+
+```text
+Native window chrome
+Left rail | Project/thread sidebar | Thread header or task tabs | Tool panel | Right rail
+          |                        | Conversation + composer   |            |
+Status bar across the window
+```
+
+| Region / trigger | Accepted behavior |
+|---|---|
+| Top chrome and rail surfaces | Top header segments share one opaque, host-theme-derived surface and aligned bottom divider. Both persistent rails use that material with inward dividers that begin below the 46px top chrome, separating navigation from panel and conversation content without crossing the traffic-light region. Both panel transitions share a 300ms duration and the same easing, including matching reduced-motion behavior. Right-panel motion reveals within its own bounds; it must not sweep underneath or move the right rail. |
+| Left rail | Remains visible with the sidebar open or closed. Home, New thread, Search, Activity and Code Review. The standalone Projects rail icon is removed by the owner amendment of 2026-10-03; projects remain in the expanded navigation sidebar. Settings appears at the bottom of the rail only while the left sidebar is collapsed; the expanded sidebar owns its Settings footer. The standalone Customize icon is removed, and More does not repeat Settings categories. Home presents work overview and project/thread navigation; Activity presents completion, failures and pending user input from real state. These are CEDIA projections, not another OMP execution owner. |
+| Left sidebar | Projects and threads; independently collapsible and resizable. Collapsing it leaves the left rail visible. Threads/Projects flyouts are collapsed-sidebar previews, confined below the top chrome; navigation and expansion dismiss pending or visible previews. Entering Settings opens its category sidebar automatically, including reopening it from the Settings rail button after a manual collapse. |
+| Settings presentation | Reserve the shared top-chrome row before scrolling content. Keep category navigation, readable setting names and effective values prominent; technical metadata remains available in a disclosure. Providers and models use the existing OMP-owned catalog/account surface. The legacy generic Git-writing/custom-model form is not a working CEDIA settings destination; old model-settings links resolve to the backed provider/model surface. |
+| Sidebar open | Main header shows the selected thread name. Do not render a duplicate task-tab strip. |
+| Sidebar closed | Replace the thread-name header with task tabs across all projects, with project identification. Include running work, pending answers/approvals and unfinished active work, including stopped work ready to Continue. Completed/archived threads are excluded except for the selected-thread exception below. These tabs derive from task state, not accumulated browsing history. |
+| Selected-thread exception | Always retain the currently viewed thread as one tab, including completed or archived threads. Deduplicate by thread identity. Tabs support pointer and keyboard reordering with device-local persisted identity order; unseen eligible tasks append without changing the selected task. A state change or sidebar collapse must not navigate away from the current conversation. |
+| View continuity | Sidebar toggles and header/tab changes preserve selected task, draft, scroll position and execution. Use authoritative task status; intermediate OMP turn events do not prove task completion. |
+| Main content | Existing conversation and composer, with existing task identity, model, queue, approvals and ownership rules. |
+| Right rail | Remains available when the tool panel is closed. Use existing dock tools, labels, icons and capability gates: Review/Changes, Terminal, Browser, Files, Side chats, iOS Simulator and Source control/Git. Retain contextual file/detail entry points. This decision adds launch access, not new Plan/Agents/Context tools or a PR integration. |
+| Tool-panel toggle | The corner toggle belongs to the right rail and independently opens/closes the panel (an empty panel shows its existing tool launcher). The panel ends before the opaque right rail, including when maximized. Selecting a tool icon reopens its retained pane when present (including Side chats), creating only when absent; selecting a different icon switches the visible tool; selecting the active icon again collapses the panel. The panel is resizable; interrupted drags restore the prior cursor and text-selection behavior. Window narrowing clamps the rendered panel width to retain conversation space without overwriting the saved preferred width. Existing supported tool internals remain in use. Every open pane retains a visible title/tab and close action, including the last pane; closing the final pane returns to the existing tool launcher, and reopening a tool remains available from the rail. Dragging resizes directly without the open/close animation or repeated composer layout probes on every pointer frame. |
+| Task switch with tool panel open | Keep the selected tool kind and panel visibility, then resolve its data/resources for the new task. Never transplant terminal input, browser handles, file paths or sidechat identity across tasks. Preserve resource lifetime under its existing owner. If that tool is unavailable for the new task, show the specific contextual reason without exposing the old task's data. |
+| Bottom bar | Retain the existing status bar and its real host, model, session and branch data. |
+
+The IDE dock remains the compact shared chat surface under §3.A; this amendment does not
+add permanent global rails/task navigation inside that dock. Application theme, native
+chrome, keyboard ownership and capability honesty remain governed by their existing rules.
+Exact widths, narrow-window overflow and tab ordering are implementation design details to
+resolve against actual available space; they must preserve the selected thread and access
+to pending-input tasks. No new execution service or task-status store is authorized by this layout.
+
+Delivery sequence and completion tracking are in §10 item 71. Verify the layout with
+multi-project state fixtures and the actual packaged Agents window before claiming it landed.
+
+### 3.F Code Review (owner amendment 2026-10-03)
+
+The owner approved a dedicated GitHub/GitLab Code Review destination using the supplied
+Codex screenshots as the visual reference. This is separate from the task-local Review
+right-rail tool. The left sidebar contains project/repository selection, PR/MR search and
+review lists; the center contains Summary and Changes with title, author, branches, body,
+activity and diff; the right summary column contains actual merge status, reviews and checks.
+Unsupported provider fields (including stack metadata) are omitted rather than fabricated.
+The shared CEDIA chrome, solid theme surfaces and panel motion remain authoritative.
+
+The accepted first functional scope is reading PR/MR details and diffs, asking OMP about
+an immutable revision, running an OMP review, and saving editable comment drafts before
+sending. Publishing comments, approvals and merge actions are not implied by a screenshot
+button. Provider access belongs to the authenticated host using existing CLI credentials;
+the renderer never receives tokens. OMP review/ask uses the existing durable task and turn
+path, with head/base SHA and snapshot identity bound to the context. It must not create a
+second execution or transcript owner. Drafts retain revision anchors and must not silently
+move to a new head. Provider/auth failures and incomplete diffs are visible.
+
+GitHub and GitLab adapters require fixture tests and separate live runtime evidence.
+Missing GitLab CLI/authentication is an external verification limit, not a successful
+provider integration receipt. Implementation and verification are recorded in dated
+maintenance evidence; this amendment itself does not declare delivery complete.
+
+#### 3.F.1 GitHub review workflow expansion (owner amendment 2026-10-03, 17:22)
+
+The owner explicitly expands the first read/draft slice to the GitHub PR workflow
+shown in the Codex references and the preceding gap audit. This supersedes the
+first-slice restriction on implementing provider writes; it does not authorize the
+agent to publish comments or mutate a real PR during verification. GitLab retains
+its existing read/diff support until separately qualified for these operations.
+"GitHub features like Codex" here means the PR review workspace, not unrelated
+GitHub administration, billing, packages, secrets or organization management.
+
+| Area | Required behavior |
+|---|---|
+| Navigation | More lists only real Cedia destinations. Projects is available there and in the expanded sidebar, never restored as a standalone rail icon. Code Review can be pinned/unpinned to the rail. PR tabs preserve open review identities, selection and pins independently of execution-task tabs. |
+| Discovery | Paginated repository review lists, authored-by-viewer, needs-viewer-review and team-review filters using provider data, with honest unsupported/permission states. |
+| Reading | Full paginated comments, review threads and activity, requested reviewers, checks and files. Stack/related PR information must derive from actual branch relationships or explicit provider metadata. |
+| Review configuration | A settings popover stores reusable per-project review instructions; Add example, Save and Save and run work. Saved instructions feed OMP review context; provider prose cannot overwrite them. |
+| OMP composer | Keep normal OMP task ownership, supported model selection and bounded context attachments. Persist enough review/task association to recover after navigation and restart; no second transcript store. |
+| Inline review | Display diff-thread anchors and replies; create/edit revision-bound line drafts, publish comments or a review with COMMENT/APPROVE/REQUEST_CHANGES, and resolve/unresolve conversations where supported. |
+| PR actions | Edit title/body, request/remove users or teams as reviewers, convert Draft/Ready, close/reopen, and merge by repository-supported method. Display capability/permission restrictions before dispatch; provider rules remain authoritative. |
+| Write contract | Every external operation has explicit user-facing target/action/content, a stable command id and durable receipt. Re-read the PR head before writes; bind reviews/merge to the expected head. Never automatically retry an operation with unknown remote outcome. Confirmation occurs in the product before publishing or changing remote state. Credentials remain in host-owned gh execution. |
+| Validation | Provider-free fixtures cover pagination, permissions, stale anchors, invalid line targets, duplicate command ids and unknown outcomes. Native Computer Use covers the assembled UI. Read-only live GitHub plus a bounded OMP turn may be verified; remote writes require a separately authorized test PR/action. Report fixture-only mutations and unavailable live providers explicitly. |
+
+Extend the existing host forge service, native IPC and renderer adapter through
+explicit typed routes. Keep provider-specific API handling behind the host and use
+existing durable drafts for editable local work and preferences. The root owns
+integration and the final runtime receipt; §10 item 72 tracks this expansion.
+
+The subsequent owner request for Arc-guided UI quality applies to this same
+workspace. Use Arc's free composition, tabs, filter-toolbar and comment-thread
+patterns through existing Cedia primitives and semantic theme tokens; do not
+install a second global foundation, theme or execution owner. Consolidate the
+header and composer OMP entry points into one review controller, keep mutation
+confirmation and retry identity independent from presentation, and preserve
+keyboard navigation, narrow-sidebar readability and explicit asynchronous states.
 
 ### 3.1 Measured values (light theme, empty draft, 1710×1073, default zoom)
 
@@ -7700,6 +7805,97 @@ implementation and deployment remain outside this exercise.
 - Replacing OMP with another harness to declare the destination achieved.
 - Limiter/E3, cloud agent products, and owning an editor fork solely to match another product.
 - Device deployment, paid infrastructure, or public remote access setup in this decision exercise.
+
+71. **Own the Synara vendor surface; Codex-style icon rail with drag-to-collapse (owner decisions 2026-10-02).**
+    Vendor strategy is own-and-cherry-pick, not track-upstream: the vendored tree stays pinned
+    at its current commit and is edited in place, with every deviation recorded in
+    `apps/macos/agent-window/upstream.json` adaptations. Upstream remains a port source for
+    selected improvements (reviewed first, landed with receipts); routine re-vendor merges are
+    out. Rationale: prior cuts (Studio, Spaces, theme packs, kanban, profile share) already
+    diverge the product, so tracking would re-pay merge cost for features this plan rejects.
+    Sidebar direction: the Agents-window sidebar gains a Codex-style collapsed state — a slim
+    icon rail — reached by dragging the sidebar edge (snap full rail) as well as by the
+    existing toggle; the collapsed state persists per window. The vendor component already
+    supports `collapsible="icon"` at 3rem, so this is adaptation, not new structure. Open
+    state carries no pressed-fill on either trigger; the toggle glyphs carry the state (first
+    instance of this policy: both trigger fills removed 2026-10-02, adaptations entries 23-24).
+    Historical status: implemented 2026-10-02 (mock-approved 48px rail reusing the 3rem token, 156px snap with pre-drag width restore, drag-open from the rail; measured against the Codex reference: 47px rail, header kept at 46px for native traffic-light alignment, ~40px icon pitch already matched; typecheck clean on both configs, packaged to both agent-ui copies, relaunched). This receipt covers the earlier collapsed-only rail, not the later §3.E layout. Top-bar follow-up 2026-10-02: the fixed shell keeps one static toggle+arrows cluster (arrows never hide, `AppNavigationButtons.tsx`); `ChatHeader.tsx` clears it with open-state-driven 56px padding on the sidebar 200ms linear curve instead of the non-matching peer-data selector, and `ChatView.tsx` animates the outer traffic-light gutter on the same curve — controls stay fixed together, only the thread title glides. Measured in the packaged Agents window via CDP: expanded titleX=327, collapsed titleX=216 with no upward spike (max+0 vs the prior +70 jump), cluster rect identical in both states (x=0 w=174), Back/Forward rendered in both states, title clears the cluster (216>174). Bundle rebuilt (`build-agent-window.ts`) and verified against the repackaged app copies.
+
+    **Later owner-approved layout amendment: §3.E. Implementation open.** Preserve the
+    own-and-cherry-pick vendor strategy above; replace the collapsed-only composition with
+    independent left rail/sidebar, conditional task tabs and a right tool rail. Execute in order:
+
+    - [x] Separate the left rail from sidebar visibility (`components/Sidebar.tsx` persistent
+      rail column + panel wrapper, `components/ui/sidebar.tsx` rail+panel expanded widths;
+      `_chat.tsx` unchanged — still `collapsible="icon"`). Source-verified 2026-10-03:
+      app + vendor typechecks clean, agent-window suite 439/439. Packaged Agents-window
+      observation, resize/keyboard/restore verification and vendor-adaptation review remain.
+    - [x] Add the state-derived cross-project task-tab projection (`components/chat/ChatHeader.tsx`
+      + new `TaskTabs.tsx` / `taskTabs.logic.ts`). Source-verified 2026-10-03: 10 projection
+      tests (running/waiting/stopped/continuable/completed/archived, current-thread exception,
+      deduplication, ordering, labels, settled override); navigation reuses the existing path so
+      task/draft/reading position follow thread-switch behavior. Live-state and packaged follow-up
+      remain under the verify bullet.
+    - [x] Add right-rail launchers (`RightToolRail.tsx` + `rightToolRail.logic.ts` beside the
+      existing `RightDock.tsx`; no store-shape change — per-thread ownership already held).
+      Source-verified 2026-10-03: 8 tests (carry/no-carry, unavailable reasons, singleton reuse,
+      active-icon collapse, tool switching, task A/B isolation). Packaged task-switch capture
+      remains under the verify bullet.
+    - [x] Verify wide/narrow windows, overflow access, keyboard activation and resize
+      behavior; package and observe the actual Agents window
+      (`docs/maintenance/evidence/rail-tabs-packaged-2026-10-03/findings.md`,
+      `scripts/rail-tabs-packaged-proof.ts`: rail open/closed, 0px title glide,
+      tab strip, tool open/collapse/switch/carry, keyboard toggle, 900px
+      overflow, IDE round trip; zero provider calls). Typechecks, 457 agent-window
+      tests and `check:packaged` 12/12 green. Compact IDE-dock visuals and
+      on-screen theme switching remain explicitly open (code-gated, not captured).
+      Follow-up 2026-10-03: correct the panel/rail overlap and move the corner toggle
+      inside the rail header; keep rail access while maximized and reserve task-tab
+      space before shrinking the header action strip in narrow windows. See
+      [right-rail layout verification](evidence/right-rail-layout-2026-10-03/findings.md).
+      Later owner follow-up: make top chrome and both rails visually distinct and
+      replace the right dock's under-rail translation with an in-bounds reveal;
+      [chrome/motion verification](evidence/chrome-motion-2026-10-03/findings.md).
+      Further UI/UX retest covers interrupted resize cleanup, adaptive dock width,
+      retained Side chats and native Review image previews;
+      [UI/UX retest receipt](evidence/ui-ux-retest-2026-10-03/findings.md).
+      The same receipt records the later flyout stacking/lifecycle correction,
+      Settings sidebar entry and spacing, and consolidation of the unsupported
+      generic model editor into the backed OMP provider/model destination.
+
+72. **Dedicated forge review and navigation/settings follow-up (owner decisions 2026-10-03).**
+    Main browser tabs (owner screenshot 2026-10-03): Code Review’s top bar exposes
+    a New tab action and peer browser tabs with selection and close controls.
+    Blank main tabs focus the address field immediately; the home New chat action
+    creates a fresh unsent draft. Dock and terminal tab close controls remain to
+    the right of the label, with a stable leading identity icon. Reuse
+    the native browser tab/state owner; a dedicated UI namespace must not create or
+    attach an OMP thread. Retain the review while browsing, hide native web content
+    when returning to review, and show backed Cedia tools plus local recent pages
+    on the blank-tab home. Recent-page cards and tool actions expose themed hover
+    and keyboard-focus feedback. Each recent card can be dismissed persistently
+    without closing its live tab or changing another browser owner's history.
+    Browser tabs last for the current app window session.
+
+    Sidebar gesture follow-up: plain seam clicks preserve panel width; the persistent
+    icon rail is excluded from resize measurements. Both collapsed desktop panels
+    support an inward seam drag to reopen at their remembered width. The right
+    seam remains outside hidden/inert dock content and below the titlebar.
+
+    Implement §3.F and the explicit §3.F.1 owner expansion using the existing host,
+    OMP task dispatch and durable draft owner. The first read/draft slice is followed
+    by GitHub review queues, discussions, review instructions and explicit provider
+    actions, with durable receipts and revision checks. Live write verification still
+    requires authorization for a concrete test action. GitLab retains the qualified
+    read/diff slice until its write operations are implemented and verified.
+    The same slice adds persistent pointer/keyboard task-tab ordering, a collapsed-only
+    rail Settings entry, removes the standalone Customize entry and Settings duplicates
+    in More, and reconciles Settings controls with Cedia/OMP ownership. Source and native
+    verification, including remaining external-provider limits, are recorded in the
+    [UI/UX retest receipt](evidence/ui-ux-retest-2026-10-03/findings.md). This does not
+    close the broader item 70 acceptance matrix.
+    The IDE shell alignment and native right-dock behavior approved on 2026-10-04
+    are recorded in the [packaged IDE verification](evidence/ide-shell-alignment-2026-10-04/findings.md).
 
 ## 11. Acceptance criteria: "CEDIA owns its workspace"
 

@@ -132,6 +132,51 @@
     backdrop-filter: var(--app-sidebar-backdrop-filter, none);
   }
 
+  /* Standalone Cedia chrome uses an opaque material so the three aligned
+     surfaces (top header, left rail, and right rail) keep their edges stable
+     while a drawer opens or closes. The mix deliberately reuses the host's
+     sidebar/foreground tokens instead of introducing a second theme palette;
+     3% foreground gives both light and dark themes a quiet separation. */
+  .cedia-chrome-surface,
+  .cedia-chrome-header {
+    background-color: color-mix(in srgb, var(--sidebar) 97%, var(--foreground) 3%);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .cedia-detail-sidebar {
+    background: var(--sidebar);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* Keep the 46px header segments on one baseline and paint their divider in
+     the same direction/color as the existing chat-surface seam. */
+  .cedia-chrome-header {
+    background-image: linear-gradient(var(--app-surface-divider), var(--app-surface-divider));
+    background-repeat: no-repeat;
+    background-position: left bottom;
+    background-size: 100% 1px;
+  }
+
+  /* Rail seams start below the shared 46px titlebar. A full-height inset
+     shadow cuts through the macOS traffic-light region and fragments the
+     otherwise continuous top chrome. Background strokes keep hit areas intact. */
+  .cedia-chrome-rail-left,
+  .cedia-chrome-rail-right {
+    background-image: linear-gradient(var(--app-surface-divider), var(--app-surface-divider));
+    background-repeat: no-repeat;
+    background-size: 1px calc(100% - 46px);
+  }
+
+  .cedia-chrome-rail-left {
+    background-position: right bottom;
+  }
+
+  .cedia-chrome-rail-right {
+    background-position: left bottom;
+  }
+
   /* Small circular icon badges that sit directly on the sidebar surface inside
      thread rows — the meta-chip stack, the handoff provider avatar, the terminal
      count badge. They take the SAME material as the sidebar (translucent or
@@ -3092,4 +3137,106 @@ html.cedia-ide-embedded [data-chat-composer-actions="right"] {
 html.cedia-ide-embedded [aria-label="Change model and reasoning"] {
   flex: 1 1 0%;
   min-width: 0;
+}
+
+/* Cedia card layout (owner-approved): floating 12px cards on a 4px shell
+ * margin with 4px gaps. Only visual surfaces change; positioning shells,
+ * drag math and resize behavior are untouched. Rail seam gradients are
+ * retired because each card now carries its own border. Below-header geometry
+ * (top 50px = 46px window header + 4px gap, bottom 4px) lives on the fixed
+ * containers in ui/sidebar.tsx / RightDock.tsx so all cards share edges. */
+.group[data-variant="floating"] [data-sidebar="sidebar"] {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+/* Cedia card row: the left thread card is in-flow (same top/bottom math as the
+ * center card). No height override needed — in-flow flex items size with the row. */
+.cedia-chrome-rail-left,
+.cedia-chrome-rail-right {
+  background-image: none;
+}
+/* The square seam belongs to the pre-card layout: inside the floating center
+ * card it would draw a divider line where the target wants a real 4px gap,
+ * so it stays hidden there. */
+.cedia-center-card .chat-content-card::before {
+  display: none;
+}
+@media (min-width: 768px) {
+  .cedia-dock-card[data-slot="sidebar-container"] {
+    /* Geometry + clip: the card chrome lives on the inner surface now
+     * (RightDock innerClassName, same token as the other cards), so the
+     * inner surface clips the sliding content. Keep the positioning shell
+     * visible so its resize handle can reach the card's left edge. */
+    top: 0;
+    bottom: 0;
+    height: 100%;
+    overflow: visible;
+  }
+}
+.cedia-dock-card [data-slot="sidebar-inner"] {
+  /* The dock content has its own clip. The resize handle must reach the
+   * outer card edge, including at mid-height. */
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cedia-dock-card[data-slot="sidebar-container"] {
+    transition: none;
+  }
+}
+
+/* Card surfaces on the gray stage (target.html), inside one token family —
+ * no second palette. The sidebar and dock cards keep the chrome tone and read
+ * through radius, edge and shadow; the center card takes the lighter editor
+ * surface so it floats above the shell. In dark mode the center card keeps
+ * the same elevation lift as the other cards over the dark chrome. */
+.group[data-variant="floating"] [data-sidebar="sidebar"],
+.cedia-dock-card [data-sidebar="sidebar"] {
+  background-color: color-mix(in srgb, var(--sidebar) 90%, white 10%);
+}
+.cedia-center-card {
+  background-color: var(--background);
+  /* The inner inset surface paints its own background over the card — clip
+   * it to the card box so it can't wash out the 1px edge (the "faint center
+   * border": content bg bleeding past the border radius). */
+  overflow: hidden;
+}
+/* Right card: ONE edge on the wrapper only. The dock inner + the rail are
+ * transparent by construction (RightDock transparentSurface, rail bg-transparent)
+ * so no second border paints where dock meets rail (the "two cards" look).
+ * Neutralized here too (not just Tailwind) so load order never re-adds it. */
+[data-testid="cedia-right-card"] {
+  background-color: color-mix(in srgb, var(--sidebar) 90%, white 10%);
+}
+[data-testid="cedia-right-card"] [data-sidebar="sidebar"],
+[data-testid="cedia-right-card"] [data-testid="cedia-right-rail"] {
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.group[data-variant="floating"] [data-sidebar="sidebar"],
+.cedia-dock-card [data-sidebar="sidebar"],
+.cedia-center-card,
+[data-testid="cedia-right-card"] {
+  /* Mockup corners: one radius token — every card reads the same curve.
+   * 12px outer + 4px card padding (p-1) → inner content sits at an effective
+   * 8px (concentric, surfaces.md). Rail buttons keep their own size-8
+   * (32px box, rounded-md) — they are controls ON the card, not nested
+   * surfaces, so they do NOT take the card radius. */
+  border-radius: 12px;
+  /* Unlayered CSS (not @layer): Tailwind v4 puts `border` in @layer base/
+   * utilities, and layered styles lose to unlayered ones at equal
+   * specificity — the card edge must win over preflight, not tie with it. */
+  border-width: 1px;
+  border-style: solid;
+  /* Opaque edge: --sidebar-border itself is 4-5% alpha and washes out over
+   * the light stage ("faint center card"). Mix it toward the foreground so
+   * the edge stays visible in both modes without leaving the token family. */
+  border-color: color-mix(in srgb, var(--sidebar-border) 40%, var(--foreground) 60%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-right-tool-rail] {
+    transition: none;
+  }
 }

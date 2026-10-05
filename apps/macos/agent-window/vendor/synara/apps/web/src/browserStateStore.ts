@@ -29,7 +29,14 @@ export interface BrowserHistoryEntry {
 interface BrowserStateStore {
   threadStatesByThreadId: Record<string, ThreadBrowserState | undefined>;
   recentHistoryByThreadId: Record<string, BrowserHistoryEntry[] | undefined>;
+  /**
+   * URLs hidden from the lightweight New tab home for each browser owner.
+   * Keep this separate from recentHistory so dismissing a card never mutates
+   * live browser metadata or hides the same URL in another owner.
+   */
+  dismissedHistoryUrlsByThreadId: Record<string, Record<string, true> | undefined>;
   upsertThreadState: (state: ThreadBrowserState) => void;
+  dismissRecentHistory: (threadId: ThreadId, url: string) => void;
   removeThreadState: (threadId: ThreadId) => void;
 }
 
@@ -112,6 +119,28 @@ export function sanitizeRecentHistoryByThreadId(
   });
 }
 
+/**
+ * Validate the per-owner URL dismissal map before it reaches the renderer.
+ * URLs are keys rather than values so malformed records can be discarded
+ * without allowing an arbitrary value to be treated as a dismissed URL.
+ */
+export function sanitizeDismissedHistoryUrlsByThreadId(
+  value: unknown,
+): Record<string, Record<string, true>> {
+  return sanitizeStringKeyedRecord(value, (rawUrls) => {
+    if (!isPlainObject(rawUrls)) {
+      return null;
+    }
+    const urls = Object.entries(rawUrls).reduce<Record<string, true>>((result, [url, value]) => {
+      if (url.trim().length > 0 && value === true) {
+        result[url] = true;
+      }
+      return result;
+    }, {});
+    return Object.keys(urls).length > 0 ? urls : null;
+  });
+}
+
 export function createDedupedBrowserStateStorage(
   resolveStorage: () => StringStorage,
 ): StringStorage {
@@ -142,6 +171,7 @@ export const useBrowserStateStore = create<BrowserStateStore>()(
     (set) => ({
       threadStatesByThreadId: {},
       recentHistoryByThreadId: {},
+      dismissedHistoryUrlsByThreadId: {},
       upsertThreadState: (state) =>
         set((current) => {
           const previousState = current.threadStatesByThreadId[state.threadId];
@@ -156,18 +186,53 @@ export const useBrowserStateStore = create<BrowserStateStore>()(
           const orderedTabs = activeTab
             ? [activeTab, ...state.tabs.filter((tab) => tab.id !== activeTab.id)]
             : state.tabs;
+          const previousDismissedUrls =
+            current.dismissedHistoryUrlsByThreadId[state.threadId] ?? {};
+          // A URL that changes on an existing live tab is a deliberate visit,
+          // so allow it back into Recent pages. Repeated native snapshots of
+          // the same URL stay dismissed and cannot resurrect a removed card.
+          const revisitedUrls = new Set<string>();
+          if (previousState) {
+            for (const tab of state.tabs) {
+              const previousTab = previousState.tabs.find((candidate) => candidate.id === tab.id);
+              const nextUrl = normalizeHistoryUrl(tab.lastCommittedUrl ?? tab.url);
+              const previousUrl = previousTab
+                ? normalizeHistoryUrl(previousTab.lastCommittedUrl ?? previousTab.url)
+                : "";
+              if (nextUrl && nextUrl !== previousUrl) {
+                revisitedUrls.add(nextUrl);
+              }
+            }
+          }
+          const nextDismissedUrls = Object.keys(previousDismissedUrls).reduce<Record<string, true>>(
+            (result, url) => {
+              if (!revisitedUrls.has(url)) {
+                result[url] = true;
+              }
+              return result;
+            },
+            {},
+          );
           const previousHistory =
             current.recentHistoryByThreadId[state.threadId] ?? EMPTY_BROWSER_HISTORY;
           const nextHistory = orderedTabs.reduce(
-            (entries, tab) =>
-              upsertRecentHistoryEntry(entries, {
-                url: tab.lastCommittedUrl ?? tab.url,
+            (entries, tab) => {
+              const url = normalizeHistoryUrl(tab.lastCommittedUrl ?? tab.url);
+              if (url && nextDismissedUrls[url]) {
+                return entries;
+              }
+              return upsertRecentHistoryEntry(entries, {
+                url,
                 title: tab.title,
                 tabId: tab.id,
-              }),
+              });
+            },
             previousHistory,
           );
           const historyChanged = !sameBrowserHistoryEntries(previousHistory, nextHistory);
+          const dismissedChanged =
+            Object.keys(previousDismissedUrls).length !== Object.keys(nextDismissedUrls).length ||
+            Object.keys(previousDismissedUrls).some((url) => previousDismissedUrls[url] !== nextDismissedUrls[url]);
 
           return {
             threadStatesByThreadId: {
@@ -180,11 +245,38 @@ export const useBrowserStateStore = create<BrowserStateStore>()(
                   [state.threadId]: nextHistory,
                 }
               : current.recentHistoryByThreadId,
+            dismissedHistoryUrlsByThreadId: dismissedChanged
+              ? {
+                  ...current.dismissedHistoryUrlsByThreadId,
+                  [state.threadId]: Object.keys(nextDismissedUrls).length > 0 ? nextDismissedUrls : undefined,
+                }
+              : current.dismissedHistoryUrlsByThreadId,
+          };
+        }),
+      dismissRecentHistory: (threadId, url) =>
+        set((current) => {
+          const normalizedUrl = normalizeHistoryUrl(url);
+          if (!normalizedUrl) {
+            return current;
+          }
+          const previousUrls = current.dismissedHistoryUrlsByThreadId[threadId] ?? {};
+          if (previousUrls[normalizedUrl]) {
+            return current;
+          }
+          return {
+            ...current,
+            dismissedHistoryUrlsByThreadId: {
+              ...current.dismissedHistoryUrlsByThreadId,
+              [threadId]: { ...previousUrls, [normalizedUrl]: true },
+            },
           };
         }),
       removeThreadState: (threadId) =>
         set((current) => {
-          if (!Object.hasOwn(current.threadStatesByThreadId, threadId)) {
+          if (
+            !Object.hasOwn(current.threadStatesByThreadId, threadId) &&
+            !Object.hasOwn(current.dismissedHistoryUrlsByThreadId, threadId)
+          ) {
             return current;
           }
           const nextThreadStatesByThreadId = {
@@ -193,11 +285,16 @@ export const useBrowserStateStore = create<BrowserStateStore>()(
           const nextRecentHistoryByThreadId = {
             ...current.recentHistoryByThreadId,
           };
+          const nextDismissedHistoryUrlsByThreadId = {
+            ...current.dismissedHistoryUrlsByThreadId,
+          };
           delete nextThreadStatesByThreadId[threadId];
           delete nextRecentHistoryByThreadId[threadId];
+          delete nextDismissedHistoryUrlsByThreadId[threadId];
           return {
             threadStatesByThreadId: nextThreadStatesByThreadId,
             recentHistoryByThreadId: nextRecentHistoryByThreadId,
+            dismissedHistoryUrlsByThreadId: nextDismissedHistoryUrlsByThreadId,
           };
         }),
     }),
@@ -206,11 +303,16 @@ export const useBrowserStateStore = create<BrowserStateStore>()(
       storage: createJSONStorage(() => browserStateStorage),
       partialize: (state) => ({
         recentHistoryByThreadId: state.recentHistoryByThreadId,
+        dismissedHistoryUrlsByThreadId: state.dismissedHistoryUrlsByThreadId,
       }),
       merge: (persisted, current) => ({
         ...current,
         recentHistoryByThreadId: sanitizeRecentHistoryByThreadId(
           (persisted as { recentHistoryByThreadId?: unknown } | undefined)?.recentHistoryByThreadId,
+        ),
+        dismissedHistoryUrlsByThreadId: sanitizeDismissedHistoryUrlsByThreadId(
+          (persisted as { dismissedHistoryUrlsByThreadId?: unknown } | undefined)
+            ?.dismissedHistoryUrlsByThreadId,
         ),
       }),
     },

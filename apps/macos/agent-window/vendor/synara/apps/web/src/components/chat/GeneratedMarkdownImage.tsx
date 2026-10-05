@@ -57,6 +57,7 @@ function GeneratedMarkdownImageContent(props: GeneratedMarkdownImageProps) {
   const [previewGrant, setPreviewGrant] = useState<string>();
   const grantOptions = projectLocalPreviewGrantQueryOptions({
     path: absolutePath,
+    cwd,
     enabled: needsGrant && absolutePath !== null && previewGrant === undefined,
     // An HTTP denial must not reuse a token invalidated by a server restart.
     staleTime: 0,

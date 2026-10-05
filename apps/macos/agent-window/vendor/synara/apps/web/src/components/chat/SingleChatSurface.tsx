@@ -3,7 +3,9 @@ import type { ProjectId, ThreadId, TurnId } from "@synara/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { flushWorkspaceEditors } from "~/lib/workspaceEditorSession";
 import { useNavigate } from "@tanstack/react-router";
+import { createPortal } from "react-dom";
 import {
+  type ComponentProps,
   lazy,
   type ReactNode,
   startTransition,
@@ -25,7 +27,6 @@ import { useDockPaneRuntimeActivation } from "../../hooks/useDockPaneRuntimeActi
 import { useDevicePaneOpenRequests } from "../../hooks/useDeviceEventBridge";
 import { useDeviceSupport } from "../../hooks/useDeviceSupport";
 import { useRepoDiffTotals } from "../../hooks/useRepoDiffTotals";
-import { useDesktopTopBarWindowControlsGutterClassName } from "~/hooks/useDesktopTopBarGutter";
 import { isIdeEmbeddedRuntime } from "~/ide-mode";
 import { readNativeApi } from "~/nativeApi";
 import { openInPreferredEditor } from "../../editorPreferences";
@@ -45,7 +46,10 @@ import type { DockPaneRuntimeMode } from "../../lib/dockPaneActivation";
 import type { FileCommentSelection } from "../../lib/fileComments";
 import type { DiffFileEditRequest } from "../../lib/diffEditBaseRev";
 import { gitBranchesQueryOptions } from "../../lib/gitReactQuery";
-import { canComposerHandlePanelWidth } from "../../lib/panelResize";
+import {
+  canComposerHandlePanelWidth,
+  createComposerWidthResizeSession,
+} from "../../lib/panelResize";
 import { projectListDirectoriesQueryOptions } from "../../lib/projectReactQuery";
 import { waitForSidechatCreator } from "../../lib/sidechatCreatorRegistry";
 import {
@@ -95,6 +99,8 @@ import { FloatingBrowserPanel } from "./FloatingBrowserPanel";
 import { shouldRenderFloatingBrowserPanel } from "./floatingBrowserPanel.logic";
 import { PanelStateMessage } from "./PanelStateMessage";
 import { RightDock } from "./RightDock";
+import { RightToolRail } from "./RightToolRail";
+import { resolveRailCarry, resolveRailPick } from "./rightToolRail.logic";
 import {
   buildRightDockPaneLabelOverrides,
   getRightDockPaneMeta,
@@ -114,7 +120,6 @@ import { routeSingleDevicePaneOpenRequest } from "./devicePaneOpenRequest";
 import { pullRequestDetailInputFromPane } from "../pullRequest/pullRequestDetail.logic";
 import { usePullRequestPaneStateIcon } from "../pullRequest/usePullRequestPaneStateIcon";
 import { RouteInsetSurface } from "../RouteInsetSurface";
-import { SidebarToggleIcon } from "../SidebarToggleIcon";
 import { toastManager } from "../ui/toast";
 import { WorkspaceSearchPalette, type WorkspaceSearchPaletteMode } from "../WorkspaceSearchPalette";
 import {
@@ -122,9 +127,6 @@ import {
   resolveRoutePanelBootstrap,
 } from "../../routes/-chatThreadRoute.logic";
 import { cn } from "~/lib/utils";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { Toggle } from "../ui/toggle";
-import { CHAT_HEADER_TOGGLE_CLASS_NAME } from "./chatHeaderControls";
 
 
 const PullRequestDockPane = lazy(() => import("../pullRequest/PullRequestDockPane"));
@@ -141,51 +143,9 @@ const DockFilePane = lazy(() =>
   })),
 );
 
-const DIFF_INLINE_DEFAULT_WIDTH = "max(28rem, calc(50vw - 8rem))";
+// Cedia 3-card row: fixed dock width — never 50vw (see defaultWidth below).
+const CEDIA_DOCK_DEFAULT_WIDTH = "22rem";
 const SINGLE_PANEL_MIN_WIDTH = 26 * 16;
-
-function ShellRightDockToggle({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const desktopWindowControlsGutter = useDesktopTopBarWindowControlsGutterClassName();
-  return (
-    <div
-      className={cn(
-        "pointer-events-none absolute top-[9px] z-40 flex items-center",
-        desktopWindowControlsGutter ? "right-[146px]" : "right-2",
-      )}
-    >
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              className={cn(
-                CHAT_HEADER_TOGGLE_CLASS_NAME,
-                "pointer-events-auto !size-7 transition-colors duration-200 motion-reduce:transition-none [-webkit-app-region:no-drag]",
-                open &&
-                  "bg-[var(--color-background-button-secondary)] text-[var(--color-text-foreground)] hover:bg-[var(--color-background-button-secondary-hover)]",
-              )}
-              pressed={open}
-              onPressedChange={onToggle}
-              aria-label="Toggle right sidebar"
-              variant="default"
-              size="xs"
-            >
-              <SidebarToggleIcon side="right" open={open} />
-            </Toggle>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {open ? "Close right sidebar" : "Open right sidebar"}
-        </TooltipPopup>
-      </Tooltip>
-    </div>
-  );
-}
 
 const allowAnySplitDirection = (_direction: SplitDirection) => true;
 
@@ -216,6 +176,67 @@ function shouldAcceptDockWidth({
   });
 }
 
+function beginDockResize({ currentWidth }: { currentWidth: number }) {
+  return createComposerWidthResizeSession({
+    currentPanelWidth: currentWidth,
+    paneScopeId: SINGLE_CHAT_PANE_SCOPE_ID,
+  });
+}
+
+// DOM order (mockup cutover): the center viewport shell renders first, and
+// `ChatRightCards` renders the dock + tool rail as SIBLINGS of that shell —
+// never inside `CHAT_MAIN_VIEWPORT_SHELL`. The shell row mounts the right
+// cards as the THIRD card below the window header with uniform 4px insets.
+// Props mirror what SingleChatSurface already holds in scope (dockState,
+// dockLauncherItems, resize/selection handlers); the rail props carry the
+// active/pending kind + toggle/pick handlers.
+export function ChatRightCards(props: {
+  dock: ComponentProps<typeof RightDock>;
+  rail: ComponentProps<typeof RightToolRail>;
+}) {
+  // ONE card with TWO states, mirroring the left (48px rail + thread panel):
+  // dock open → panel + rail side by side; dock closed → rail alone stays
+  // mounted as a 48px collapsed card (never unmounts, never zero-width).
+  // The dock stays mounted in both states (like the left Sidebar): open/close
+  // animates widths via the shared drawer token while the dock's own
+  // gap + container collapse to 0 — conditional-mount would snap with no
+  // transition (the old bug). The rail keeps its own buttons but paints no
+  // second edge: no inner card chrome on the dock, no gap between dock and
+  // rail inside the card (gap-0 + p-1 keeps the inner content concentric with
+  // the 12px outer radius, surfaces.md).
+  const dockOpen = props.dock.state.open;
+  return (
+    <div data-testid="cedia-right-card" data-dock-open={dockOpen ? "true" : undefined} className="relative flex max-w-full min-h-0 min-w-0 shrink-0 items-stretch gap-0 overflow-hidden rounded-xl border bg-sidebar p-1 shadow-[0_6px_20px_rgba(0,0,0,0.1)]">
+      {/* Keep the dock mounted while closed (like the left Sidebar): the
+          dock's own gap + container animate to 0 via the shared drawer token,
+          so open/close slides instead of mount/unmount snapping. `invisible`
+          (not display:none) keeps layout mounted with content hidden; the w-0
+          card + overflow clips it. */}
+      <div className={dockOpen ? "flex min-h-0 min-w-0 flex-1" : "invisible flex min-h-0 min-w-0 max-w-0 flex-none overflow-hidden"}>
+        <RightDock {...props.dock} />
+      </div>
+      <RightToolRail {...props.rail} />
+    </div>
+  );
+}
+
+// Portals the right cards into the shell row's [data-right-cards-outlet]
+// (owned by _chat.tsx, ABOVE this surface in the tree), so DOM order is
+// [center shell] + [right cards] as siblings in the cards row. Renders null
+// until the outlet exists (shell mounts it on the non-IDE path). IDE-embed
+// renders no dock/rail at all (dockProps/railProps are null there).
+function RightCardsOutlet(props: {
+  dock: ComponentProps<typeof RightDock>;
+  rail: ComponentProps<typeof RightToolRail>;
+}) {
+  const [outlet, setOutlet] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setOutlet(document.querySelector<HTMLElement>("[data-right-cards-outlet]"));
+  }, []);
+  if (!outlet) return null;
+  return createPortal(<ChatRightCards dock={props.dock} rail={props.rail} />, outlet);
+}
+
 function RightDockPanePlaceholder(props: { kind: RightDockPaneKind }) {
   const { label } = getRightDockPaneMeta(props.kind);
   return <PanelStateMessage>{label} panel is coming soon.</PanelStateMessage>;
@@ -230,6 +251,11 @@ const DOCK_EMBEDDED_PANEL_STATE: SplitViewPanePanelState = {
   hasOpenedPanel: false,
   lastOpenPanel: "browser",
 };
+
+// Cedia right rail (§3.E): remembers the last surface thread so a task switch can
+// carry the visible tool kind to the new task. Window-level pointer only — pane
+// resources stay task-scoped in the dock store.
+let lastRailCarryThreadId: ThreadId | null = null;
 
 export function SingleChatSurface(props: {
   threadId: ThreadId;
@@ -248,6 +274,7 @@ export function SingleChatSurface(props: {
   const closePane = useRightDockStore((store) => store.closePane);
   const setActivePane = useRightDockStore((store) => store.setActivePane);
   const setDockOpen = useRightDockStore((store) => store.setDockOpen);
+  const toggleDockOpen = useRightDockStore((store) => store.toggleDockOpen);
   const updatePane = useRightDockStore((store) => store.updatePane);
   const activeProject = useStore(
     useMemo(() => createProjectSelector(props.projectId), [props.projectId]),
@@ -342,8 +369,68 @@ export function SingleChatSurface(props: {
     toggleSingletonPane(props.threadId, { kind: "device" });
   };
   const handleToggleRightDock = () => {
-    setDockOpen(props.threadId, !dockState.open);
+    toggleDockOpen(props.threadId);
   };
+  const railActiveKind = dockState.open ? (activePane?.kind ?? null) : null;
+  const handleRailPickDockPane = (kind: RightDockPaneKind) => {
+    // Picking the visible tool collapses the panel; picking another switches
+    // to it through the same open path as the dock launchers, so contextual
+    // panes keep their existing behavior.
+    // NOTE: dockState here is the render-time snapshot — but onPick fires
+    // from the CURRENT render's closure, so it always sees fresh state.
+    const decision = resolveRailPick(dockState, kind);
+    if (decision.action === "collapse") {
+      setDockOpen(props.threadId, false);
+      return;
+    }
+    if (decision.action === "select") {
+      requestImmediateDockHydration(kind);
+      setActivePane(props.threadId, decision.paneId);
+      setDockOpen(props.threadId, true);
+      return;
+    }
+    handleAddDockPane(kind);
+  };
+  // Cedia right rail (§3.E): a task switch keeps the selected tool kind and
+  // panel visibility. The new task reuses its own pane of that kind or opens a
+  // fresh one — terminal input, browser handles, file paths and sidechat
+  // identity are never transplanted. Unavailable tools stay closed with the
+  // specific reason instead of the old task's data.
+  useEffect(() => {
+    if (ideEmbedded) {
+      lastRailCarryThreadId = props.threadId;
+      return;
+    }
+    const previousThreadId = lastRailCarryThreadId;
+    lastRailCarryThreadId = props.threadId;
+    if (previousThreadId === null || previousThreadId === props.threadId) return;
+    const previousState = selectRightDockState(previousThreadId)(
+      useRightDockStore.getState(),
+    );
+    const previousActive = resolveActivePane(previousState);
+    if (previousActive === null) return;
+    const carry = resolveRailCarry({
+      prevKind: previousActive.kind,
+      availableKinds: availableDockPaneKinds,
+    });
+    if (carry.action === "none") return;
+    if (carry.action === "skip") {
+      const meta = getRightDockPaneMeta(carry.kind);
+      toastManager.add({
+        type: "warning",
+        title: `${meta.label} isn't available here`,
+        description: carry.reason,
+      });
+      return;
+    }
+    const existing = dockState.panes.find((pane) => pane.kind === carry.kind);
+    if (existing) {
+      setActivePane(props.threadId, existing.id);
+      setDockOpen(props.threadId, true);
+    } else {
+      openPane(props.threadId, { kind: carry.kind });
+    }
+  }, [props.threadId, ideEmbedded, dockState, availableDockPaneKinds]);
   const handleOpenBrowserUrl = () => {
     requestImmediateDockHydration("browser");
     openPane(props.threadId, { kind: "browser" });
@@ -697,9 +784,13 @@ export function SingleChatSurface(props: {
       ? { [pullRequestPane.id]: pullRequestPaneStateIcon }
       : undefined;
 
+  const [pendingSidechatThreads, setPendingSidechatThreads] = useState<ReadonlySet<ThreadId>>(() => new Set());
   const handleAddDockPane = (kind: RightDockPaneKind) => {
     requestImmediateDockHydration(kind);
     if (kind === "sidechat") {
+      if (pendingSidechatThreads.has(props.threadId)) return;
+      const sourceThreadId = props.threadId;
+      setPendingSidechatThreads((current) => new Set(current).add(sourceThreadId));
       // Sidechat spawns a thread; reuse the composer's /side flow (correct model
       // selection) published via the registry instead of opening an empty pane.
       void waitForSidechatCreator(props.threadId)
@@ -723,6 +814,13 @@ export function SingleChatSurface(props: {
                 ? error.message
                 : "An error occurred while creating Side chat.",
           });
+        })
+        .finally(() => {
+          setPendingSidechatThreads((current) => {
+            const next = new Set(current);
+            next.delete(sourceThreadId);
+            return next;
+          });
         });
       return;
     }
@@ -742,6 +840,7 @@ export function SingleChatSurface(props: {
               threadId={props.threadId}
               onClosePanel={() => closePane(props.threadId, pane.id)}
               runtimeMode={context.runtimeMode}
+              isVisible={context.isVisible}
               onRequestLive={requestActiveDockPaneLive}
             />
           </Suspense>
@@ -887,92 +986,120 @@ export function SingleChatSurface(props: {
     setActivePane(props.threadId, paneId);
   };
 
+  // DOM order: [center viewport shell] + [right cards] as siblings in a flex
+  // row. The dock + rail are OUTSIDE CHAT_MAIN_VIEWPORT_SHELL. The shell row
+  // (_chat.tsx data-right-cards-outlet) lives ABOVE this surface in the tree
+  // (it owns the Outlet we render through), so props cannot flow upward:
+  // this surface portals the right cards into that outlet. When the outlet is
+  // absent (tests, IDE embed) RightCardsOutlet renders null — there is no
+  // inline data-right-cards-fallback sibling (explicitly accepted: a missing
+  // outlet means no right cards, never a duplicate ChatRightCards instance).
+  const dockProps = !ideEmbedded
+    ? {
+        state: dockState,
+        minWidth: SINGLE_PANEL_MIN_WIDTH,
+        // Cedia card layout: 3rd card shares the row — fixed px, never 50vw.
+        defaultWidth: CEDIA_DOCK_DEFAULT_WIDTH,
+        beginResize: beginDockResize,
+        shouldAcceptWidth: shouldAcceptDockWidth,
+        addMenuKinds: availableDockPaneKinds,
+        launcherItems: dockLauncherItems,
+        motionKey: props.threadId,
+        activePaneRuntimeMode:
+          floatingBrowserVisible && activePane?.kind === "browser"
+            ? ("preview" as const)
+            : activePaneRuntimeMode,
+        browserRuntimeMode: (floatingBrowserVisible ? "preview" : "live") as "preview" | "live",
+        ...(paneLabelOverrides ? { paneLabelOverrides } : {}),
+        ...(paneIconOverrides ? { paneIconOverrides } : {}),
+        onSelectPane: handleSelectDockPane,
+        onClosePane: (paneId: string) => {
+          if (dockState.panes.find((pane) => pane.id === paneId)?.kind !== "explorer") {
+            closePane(props.threadId, paneId);
+            return;
+          }
+          void flushWorkspaceEditors(queryClient, workspaceRoot).then((saved) => {
+            if (saved) closePane(props.threadId, paneId);
+          });
+        },
+        collapseInShell: true as const,
+        onCollapse: () => setDockOpen(props.threadId, false),
+        onOpenChange: (open: boolean) => {
+          setDockOpen(props.threadId, open);
+        },
+        onAddPane: handleAddDockPane,
+        renderPane: renderDockPane,
+      }
+    : null;
+  const railProps = !ideEmbedded
+    ? {
+        items: dockLauncherItems,
+        activeKind: railActiveKind,
+        pendingKind: (pendingSidechatThreads.has(props.threadId) ? "sidechat" : null) as "sidechat" | null,
+        onPick: handleRailPickDockPane,
+      }
+    : null;
   return (
     <WorkspaceFileOpenerContext.Provider value={dockFileOpener}>
-      <div
-        className={cn(CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME, CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME)}
-      >
-        {ideEmbedded ? null : (
-          <ShellRightDockToggle open={dockState.open} onToggle={handleToggleRightDock} />
-        )}
-        <ChatPaneDropOverlay
-          canDropInDirection={allowAnySplitDirection}
-          excludedThreadIds={excludedThreadIds}
-          onDrop={handleDropThread}
-          className="flex h-full min-h-0 min-w-0 flex-1"
+      {/* Cedia single header owns the ONLY title row (route header above the
+          cards): this surface renders JUST the center viewport — no in-flow
+          header of its own. (DeferredChatView's hideHeader hides the surface
+          header; hideSidebarControls in ChatView hides its leading cluster.) */}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 gap-1">
+        <div
+          className={cn(CHAT_MAIN_VIEWPORT_SHELL_CLASS_NAME, CHAT_MAIN_CONTENT_SURFACE_CLASS_NAME)}
         >
-          <RouteInsetSurface surfaceClassName={CHAT_BACKGROUND_CLASS_NAME}>
-            <DeferredChatView
-              threadId={props.threadId}
-              paneScopeId={SINGLE_CHAT_PANE_SCOPE_ID}
-              deferMount={isBrandNewDraftThread}
-              surfaceMode="single"
-              isFocusedPane
-              panelState={chatPanelState}
-              onToggleDiff={handleToggleDiff}
-              {...(ideEmbedded ? {} : { onToggleRightDock: handleToggleRightDock })}
-              onToggleBrowser={handleToggleBrowser}
-              {...(hasDeviceSupport ? { onToggleDevice: handleToggleDevice } : {})}
-              onOpenBrowserUrl={handleOpenBrowserUrl}
-              onOpenTurnDiff={handleOpenTurnDiff}
-              onSplitSurface={handleSplitSurface}
-            />
-            {floatingBrowserVisible ? (
-              <FloatingBrowserPanel
-                key={props.threadId}
+          <ChatPaneDropOverlay
+            canDropInDirection={allowAnySplitDirection}
+            excludedThreadIds={excludedThreadIds}
+            onDrop={handleDropThread}
+            className="flex h-full min-h-0 min-w-0 flex-1"
+          >
+            <RouteInsetSurface surfaceClassName={CHAT_BACKGROUND_CLASS_NAME}>
+              <DeferredChatView
                 threadId={props.threadId}
-                onClose={dismissFloatingBrowser}
-                onPopToSidebar={() => {
-                  dismissFloatingBrowser();
-                  requestImmediateDockHydration("browser");
-                  openPane(props.threadId, { kind: "browser" });
-                }}
+                paneScopeId={SINGLE_CHAT_PANE_SCOPE_ID}
+                deferMount={isBrandNewDraftThread}
+                // Cedia single header: the route window header owns the ONLY
+                // title row — never render the in-card surface header here.
+                hideHeader={!ideEmbedded}
+                surfaceMode="single"
+                isFocusedPane
+                panelState={chatPanelState}
+                onToggleDiff={handleToggleDiff}
+                {...(ideEmbedded ? {} : { onToggleRightDock: handleToggleRightDock })}
+                onToggleBrowser={handleToggleBrowser}
+                {...(hasDeviceSupport ? { onToggleDevice: handleToggleDevice } : {})}
+                onOpenBrowserUrl={handleOpenBrowserUrl}
+                onOpenTurnDiff={handleOpenTurnDiff}
+                onSplitSurface={handleSplitSurface}
               />
-            ) : null}
-          </RouteInsetSurface>
-        </ChatPaneDropOverlay>
-        {!ideEmbedded ? <RightDock
-          state={dockState}
-          minWidth={SINGLE_PANEL_MIN_WIDTH}
-          defaultWidth={DIFF_INLINE_DEFAULT_WIDTH}
-          shouldAcceptWidth={shouldAcceptDockWidth}
-          addMenuKinds={availableDockPaneKinds}
-          launcherItems={dockLauncherItems}
-          motionKey={props.threadId}
-          activePaneRuntimeMode={
-            floatingBrowserVisible && activePane?.kind === "browser"
-              ? "preview"
-              : activePaneRuntimeMode
-          }
-          browserRuntimeMode={floatingBrowserVisible ? "preview" : "live"}
-          {...(paneLabelOverrides ? { paneLabelOverrides } : {})}
-          {...(paneIconOverrides ? { paneIconOverrides } : {})}
-          onSelectPane={handleSelectDockPane}
-          onClosePane={(paneId) => {
-            if (dockState.panes.find((pane) => pane.id === paneId)?.kind !== "explorer") {
-              closePane(props.threadId, paneId);
-              return;
-            }
-            void flushWorkspaceEditors(queryClient, workspaceRoot).then((saved) => {
-            if (saved) closePane(props.threadId, paneId);
-            });
-          }}
-          collapseInShell
-          onCollapse={() => setDockOpen(props.threadId, false)}
-          onOpenChange={(open) => {
-            setDockOpen(props.threadId, open);
-          }}
-          onAddPane={handleAddDockPane}
-          renderPane={renderDockPane}
-        /> : null}
-        <WorkspaceSearchPalette
-          open={searchPaletteOpen}
-          mode={searchPaletteMode}
-          onOpenChange={setSearchPaletteOpen}
-          cwd={workspaceRoot}
-          onOpenFile={handleOpenWorkspaceSearchFile}
-          onOpenDirectory={handleOpenWorkspaceSearchDirectory}
-        />
+              {floatingBrowserVisible ? (
+                <FloatingBrowserPanel
+                  key={props.threadId}
+                  threadId={props.threadId}
+                  onClose={dismissFloatingBrowser}
+                  onPopToSidebar={() => {
+                    dismissFloatingBrowser();
+                    requestImmediateDockHydration("browser");
+                    openPane(props.threadId, { kind: "browser" });
+                  }}
+                />
+              ) : null}
+            </RouteInsetSurface>
+          </ChatPaneDropOverlay>
+          <WorkspaceSearchPalette
+            open={searchPaletteOpen}
+            mode={searchPaletteMode}
+            onOpenChange={setSearchPaletteOpen}
+            cwd={workspaceRoot}
+            onOpenFile={handleOpenWorkspaceSearchFile}
+            onOpenDirectory={handleOpenWorkspaceSearchDirectory}
+          />
+        </div>
+        {dockProps && railProps ? (
+          <RightCardsOutlet dock={dockProps} rail={railProps} />
+        ) : null}
       </div>
     </WorkspaceFileOpenerContext.Provider>
   );

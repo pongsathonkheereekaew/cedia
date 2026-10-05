@@ -364,7 +364,15 @@ async function boot(): Promise<void> {
   // in the IDE window reaches the AI window and survives a restart.
   const { installHostPreferenceSync } = await import("../vendor/synara/apps/web/src/hostPreferences");
   const hostPreferences = installHostPreferenceSync(bridge);
-  void hostPreferences.hydrate();
+  const hostPreferencesReady = hostPreferences.hydrate();
+  window.__CEDIA_HOST_PREFERENCES_FLUSH__ = async () => {
+    await hostPreferencesReady;
+    await hostPreferences.flush();
+    const unsaved = hostPreferences.unsaved();
+    if (hostPreferences.status() !== "ready" || unsaved.length > 0) {
+      throw new Error(`Cedia preferences were not acknowledged${unsaved.length ? ` (${unsaved.join(", ")})` : ""}.`);
+    }
+  };
   if (sessionId) await sharedDraftBridge.hydrateThread(sessionId);
   let contextHandoffs = Promise.resolve();
   synchronizeContext = () => {
@@ -433,6 +441,7 @@ async function boot(): Promise<void> {
     void sharedDraftBridge.flush().finally(() => {
       sharedDraftBridge.dispose();
       hostPreferences.dispose();
+      delete window.__CEDIA_HOST_PREFERENCES_FLUSH__;
       delete window.__CEDIA_DRAFT_FLUSH__;
       disposeDeviceFrames();
       bridge.dispose();

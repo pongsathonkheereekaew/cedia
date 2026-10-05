@@ -317,6 +317,10 @@ export function setActivePaneInState(
   return { ...state, open: true, activePaneId: paneId };
 }
 
+export function toggleDockOpenInState(state: RightDockThreadState): RightDockThreadState {
+  return { ...state, open: !state.open };
+}
+
 export function setDockOpenInState(
   state: RightDockThreadState,
   open: boolean,

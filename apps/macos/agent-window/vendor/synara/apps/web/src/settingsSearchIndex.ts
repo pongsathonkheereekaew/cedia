@@ -5,6 +5,7 @@
 // Exports: entry type, the index, section label lookup, and the ranking helper
 
 import { rankProviderDiscoveryItems } from "~/lib/providerDiscovery";
+import { isCediaHostRuntime } from "./appSettings";
 import {
   settingRowAnchorId,
   SETTINGS_NAV_ITEMS,
@@ -65,13 +66,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Power",
     keywords: "prevent sleep keep awake power.sleepPrevention",
     target: null,
-  },
-  {
-    id: "general:new-threads",
-    section: "general",
-    title: "New threads",
-    keywords:
-      "Pick the default workspace mode for newly created draft threads. local worktree environment",
   },
   {
     id: "general:welcome-tour",
@@ -170,7 +164,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "appearance:theme",
     section: "appearance",
     title: "Theme",
-    keywords: "Follows the IDE theme. Change it in the IDE window with Preferences: Color Theme; both windows repaint together.",
+    keywords: "Cedia shared chrome stays solid and follows the IDE theme. Change it in the IDE window with Preferences: Color Theme; both windows repaint together.",
   },
   {
     id: "appearance:system-ui-font",
@@ -313,20 +307,9 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     target: null,
   },
 
-  // ── Models ────────────────────────────────────────────────────────────────────
-  {
-    id: "models:git-writing-model",
-    section: "models",
-    title: "Git writing model",
-    keywords: "Used for generated commit messages, PR titles, and branch names.",
-  },
-  {
-    id: "models:saved-model-slugs",
-    section: "models",
-    title: "Saved model slugs",
-    keywords: "Add custom model slugs for supported providers. custom model",
-  },
-
+  // ── Legacy model aliases ───────────────────────────────────────────────────────
+  // These terms still find the supported OMP provider surface after the old generic
+  // provider-CLI editor was removed. Their keywords live on the backed catalog entry below.
   // ── AI / OMP ────────────────────────────────────────────────────────────────
   {
     id: "omp:settings",
@@ -339,30 +322,20 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
 
   // ── Providers ─────────────────────────────────────────────────────────────────
   {
-    id: "providers:automatic-cli-update-checks",
+    id: "providers:accounts",
     section: "providers",
-    title: "Automatic CLI update checks",
+    title: "Provider accounts",
     keywords:
-      "Check Codex Claude and other provider CLIs for newer versions in the background. updates upgrade disable nags",
+      "Sign in through OMP, provide an API key, sign out, and see the credential state reported by the runtime.",
+    target: null,
   },
   {
-    id: "providers:visible-providers",
+    id: "providers:catalog",
     section: "providers",
-    title: "Visible providers",
+    title: "Live OMP catalog",
     keywords:
-      "Drag providers into your preferred picker order and hide the ones you don't use. visibility order",
-  },
-  {
-    id: "providers:provider-updates",
-    section: "providers",
-    title: "Provider updates",
-    keywords: "Update installed provider tools that Cedia can safely update. upgrade cli",
-  },
-  {
-    id: "providers:installed-clis",
-    section: "providers",
-    title: "Installed CLIs",
-    keywords: "Review provider versions and update tools. binary overrides path install",
+      "Upstream providers and models supplied by OMP at runtime. The model picker uses this catalog. Saved model slugs custom model model list Git writing model.",
+    target: null,
   },
 
   // ── Advanced ──────────────────────────────────────────────────────────────────
@@ -388,6 +361,18 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
 ] as const;
 
+/**
+ * Vendor settings that have no Cedia owner. Keep their index entries for the
+ * vendor/browser surface, but do not deep-link Cedia users into controls whose
+ * adapter endpoint rejects every read or write.
+ */
+const CEDIA_UNSUPPORTED_SETTINGS_ENTRY_IDS = new Set([
+  "general:automation-run-threads",
+  "general:environment-usage",
+  "general:environment-pull-request",
+  "general:environment-recap",
+]);
+
 const SETTINGS_SECTION_LABEL_BY_ID = new Map<SettingsSectionId, string>(
   SETTINGS_NAV_ITEMS.map((item) => [item.id, item.label]),
 );
@@ -412,9 +397,11 @@ export function rankSettingsSearchEntries(
   }
   // A result that deep-links into a destination the host reports as not implemented is not a
   // result: clicking it would land on a section that is gone from the nav (§3.B).
-  const candidates = capabilities === undefined
-    ? SETTINGS_SEARCH_ENTRIES
-    : SETTINGS_SEARCH_ENTRIES.filter((entry) => settingsSectionVisible(entry.section, capabilities));
+  const cediaHost = isCediaHostRuntime();
+  const candidates = SETTINGS_SEARCH_ENTRIES.filter((entry) => {
+    if (cediaHost && CEDIA_UNSUPPORTED_SETTINGS_ENTRY_IDS.has(entry.id)) return false;
+    return settingsSectionVisible(entry.section, capabilities);
+  });
   const ranked = rankProviderDiscoveryItems(candidates, trimmed, (entry) => [
     { value: entry.title },
     { value: entry.keywords, weight: 200 },

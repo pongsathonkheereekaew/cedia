@@ -62,6 +62,8 @@ export interface HostPreferenceSnapshot {
   readonly values: Readonly<Record<string, unknown>>;
 }
 
+export type HostPreferenceSyncStatus = "unknown" | "ready" | "unavailable" | "conflict";
+
 export interface HostPreferenceTransport {
   invoke: (channel: string, input?: unknown) => Promise<unknown>;
   on?: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
@@ -77,6 +79,8 @@ export interface HostPreferenceBridge {
   revision: () => number;
   /** Keys this window changed but the host has not confirmed. */
   unsaved: () => readonly string[];
+  /** Whether the most recent host read/write was acknowledged. */
+  status: () => HostPreferenceSyncStatus;
   dispose: () => void;
 }
 
@@ -159,9 +163,12 @@ export function pendingHostPatch(
 export function installHostPreferenceSync(transport: HostPreferenceTransport): HostPreferenceBridge {
   let revision = 0;
   let snapshot: HostPreferenceSnapshot = { revision: 0, values: {} };
+  let syncStatus: HostPreferenceSyncStatus = "unknown";
   let timer: number | undefined;
   let writing: Promise<void> | undefined;
   let disposed = false;
+  let inFlightKeys: readonly string[] = [];
+  let projectingHostValues = false;
 
   const snapshotFrom = (value: unknown): HostPreferenceSnapshot | undefined => {
     if (!isRecord(value)) return undefined;
@@ -181,15 +188,42 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
   };
 
   const adopt = (next: HostPreferenceSnapshot): "applied" | "unchanged" => {
-    const result = applyHostPreferences(next);
+    let result: "applied" | "unchanged";
+    projectingHostValues = true;
+    try { result = applyHostPreferences(next); } finally { projectingHostValues = false; }
     revision = next.revision;
     snapshot = next;
+    syncStatus = "ready";
     return result;
+  };
+
+  // Read the latest local values at acknowledgment time, not when a request
+  // started. A user can edit (or revert) a key while the host is responding.
+  const adoptPreservingLocalEdits = (next: HostPreferenceSnapshot): void => {
+    const latest = readLocalSettings();
+    const pendingKeys = new Set([
+      ...inFlightKeys,
+      ...pendingHostPatch(latest, snapshot).flatMap(entry => Object.keys(entry.patch)),
+    ]);
+    const overlay: Record<string, unknown> = {};
+    for (const binding of HOST_PREFERENCE_BINDINGS) {
+      if (pendingKeys.has(binding.hostKey)) overlay[binding.appKey] = latest[binding.appKey];
+    }
+    adopt(next.revision < revision ? snapshot : next);
+    if (pendingKeys.size > 0) {
+      projectingHostValues = true;
+      try {
+        writeLocalSettings(applyLocalAppSettingsPatch(readLocalSettings(), overlay as Partial<AppSettings>));
+      } finally { projectingHostValues = false; }
+    }
   };
 
   const hydrate = async (): Promise<"applied" | "unchanged" | "unavailable"> => {
     const next = await read();
-    if (!next) return "unavailable";
+    if (!next) {
+      syncStatus = "unavailable";
+      return "unavailable";
+    }
     return adopt(next);
   };
 
@@ -203,11 +237,17 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
    * pretend they were saved, and it does not keep overwriting another writer.
    */
   const write = async (): Promise<void> => {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    let conflictRetries = 0;
+    while (true) {
       const local = readLocalSettings();
       const pending = pendingHostPatch(local, snapshot);
       if (pending.length === 0) return;
       const { category, patch } = pending[0]!;
+      // The host replies with its complete record. Keep every category this
+      // window still wants to write before adopting that record; otherwise a
+      // successful appearance write could clobber a queued layout/composer
+      // change with the older values from the host snapshot.
+      inFlightKeys = pending.flatMap(entry => Object.keys(entry.patch));
       let answer: unknown;
       try {
         answer = await transport.invoke(CEDIA_AGENT_CHANNEL, {
@@ -219,14 +259,23 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
         });
       } catch {
         // Unavailable: the local value stays the window's own, and the next change retries.
+        syncStatus = "unavailable";
         return;
       }
       const status = isRecord(answer) ? answer.status : undefined;
-      if (status === "unavailable") return;
+      if (status === "unavailable") {
+        syncStatus = "unavailable";
+        return;
+      }
       const adopted = status === "conflict" ? (snapshotFrom(answer) ?? await read()) : snapshotFrom(answer);
-      if (!adopted) return;
+      if (!adopted) {
+        syncStatus = "unavailable";
+        return;
+      }
       if (status === "saved") {
-        adopt(adopted);
+        adoptPreservingLocalEdits(adopted);
+        inFlightKeys = [];
+        conflictRetries = 0;
         continue;
       }
       // Conflict: the host refused this revision and its answer carries the record that won. Take
@@ -234,15 +283,23 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
       // just moved, then re-send them once on top of the new revision. That is the difference
       // between "another window changed something" (adopted) and "this window's action was undone"
       // (not adopted), and the re-send is what makes the other window learn the result too.
-      const mine = readLocalSettings();
-      adopt(adopted);
-      const overlay: Record<string, unknown> = {};
-      for (const binding of HOST_PREFERENCE_BINDINGS) {
-        if (Object.hasOwn(patch, binding.hostKey as string)) overlay[binding.appKey] = (mine as Record<string, unknown>)[binding.appKey];
-      }
-      writeLocalSettings(applyLocalAppSettingsPatch(readLocalSettings(), overlay as Partial<AppSettings>));
+      const shouldRetryConflict = conflictRetries < 1;
+      conflictRetries += 1;
+      adoptPreservingLocalEdits(adopted);
+      inFlightKeys = [];
+      syncStatus = "conflict";
       if (pendingHostPatch(readLocalSettings(), adopted).length === 0) return;
+      if (!shouldRetryConflict) return;
     }
+  };
+
+  const startWrite = (): Promise<void> => {
+    if (writing) return writing;
+    writing = write().finally(() => {
+      inFlightKeys = [];
+      writing = undefined;
+    });
+    return writing;
   };
 
   const scheduleWrite = (): void => {
@@ -250,11 +307,12 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
     if (timer !== undefined) window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       timer = undefined;
-      writing = write().finally(() => { writing = undefined; });
+      void startWrite();
     }, WRITE_DEBOUNCE_MS);
   };
 
   const onLocalChange = (event: unknown): void => {
+    if (projectingHostValues) return;
     const key = (event as CustomEvent<{ key?: unknown }> | undefined)?.detail?.key;
     if (key !== APP_SETTINGS_STORAGE_KEY) return;
     scheduleWrite();
@@ -263,7 +321,7 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
     const next = snapshotFrom(args[0]);
     // An older publication than what this window already holds is not news.
     if (!next || next.revision <= revision) return;
-    adopt(next);
+    adoptPreservingLocalEdits(next);
   };
 
   window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, onLocalChange as EventListener);
@@ -276,13 +334,13 @@ export function installHostPreferenceSync(transport: HostPreferenceTransport): H
         window.clearTimeout(timer);
         timer = undefined;
       }
-      await writing;
-      await write();
+      await startWrite();
     },
     revision: () => revision,
     // Computed, never tracked: a key is unsaved exactly while this window's value differs from the
     // last record the host confirmed, so a refused write cannot disappear by bookkeeping.
     unsaved: () => pendingHostPatch(readLocalSettings(), snapshot).flatMap(entry => Object.keys(entry.patch)),
+    status: () => syncStatus,
     dispose: () => {
       disposed = true;
       if (timer !== undefined) window.clearTimeout(timer);

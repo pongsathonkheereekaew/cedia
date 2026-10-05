@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">CEDIA open channel concept</title>
+  <g fill="none" stroke="#111" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M181 46c-40-22-90-15-122 18-35 36-36 88-4 126"/>
+    <path d="M75 210c40 22 90 15 122-18 35-36 36-88 4-126"/>
+    <path d="M83 108h62"/>
+    <path d="M111 148h62"/>
+  </g>
+</svg>

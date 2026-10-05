@@ -1,0 +1,170 @@
+/**
+ * Typed contract for the provider-backed Code Review workspace.
+ *
+ * The existing `ForgeReview*` DTOs are intentionally small read projections.  This
+ * contract describes the paged workspace and the explicit, revision-bound GitHub
+ * mutations that may be dispatched by the host.  Provider credentials and transport
+ * details never cross this boundary.
+ */
+
+import type {
+  ForgeReviewActor,
+  ForgeReviewCheck,
+  ForgeReviewComment,
+  ForgeReviewCommit,
+  ForgeReviewDetail,
+  ForgeReviewFile,
+  ForgeReviewProvider,
+  ForgeReviewReview,
+  ForgeReviewSummary,
+} from "./index.ts";
+
+export type ForgeReviewWorkflowSection = "overview" | "activity" | "threads";
+
+export interface ForgeReviewPage<T> {
+  readonly items: readonly T[];
+  /** Opaque provider cursor.  GitHub currently uses a bounded page token. */
+  readonly nextCursor?: string;
+  readonly truncated: boolean;
+}
+
+export interface ForgeReviewReviewThread {
+  readonly id: string;
+  readonly isResolved: boolean;
+  readonly isOutdated?: boolean;
+  readonly viewerCanReply?: boolean;
+  readonly viewerCanResolve?: boolean;
+  readonly viewerCanUnresolve?: boolean;
+  readonly comments: readonly ForgeReviewComment[];
+  readonly commentsNextCursor?: string;
+  readonly commentsTruncated: boolean;
+  readonly path?: string;
+  readonly line?: number;
+  readonly side?: "left" | "right";
+  readonly commitSha?: string;
+}
+
+export interface ForgeReviewActivityItem {
+  readonly id: string;
+  readonly kind: "comment" | "review" | "commit" | "timeline" | "unknown";
+  readonly event?: string;
+  readonly body?: string;
+  readonly actor?: ForgeReviewActor;
+  readonly createdAt?: string;
+  readonly url?: string;
+  readonly commitSha?: string;
+}
+
+export interface ForgeReviewWorkflowOverview {
+  readonly detail: ForgeReviewDetail;
+  readonly permissions: ForgeReviewPermissions;
+  readonly capabilities: ForgeReviewWorkflowCapabilities;
+}
+
+export interface ForgeReviewPermissions {
+  readonly canComment: boolean;
+  readonly canReview: boolean;
+  readonly canEdit: boolean;
+  readonly canRequestReviewers: boolean;
+  readonly canChangeState: boolean;
+  readonly canMerge: boolean;
+  /** False means the host did not prove that the provider grants this action. */
+  readonly available: boolean;
+  readonly mergeMethods: readonly ForgeReviewMergeMethod[];
+  readonly reason?: string;
+}
+
+export type ForgeReviewMergeMethod = "merge" | "squash" | "rebase";
+
+export interface ForgeReviewWorkflowCapabilities {
+  readonly provider: ForgeReviewProvider;
+  readonly reads: readonly ForgeReviewWorkflowSection[];
+  readonly writes: readonly ForgeReviewMutationKind[];
+}
+
+export interface ForgeReviewWorkflowResult {
+  readonly provider: ForgeReviewProvider;
+  readonly repository: ForgeReviewDetail["repository"];
+  readonly number: number;
+  readonly headSha?: string;
+  readonly snapshotHash: string;
+  readonly section: ForgeReviewWorkflowSection;
+  readonly overview?: ForgeReviewWorkflowOverview;
+  readonly activity?: ForgeReviewPage<ForgeReviewActivityItem>;
+  readonly threads?: ForgeReviewPage<ForgeReviewReviewThread>;
+}
+
+export interface ForgeReviewWorkflowRequest {
+  readonly projectId: string;
+  readonly url: string;
+  readonly section: ForgeReviewWorkflowSection;
+  readonly cursor?: string;
+  readonly limit?: number;
+  /** When reading nested thread comments, identify the thread and pass its comment cursor. */
+  readonly threadId?: string;
+  readonly commentCursor?: string;
+}
+
+export type ForgeReviewMutationKind =
+  | "issue_comment"
+  | "review"
+  | "reply"
+  | "resolve_thread"
+  | "edit"
+  | "reviewers"
+  | "draft"
+  | "state"
+  | "merge";
+
+export interface ForgeReviewInlineComment {
+  readonly path: string;
+  readonly line: number;
+  readonly side: "LEFT" | "RIGHT";
+  readonly body: string;
+  readonly startLine?: number;
+  readonly startSide?: "LEFT" | "RIGHT";
+}
+
+export type ForgeReviewMutationOperation =
+  | { readonly kind: "issue_comment"; readonly body: string }
+  | { readonly kind: "review"; readonly event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES"; readonly body?: string; readonly comments?: readonly ForgeReviewInlineComment[] }
+  | { readonly kind: "reply"; readonly commentId: string; readonly body: string }
+  | { readonly kind: "resolve_thread"; readonly threadId: string; readonly resolved: boolean }
+  | { readonly kind: "edit"; readonly title?: string; readonly body?: string }
+  | { readonly kind: "reviewers"; readonly users?: readonly string[]; readonly teams?: readonly string[]; readonly removeUsers?: readonly string[]; readonly removeTeams?: readonly string[] }
+  | { readonly kind: "draft"; readonly draft: boolean }
+  | { readonly kind: "state"; readonly state: "open" | "closed" }
+  | { readonly kind: "merge"; readonly method: ForgeReviewMergeMethod; readonly commitMessage?: string; readonly subject?: string; readonly body?: string };
+
+export interface ForgeReviewMutationRequest {
+  readonly projectId: string;
+  readonly url: string;
+  /** Stable idempotency identity generated by the product before confirmation. */
+  readonly commandId: string;
+  /** The exact PR head the user saw when confirming this action. */
+  readonly expectedHeadSha: string;
+  readonly operation: ForgeReviewMutationOperation;
+}
+
+export type ForgeReviewMutationReceiptState = "pending" | "confirmed" | "failed" | "outcome_unknown";
+
+export interface ForgeReviewMutationReceipt {
+  readonly commandId: string;
+  readonly requestHash: string;
+  readonly state: ForgeReviewMutationReceiptState;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly result?: Record<string, unknown>;
+  readonly error?: { readonly code: string; readonly message: string };
+}
+
+export interface ForgeReviewMutationResult {
+  readonly receipt: ForgeReviewMutationReceipt;
+  /** Provider response is deliberately an opaque, bounded projection. */
+  readonly result?: Record<string, unknown>;
+}
+
+/** Narrow helper kept here so host and clients share the operation list. */
+export function forgeReviewMutationKind(operation: ForgeReviewMutationOperation): ForgeReviewMutationKind {
+  return operation.kind;
+}

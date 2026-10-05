@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CEDIA Agent — card layout mockup v3, Codex-faithful (1440x900)</title>
+<style>
+  :root{
+    --bg:#f5f5f6; --side:#f5f5f6; --center:#fbfbfc;
+    --ink:#1c1c1e; --soft:#8e8e93; --hair:#e4e4e7;
+    --pill:#ececef; --pill-on:#e2e2e6; --accent:#2778c1;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#3a3a3e;font-family:-apple-system,"SF Pro Text",sans-serif;color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:22px}
+  .toolbar{display:flex;gap:8px;margin-bottom:10px}
+  .toolbar button{font:inherit;font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #55555a;
+    background:#4a4a4f;color:#fff;cursor:pointer}
+  .toolbar button[aria-pressed="true"]{background:#0a84ff;border-color:#0a84ff}
+  .spec{color:#b0b0b5;font-size:12px;margin-bottom:12px;max-width:1123px;text-align:center}
+  .stage{width:1123px;height:702px;background:var(--bg);border-radius:14px;position:relative;overflow:hidden}
+  /* tab strip */
+  .tabs{height:40px;display:flex;align-items:center;padding:0 12px;gap:10px;border-bottom:1px solid var(--hair)}
+  .lights{display:flex;gap:7px}
+  .lights i{width:11px;height:11px;border-radius:50%}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .nav{color:var(--soft);font-size:13px;display:flex;gap:10px}
+  .tab{background:#ececef;border-radius:8px;font-size:12px;padding:6px 12px;display:flex;gap:8px;align-items:center}
+  .tab .plus{color:var(--soft)}
+  .tabtools{margin-left:auto;color:var(--soft);font-size:13px;display:flex;gap:10px}
+  .body{position:absolute;top:40px;bottom:0;left:0;right:0;display:flex}
+  /* left: docked flat, rail + panel seamless */
+  .left{width:262px;flex:none;display:flex;transition:width .3s cubic-bezier(.32,.72,0,1),opacity .3s}
+  .rail{width:44px;flex:none;display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:4px}
+  .rail .b{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#6e6e73}
+  .rail .b.on{background:var(--pill-on);color:var(--ink)}
+  .rail .b svg{width:16px;height:16px}
+  .rail .sp{flex:1}
+  .lpanel{flex:1;padding:8px 10px 10px;font-size:11px;overflow:hidden;position:relative}
+  .lpanel .brand{font-size:13px;font-weight:600;margin:2px 4px 10px;display:flex}
+  .lpanel .brand .ric{margin-left:auto;color:var(--soft)}
+  .lpanel .row{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:7px;white-space:nowrap;color:#3a3a3c}
+  .lpanel .row.sel{background:var(--pill-on)}
+  .lpanel .sec{font-size:10px;color:var(--soft);margin:10px 4px 4px}
+  .lpanel .child{padding-left:24px}
+  .lpanel .foot{position:absolute;bottom:10px;left:10px;font-size:11px;color:var(--soft)}
+  /* main flat */
+  .main{flex:1;min-width:0;border-left:1px solid var(--hair);display:flex;flex-direction:column;position:relative}
+  .mhead{height:36px;flex:none;display:flex;align-items:center;padding:0 16px;font-size:13px;font-weight:600}
+  .mhead .acts{margin-left:auto;display:flex;gap:6px;font-size:11px;font-weight:400;color:var(--soft)}
+  .mhead .pill{border:1px solid var(--hair);border-radius:6px;padding:3px 8px;background:#fff}
+  .convo{flex:1;padding:14px 20px;overflow:hidden}
+  .bub{background:#efeff1;border-radius:4px 12px 12px 12px;padding:8px 12px;font-size:12px;max-width:65%;margin-bottom:12px}
+  .aline{height:11px;border-radius:6px;background:#ececef;margin-bottom:9px}
+  .composer{width:330px;margin:0 auto 10px;background:#f1f1f3;border:1px solid var(--hair);
+    border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.10);padding:10px 12px}
+  .composer .ph{font-size:12px;color:var(--soft);margin-bottom:10px}
+  .composer .frow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--soft)}
+  .composer .full{color:#c4542a}
+  .composer .model{margin-left:auto;color:var(--ink)}
+  .composer .send{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px}
+  .status{height:19px;flex:none;border-top:1px solid var(--hair);display:flex;align-items:center;
+    padding:0 16px;font-size:10px;color:var(--soft);gap:12px}
+  /* right: floating card only */
+  .rightwrap{width:248px;flex:none;padding:9px 9px 9px 0;transition:width .3s cubic-bezier(.32,.72,0,1),opacity .3s,padding .3s}
+  .rightcard{background:#fff;border:1px solid var(--hair);border-radius:12px;height:100%;
+    box-shadow:0 4px 16px rgba(0,0,0,.08);display:flex;overflow:hidden}
+  .dock{flex:1;padding:12px 10px;font-size:11px;overflow:hidden}
+  .dock .proj{font-size:12px;color:var(--soft);margin-bottom:8px}
+  .dock .ch{display:flex;font-size:12px;font-weight:600;margin-bottom:4px}
+  .dock .ch .num{margin-left:auto;font-weight:400}
+  .dock .up{color:#1a7f37}.dock .dn{color:#c43d2b}
+  .dock .dl{font-size:10px;color:var(--soft);margin:10px 2px 6px}
+  .dock .f{padding:5px 6px;border-radius:6px;font-size:10px;color:#3a3a3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rrail{width:37px;flex:none;border-left:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:4px}
+  .rrail .b{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#6e6e73}
+  .rrail .b.on{background:var(--pill-on);color:var(--ink)}
+  .rrail .b svg{width:16px;height:16px}
+  .body.hide-left .left{width:44px}
+  .body.hide-left .lpanel{display:none}
+  .body.hide-right .rightwrap{width:46px}
+  .body.hide-right .dock{display:none}
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="tLeft" aria-pressed="false">Toggle sidebar</button>
+    <button id="tRight" aria-pressed="false">Toggle right card</button>
+  </div>
+  <div class="spec">1440x900 @0.78 &middot; tab strip 52 &middot; rail 56/icon 20 (changed — measured from Codex) &middot;
+    sidebar panel 280 &middot; right card 300 + margins &middot; radius 12 &middot; composer + right card float, sidebar docked flat, rails static on collapse &middot;
+    status bar kept &middot; motion 300ms</div>
+  <div class="stage">
+    <div class="tabs">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <span class="nav">‹&nbsp;&nbsp;›</span>
+      <span class="tab">Fix Codex-style panel layout</span>
+      <span class="nav">+</span>
+      <span class="tabtools">···&nbsp;&nbsp;☰&nbsp;&nbsp;⊞</span>
+    </div>
+    <div class="body" id="cards">
+      <div class="left">
+        <div class="rail">
+          <span class="b on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-7h-6v7H5a2 2 0 01-2-2z"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>
+          <span class="sp"></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12m0 0a3 3 0 003 3h12a3 3 0 003-3V9a3 3 0 00-3-3h-6l-2-2H9a3 3 0 00-3 3z"/></svg></span>
+        </div>
+        <div class="lpanel">
+          <div class="brand">Codex ▾ <span class="ric">🔔 ⌕</span></div>
+          <div class="row">✎ New chat</div>
+          <div class="row">◉ Your dot</div>
+          <div class="sec">Pinned</div>
+          <div class="row">Translate manga to English</div>
+          <div class="sec">Projects</div>
+          <div class="row sel">📁 cedia</div>
+          <div class="row sel child">Fix Codex-style panel layout</div>
+          <div class="row child">Find what pstack-claude is</div>
+          <div class="row child">Compare Zed and Zeron…</div>
+          <div class="foot">Recents ›</div>
+        </div>
+      </div>
+      <div class="main">
+        <div class="mhead">Fix Codex-style panel layout
+          <span class="acts"><span class="pill">Open in IDE</span><span class="pill">Environment</span></span>
+        </div>
+        <div class="convo">
+          <div class="bub">Make the cards like Codex.</div>
+          <div class="aline" style="width:92%"></div>
+          <div class="aline" style="width:85%"></div>
+          <div class="aline" style="width:60%"></div>
+        </div>
+        <div class="composer">
+          <div class="ph">Do anything</div>
+          <div class="frow"><span>+</span><span class="full">Full access</span>
+            <span class="model">Muse Spark 1.3 …</span><span class="send">↑</span></div>
+        </div>
+        <div class="status"><span>host · live</span><span>model</span><span>session</span><span>branch main</span></div>
+      </div>
+      <div class="rightwrap"><div class="rightcard">
+        <div class="dock">
+          <div class="proj">cedia</div>
+          <div class="ch">Changes <span class="num"><span class="up">+19,937</span> <span class="dn">-625</span></span></div>
+          <div class="dl">Subagents ›</div>
+          <div class="dl">Sources</div>
+          <div class="f">Screenshot 2569-10-04 at 11.40.48</div>
+          <div class="f">Screenshot 2569-10-04 at 11.11.45</div>
+          <div class="f">View all</div>
+        </div>
+        <div class="rrail">
+          <span class="b on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v14a2 2 0 002 2h3m8-18h3a2 2 0 012 2v14a2 2 0 01-2 2h-3m-8-6h8"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg></span>
+          <span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></span>
+        </div>
+      </div></div>
+    </div>
+  </div>
+<script>
+  const cards = document.getElementById('cards');
+  const tL = document.getElementById('tLeft'), tR = document.getElementById('tRight');
+  tL.onclick = () => { const v = cards.classList.toggle('hide-left'); tL.setAttribute('aria-pressed', v); };
+  tR.onclick = () => { const v = cards.classList.toggle('hide-right'); tR.setAttribute('aria-pressed', v); };
+</script>
+</body>
+</html>

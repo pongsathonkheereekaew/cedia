@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">CEDIA three currents concept</title>
+  <g fill="none" stroke="#111" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M49 65c28-24 56-29 79-10 24 20 50 20 79-4"/>
+    <path d="M49 128c28-24 56-29 79-10 24 20 50 20 79-4"/>
+    <path d="M49 191c28-24 56-29 79-10 24 20 50 20 79-4"/>
+  </g>
+</svg>

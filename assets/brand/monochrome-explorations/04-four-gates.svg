@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">CEDIA four gates concept</title>
+  <g fill="none" stroke="#111" stroke-width="23" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M43 95V62c0-11 8-19 19-19h33"/>
+    <path d="M161 43h33c11 0 19 8 19 19v33"/>
+    <path d="M213 161v33c0 11-8 19-19 19h-33"/>
+    <path d="M95 213H62c-11 0-19-8-19-19v-33"/>
+    <path d="M92 128h72"/>
+    <path d="m142 106 22 22-22 22"/>
+  </g>
+</svg>
