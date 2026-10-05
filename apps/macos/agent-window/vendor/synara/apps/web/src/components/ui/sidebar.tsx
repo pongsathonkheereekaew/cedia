@@ -25,6 +25,16 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing(3)))";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
+/**
+ * Cedia icon rail (item 71; owner decision 2026-10-02). Collapsed metrics are
+ * measured against the Codex reference (47px rail, ~40px icon pitch): the rail
+ * reuses the existing 3rem icon token, and the snap threshold mirrors the
+ * approved drag mock (full 264px, snap midpoint, 48px rail).
+ */
+const SIDEBAR_ICON_RAIL_PX = 48;
+const SIDEBAR_RAIL_SNAP_PX = 156;
+/** Minimum rightward drag from the collapsed rail that reopens the sidebar. */
+const SIDEBAR_RAIL_REOPEN_PX = 24;
 
 /**
  * Soft "drawer" easing for the offcanvas open/close slide, overriding the shell's
@@ -34,7 +44,7 @@ const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
  * Shared by the thread sidebar (left) and the right dock so the two slides match.
  */
 const SIDEBAR_OFFCANVAS_MOTION_CLASS =
-  "will-change-[transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
+  "will-change-[transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:duration-0!";
 
 /**
  * Suppresses the slide entirely — for first mount or a reposition/remount where
@@ -58,6 +68,24 @@ type SidebarResizableOptions = {
   maxWidth?: number;
   minWidth?: number;
   onResize?: (width: number) => void;
+  /**
+   * Create a drag-local width guard.  The guard is created once at pointer-down
+   * and evaluated without re-measuring the DOM on every pointermove.  Heavy
+   * layout probes belong here rather than in `shouldAcceptWidth`, which is the
+   * legacy per-frame hook.
+   */
+  beginResize?: (context: {
+    currentWidth: number;
+    rail: HTMLButtonElement;
+    side: "left" | "right";
+    sidebarRoot: HTMLElement;
+    wrapper: HTMLElement;
+  }) => {
+    shouldAcceptWidth: (nextWidth: number) => boolean;
+    /** Clamp an over-wide candidate to the nearest readable width, if known. */
+    clampWidth?: (nextWidth: number) => number;
+    dispose?: () => void;
+  } | null;
   shouldAcceptWidth?: (context: {
     currentWidth: number;
     nextWidth: number;
@@ -73,6 +101,7 @@ type SidebarResolvedResizableOptions = {
   maxWidth: number;
   minWidth: number;
   onResize?: (width: number) => void;
+  beginResize?: SidebarResizableOptions["beginResize"];
   shouldAcceptWidth?: (context: {
     currentWidth: number;
     nextWidth: number;
@@ -87,6 +116,8 @@ type SidebarResolvedResizableOptions = {
 type SidebarInstanceContextProps = {
   resizable: SidebarResolvedResizableOptions | null;
   side: "left" | "right";
+  collapsible: "offcanvas" | "icon" | "none";
+  reopenOnDrag?: boolean;
 };
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
@@ -198,6 +229,7 @@ function resolveSidebarResizable(
     minWidth: options.minWidth ?? SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH,
     storageKey: options.storageKey ?? null,
     ...(options.onResize ? { onResize: options.onResize } : {}),
+    ...(options.beginResize ? { beginResize: options.beginResize } : {}),
     ...(options.shouldAcceptWidth ? { shouldAcceptWidth: options.shouldAcceptWidth } : {}),
   };
 }
@@ -211,11 +243,13 @@ function SidebarInstanceProvider({
   side,
   resizable,
   collapsible: collapsibleProp,
+  reopenOnDrag,
   children,
 }: {
   side: "left" | "right";
   resizable: boolean | SidebarResizableOptions;
   collapsible?: "offcanvas" | "icon" | "none";
+  reopenOnDrag?: boolean;
   children: React.ReactNode;
 }) {
   const collapsible = collapsibleProp ?? "offcanvas";
@@ -225,8 +259,13 @@ function SidebarInstanceProvider({
     [collapsible, isMobile, resizable],
   );
   const value = React.useMemo<SidebarInstanceContextProps>(
-    () => ({ resizable: resolvedResizable, side }),
-    [resolvedResizable, side],
+    () => ({
+      collapsible,
+      resizable: resolvedResizable,
+      side,
+      ...(reopenOnDrag ? { reopenOnDrag: true as const } : {}),
+    }),
+    [collapsible, reopenOnDrag, resolvedResizable, side],
   );
   return (
     <SidebarInstanceContext.Provider value={value}>{children}</SidebarInstanceContext.Provider>
@@ -238,6 +277,7 @@ function Sidebar({
   variant: variantProp,
   collapsible: collapsibleProp,
   resizable: resizableProp,
+  reopenOnDrag: reopenOnDragProp,
   className,
   gapClassName,
   innerClassName,
@@ -252,6 +292,8 @@ function Sidebar({
   gapClassName?: string;
   innerClassName?: string;
   transparentSurface?: boolean;
+  /** Allow a closed offcanvas panel to reopen on an inward drag. */
+  reopenOnDrag?: boolean;
 }) {
   const side = sideProp ?? "left";
   const variant = variantProp ?? "sidebar";
@@ -264,8 +306,13 @@ function Sidebar({
     [collapsible, isMobile, resizable],
   );
   const instanceContextValue = React.useMemo<SidebarInstanceContextProps>(
-    () => ({ side, resizable: resolvedResizable }),
-    [resolvedResizable, side],
+    () => ({
+      collapsible,
+      side,
+      resizable: resolvedResizable,
+      ...(reopenOnDragProp ? { reopenOnDrag: true as const } : {}),
+    }),
+    [collapsible, reopenOnDragProp, resolvedResizable, side],
   );
 
   if (collapsible === "none") {
@@ -320,7 +367,16 @@ function Sidebar({
   return (
     <SidebarInstanceContext.Provider value={instanceContextValue}>
       <div
-        className="group peer hidden text-sidebar-foreground md:block"
+        className={cn(
+          "group peer hidden text-sidebar-foreground md:block",
+          // Cedia card row: no display:none on collapse. The gap + container
+          // widths animate to 0 (left overrides the icon widths in _chat.tsx,
+          // right uses offcanvas w-0), so open/close slides instead of snapping.
+          // A zero-width flex item still takes both row gaps — pull 4px back on
+          // the leading side so the collapsed seam is one gap, not two. Icon
+          // mode only: the offcanvas dock keeps its own outlet geometry.
+          state === "collapsed" && collapsible === "icon" && "-ml-1",
+        )}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-side={side}
         data-slot="sidebar"
@@ -336,27 +392,32 @@ function Sidebar({
             variant === "floating" || variant === "inset"
               ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
               : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
+            // Agent-window cutover: the 48px rail lives outside <Sidebar> (shell-mounted),
+            // so the gap reserves only the thread-panel width in both states.
             gapClassName,
           )}
           data-slot="sidebar-gap"
         />
         <div
           className={cn(
-            // The offcanvas slide animates transform (compositor) instead of left/right
-            // (layout): a fixed panel relayouts its whole subtree per frame otherwise,
-            // which read as a janky close on heavy sidebar content. The gap still
-            // animates width — reserving layout is its job — but its subtree is empty.
-            "fixed inset-y-0 z-0 hidden h-svh w-(--sidebar-width) transition-[left,right,width,transform] duration-200 ease-linear md:flex",
-            side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:-translate-x-full"
-              : "right-0 group-data-[collapsible=offcanvas]:translate-x-full",
-            // Adjust the padding for floating and inset variants.
+            // Cedia card row: the left thread card is an in-flow flex item, NOT
+            // a viewport overlay. The old `fixed left-0 h-svh` painted over the
+            // shell-mounted 48px rail and used different bottom-edge math than
+            // the in-flow center card. In-flow + same-row top/bottom as the
+            // other cards; the gap div still reserves width + animates close.
+            // Clip horizontally so the open→close width slide reads as motion
+            // (content slides under the shrinking edge instead of squashing).
+            "relative z-[1] hidden h-full min-h-0 w-(--sidebar-width) shrink-0 overflow-x-clip transition-[width] duration-200 ease-linear md:flex",
+            // Cedia card row: no display:none on collapse — a collapsed offcanvas
+            // panel rests at w-0 (width transition) with the dock's clip-path
+            // reveal, so the row slides instead of snapping.
             variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
+              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
               : cn(
                   "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
-                  // Skip container border when innerClassName provides its own
+                  // Skip container border when innerClassName provides its own.
                   !transparentSurface &&
+                    !(collapsible === "icon" && state === "collapsed") &&
                     "group-data-[side=left]:border-r group-data-[side=right]:border-l",
                 ),
             className,
@@ -368,7 +429,17 @@ function Sidebar({
               fixed positioning, width transitions, and the resize rail hit area. */}
           <div
             className={cn(
-              "relative z-0 flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5",
+              // Sizing is scoped by variant in JS (not by utility order): the
+              // floating surface is inset-anchored (h/w auto), every other
+              // variant fills the container (h/w full). The old shared
+              // `h-full w-full` base plus floating `h-auto w-auto` overrides
+              // left the winner to CSS source order — nondeterministic.
+              // Cedia card row: clip the inner card too so a w-0 collapse hides
+              // the panel content instead of spilling it into the 4px seam.
+              "relative z-0 flex flex-col overflow-hidden group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5",
+              variant === "floating"
+                ? "m-0 h-full w-full"
+                : "h-full w-full",
               !transparentSurface && "bg-sidebar",
               innerClassName,
             )}
@@ -389,10 +460,13 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
 
   return (
     <Button
+      // Cedia: no pressed-fill behind the toggle. Upstream paints the open
+      // state with the secondary-button background; in this shell that reads
+      // as a stray grey box, and the glyph already carries the state (the
+      // filled panel inside SidebarToggleIcon). Keep the brighter ink only.
       className={cn(
         "size-7 transition-colors duration-200 motion-reduce:transition-none",
-        isOpen &&
-          "bg-[var(--color-background-button-secondary)] text-[var(--color-text-foreground)] hover:bg-[var(--color-background-button-secondary-hover)]",
+        isOpen && "text-[var(--color-text-foreground)]",
         className,
       )}
       data-sidebar="trigger"
@@ -444,19 +518,23 @@ function clampSidebarWidth(width: number, options: SidebarResolvedResizableOptio
 
 function SidebarRail({
   placement: placementProp,
+  reopenOnDrag = false,
   className,
   onClick,
   onPointerCancel,
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onLostPointerCapture,
   ...props
 }: React.ComponentProps<"button"> & {
   /** `content-seam` sits on the chat column edge above the card; `sidebar-shell` stays on the sidebar container. */
   placement?: "sidebar-shell" | "content-seam";
+  /** Allow a detached seam to reopen an offcanvas panel on inward drag. */
+  reopenOnDrag?: boolean;
 }) {
   const placement = placementProp ?? "sidebar-shell";
-  const { open, toggleSidebar } = useSidebar();
+  const { open, setOpen, toggleSidebar } = useSidebar();
   const sidebarInstance = React.useContext(SidebarInstanceContext);
   const side = sidebarInstance?.side ?? "left";
   const isContentSeam = placement === "content-seam";
@@ -466,21 +544,36 @@ function SidebarRail({
     moved: boolean;
     pointerId: number;
     pendingWidth: number;
+    startCollapsed: boolean;
     rail: HTMLButtonElement;
     rafId: number | null;
     sidebarRoot: HTMLElement;
     side: "left" | "right";
     startWidth: number;
     startX: number;
-    transitionTargets: HTMLElement[];
+    transitionTargets: Array<{
+      element: HTMLElement;
+      duration: { priority: string; value: string };
+      delay: { priority: string; value: string };
+    }>;
     width: number;
     wrapper: HTMLElement;
+    bodyCursor: { priority: string; value: string };
+    bodyUserSelect: { priority: string; value: string };
+    acceptWidth: (nextWidth: number) => boolean;
+    clampWidth?: (nextWidth: number) => number;
+    disposeResize?: () => void;
   } | null>(null);
   const resolvedResizable = sidebarInstance?.resizable ?? null;
-  const canResize = resolvedResizable !== null && open;
+  // Cedia icon rail (item 71): in icon mode the rail also accepts drags while
+  // collapsed, so the 48px rail can be dragged back open. The right dock
+  // opts in via reopenOnDrag (Sidebar `reopenOnDrag` prop) for the same
+  // closed-state behavior on its offcanvas shell.
+  const iconSnap = (sidebarInstance?.collapsible ?? "offcanvas") === "icon";
+  const canReopenOnDrag = iconSnap || reopenOnDrag || sidebarInstance?.reopenOnDrag === true;
+  const canResize = resolvedResizable !== null && (open || canReopenOnDrag);
   const railLabel = canResize ? "Resize Sidebar" : "Toggle Sidebar";
   const railTitle = canResize ? "Drag to resize sidebar" : "Toggle Sidebar";
-
   const stopResize = React.useCallback(
     (pointerId: number) => {
       const resizeState = resizeStateRef.current;
@@ -490,28 +583,57 @@ function SidebarRail({
       if (resizeState.rafId !== null) {
         window.cancelAnimationFrame(resizeState.rafId);
       }
-      resizeState.transitionTargets.forEach((element) => {
-        element.style.removeProperty("transition-duration");
+      resizeState.transitionTargets.forEach(({ element, duration, delay }) => {
+        if (duration.value) {
+          element.style.setProperty("transition-duration", duration.value, duration.priority);
+        } else {
+          element.style.removeProperty("transition-duration");
+        }
+        if (delay.value) {
+          element.style.setProperty("transition-delay", delay.value, delay.priority);
+        } else {
+          element.style.removeProperty("transition-delay");
+        }
       });
-      if (resolvedResizable?.storageKey && typeof window !== "undefined") {
+      resizeState.disposeResize?.();
+      // Cedia icon rail: a drag that started collapsed changes no width, so there
+      // is nothing to persist (the snap path below persists the restored width).
+      if (resizeState.moved && !resizeState.startCollapsed && resolvedResizable?.storageKey && typeof window !== "undefined") {
         setLocalStorageItem(resolvedResizable.storageKey, resizeState.width, Schema.Finite);
       }
-      resolvedResizable?.onResize?.(resizeState.width);
+      if (resizeState.moved && !resizeState.startCollapsed) {
+        resolvedResizable?.onResize?.(resizeState.width);
+      }
       resizeStateRef.current = null;
       if (resizeState.rail.hasPointerCapture(pointerId)) {
         resizeState.rail.releasePointerCapture(pointerId);
       }
-      document.body.style.removeProperty("cursor");
-      document.body.style.removeProperty("user-select");
+      const bodyStyle = document.body.style;
+      if (resizeState.bodyCursor.value) {
+        bodyStyle.setProperty("cursor", resizeState.bodyCursor.value, resizeState.bodyCursor.priority);
+      } else {
+        bodyStyle.removeProperty("cursor");
+      }
+      if (resizeState.bodyUserSelect.value) {
+        bodyStyle.setProperty("user-select", resizeState.bodyUserSelect.value, resizeState.bodyUserSelect.priority);
+      } else {
+        bodyStyle.removeProperty("user-select");
+      }
     },
     [resolvedResizable],
   );
+  // The resolved options object may be recreated by a parent render. Keep the
+  // unmount cleanup pointed at the latest callback without making the cleanup
+  // effect itself tear down an active drag on every render.
+  const stopResizeRef = React.useRef(stopResize);
+  stopResizeRef.current = stopResize;
 
   const handlePointerDown = React.useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       onPointerDown?.(event);
       if (event.defaultPrevented) return;
-      if (!resolvedResizable || !open || event.button !== 0) return;
+      if (!resolvedResizable || event.button !== 0 || (!open && !canReopenOnDrag)) return;
+      if (resizeStateRef.current) return;
 
       const wrapper = event.currentTarget.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
       const sidebarRoot =
@@ -529,18 +651,58 @@ function SidebarRail({
         return;
       }
 
-      const startWidth = sidebarContainer.getBoundingClientRect().width;
+      // Icon-mode containers include the persistent rail; --sidebar-width
+      // stores only the adjacent panel. Counting the rail here made every
+      // pointer-down grow the panel by another 48px, even on a plain click.
+      const startWidth = sidebarContainer.getBoundingClientRect().width -
+        (iconSnap && open ? SIDEBAR_ICON_RAIL_PX : 0);
       const initialWidth = clampSidebarWidth(startWidth, resolvedResizable);
+      const bodyStyle = document.body.style;
       const transitionTargets = [
         sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-gap']"),
         sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-container']"),
-      ].filter((element): element is HTMLElement => element !== null);
-      transitionTargets.forEach((element) => {
-        element.style.setProperty("transition-duration", "0ms");
+      ]
+        .filter((element): element is HTMLElement => element !== null)
+        .map((element) => ({
+          element,
+          duration: {
+            priority: element.style.getPropertyPriority("transition-duration"),
+            value: element.style.getPropertyValue("transition-duration"),
+          },
+          delay: {
+            priority: element.style.getPropertyPriority("transition-delay"),
+            value: element.style.getPropertyValue("transition-delay"),
+          },
+        }));
+      transitionTargets.forEach(({ element }) => {
+        // A width transition is useful for open/close but makes a pointer drag
+        // chase the previous frame.  Keep the override important because the
+        // Cedia dock applies an important transition-property utility.
+        element.style.setProperty("transition-duration", "0ms", "important");
+        element.style.setProperty("transition-delay", "0ms", "important");
       });
 
       event.preventDefault();
       event.stopPropagation();
+      const sideForResize = sidebarInstance?.side ?? "left";
+      const resizeSession = resolvedResizable.beginResize?.({
+        currentWidth: initialWidth,
+        rail: event.currentTarget,
+        side: sideForResize,
+        sidebarRoot,
+        wrapper,
+      });
+      const acceptWidth = resizeSession?.shouldAcceptWidth
+        ? resizeSession.shouldAcceptWidth
+        : (nextWidth: number) =>
+            resolvedResizable.shouldAcceptWidth?.({
+              currentWidth: initialWidth,
+              nextWidth,
+              rail: event.currentTarget,
+              side: sideForResize,
+              sidebarRoot,
+              wrapper,
+            }) ?? true;
       resizeStateRef.current = {
         moved: false,
         pointerId: event.pointerId,
@@ -548,19 +710,34 @@ function SidebarRail({
         rail: event.currentTarget,
         rafId: null,
         sidebarRoot,
-        side: sidebarInstance?.side ?? "left",
+        side: sideForResize,
+        startCollapsed: !open,
         startWidth: initialWidth,
         startX: event.clientX,
         transitionTargets,
         width: initialWidth,
         wrapper,
+        bodyCursor: {
+          priority: bodyStyle.getPropertyPriority("cursor"),
+          value: bodyStyle.getPropertyValue("cursor"),
+        },
+        bodyUserSelect: {
+          priority: bodyStyle.getPropertyPriority("user-select"),
+          value: bodyStyle.getPropertyValue("user-select"),
+        },
+        acceptWidth,
+        ...(resizeSession?.clampWidth
+          ? { clampWidth: resizeSession.clampWidth }
+          : {}),
+        ...(resizeSession?.dispose
+          ? { disposeResize: resizeSession.dispose }
+          : {}),
       };
-      wrapper.style.setProperty("--sidebar-width", `${initialWidth}px`);
       event.currentTarget.setPointerCapture(event.pointerId);
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     },
-    [onPointerDown, open, resolvedResizable, sidebarInstance?.side],
+    [canReopenOnDrag, iconSnap, onPointerDown, open, resolvedResizable, sidebarInstance?.side],
   );
 
   const handlePointerMove = React.useCallback(
@@ -578,9 +755,17 @@ function SidebarRail({
       if (Math.abs(delta) > 2) {
         resizeState.moved = true;
       }
+      if (!resizeState.moved) return;
+      // In icon mode the drag may travel down to the rail itself; otherwise the
+      // full-sidebar minimum would pin the pointer at 208px and the snap below
+      // could never trigger.
+      const effectiveBounds =
+        iconSnap && resolvedResizable.minWidth > SIDEBAR_ICON_RAIL_PX
+          ? { ...resolvedResizable, minWidth: SIDEBAR_ICON_RAIL_PX }
+          : resolvedResizable;
       resizeState.pendingWidth = clampSidebarWidth(
         resizeState.startWidth + delta,
-        resolvedResizable,
+        effectiveBounds,
       );
       if (resizeState.rafId !== null) {
         return;
@@ -588,24 +773,22 @@ function SidebarRail({
 
       resizeState.rafId = window.requestAnimationFrame(() => {
         const activeResizeState = resizeStateRef.current;
-        if (!activeResizeState || !resolvedResizable) return;
+        if (!activeResizeState) return;
 
         activeResizeState.rafId = null;
-        const nextWidth = activeResizeState.pendingWidth;
-        const accepted =
-          resolvedResizable.shouldAcceptWidth?.({
-            currentWidth: activeResizeState.width,
-            nextWidth,
-            rail: activeResizeState.rail,
-            side: activeResizeState.side,
-            sidebarRoot: activeResizeState.sidebarRoot,
-            wrapper: activeResizeState.wrapper,
-          }) ?? true;
+        const nextWidth =
+          activeResizeState.clampWidth?.(activeResizeState.pendingWidth) ??
+          activeResizeState.pendingWidth;
+        const accepted = activeResizeState.acceptWidth(nextWidth);
         if (!accepted) {
           return;
         }
 
-        activeResizeState.wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+        // Cedia icon rail: a drag that started from the collapsed rail only
+        // decides reopen on release; never move the full-width var under it.
+        if (!activeResizeState.startCollapsed) {
+          activeResizeState.wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+        }
         activeResizeState.width = nextWidth;
       });
     },
@@ -619,9 +802,52 @@ function SidebarRail({
 
       event.preventDefault();
       suppressClickRef.current = resizeState.moved;
+      const endDelta =
+        resizeState.side === "right" ? resizeState.startX - event.clientX : event.clientX - resizeState.startX;
+      // Pointer-up can arrive before the last queued animation frame. Commit
+      // that final coordinate synchronously so persistence never trails the
+      // divider and the panel does not snap back one frame on release.
+      if (resizeState.rafId !== null) {
+        window.cancelAnimationFrame(resizeState.rafId);
+        resizeState.rafId = null;
+      }
+      const effectiveBounds =
+        iconSnap && resolvedResizable?.minWidth !== undefined &&
+        resolvedResizable.minWidth > SIDEBAR_ICON_RAIL_PX
+          ? { ...resolvedResizable, minWidth: SIDEBAR_ICON_RAIL_PX }
+          : resolvedResizable;
+      const eventWidth = effectiveBounds
+        ? clampSidebarWidth(resizeState.startWidth + endDelta, effectiveBounds)
+        : resizeState.pendingWidth;
+      const finalWidth =
+        resizeState.clampWidth?.(eventWidth) ?? eventWidth;
+      if (
+        resolvedResizable &&
+        resizeState.moved &&
+        resizeState.acceptWidth(finalWidth) &&
+        !resizeState.startCollapsed
+      ) {
+        resizeState.wrapper.style.setProperty("--sidebar-width", `${finalWidth}px`);
+        resizeState.width = finalWidth;
+      }
+      const wasCollapsed = resizeState.startCollapsed;
       stopResize(event.pointerId);
+      // Cedia icon rail (item 71): snap shut or back open on release. A plain
+      // click (no move) falls through to the click-to-toggle path unchanged.
+      if (!canReopenOnDrag) return;
+      if (iconSnap && !wasCollapsed && resizeState.moved && finalWidth <= SIDEBAR_RAIL_SNAP_PX) {
+        // Collapse to the icon rail and restore the pre-drag full width (also
+        // persisted) so reopening returns to the full sidebar.
+        resizeState.wrapper.style.setProperty("--sidebar-width", resizeState.startWidth + "px");
+        if (resolvedResizable?.storageKey && typeof window !== "undefined") {
+          setLocalStorageItem(resolvedResizable.storageKey, resizeState.startWidth, Schema.Finite);
+        }
+        setOpen(false);
+      } else if (wasCollapsed && endDelta >= SIDEBAR_RAIL_REOPEN_PX) {
+        setOpen(true);
+      }
     },
-    [stopResize],
+    [canReopenOnDrag, iconSnap, resolvedResizable, setOpen, stopResize],
   );
 
   const handlePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -636,6 +862,15 @@ function SidebarRail({
     endResizeInteraction(event);
   };
 
+  const handleLostPointerCapture = (event: React.PointerEvent<HTMLButtonElement>) => {
+    onLostPointerCapture?.(event);
+    if (event.defaultPrevented) return;
+    const resizeState = resizeStateRef.current;
+    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+    suppressClickRef.current = resizeState.moved;
+    stopResize(event.pointerId);
+  };
+
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     onClick?.(event);
     if (event.defaultPrevented) return;
@@ -644,7 +879,12 @@ function SidebarRail({
       event.preventDefault();
       return;
     }
-    if (resolvedResizable && open) {
+    // A resize rail is a drag handle, not a toggle: clicks on it must fall
+    // through to whatever is beside it (the tool rail icons). The old code
+    // called toggleSidebar() here, so any click that landed on the rail's
+    // 16px strip toggled the dock instead of reaching the tool icon beneath
+    // ("tools dead": rail icons unclickable while the dock is open).
+    if (resolvedResizable) {
       event.preventDefault();
       return;
     }
@@ -653,6 +893,13 @@ function SidebarRail({
 
   React.useEffect(() => {
     if (!resolvedResizable?.storageKey || typeof window === "undefined") return;
+    // A parent rerender recreates the inline `resizable` options object and
+    // would otherwise re-run this restore effect during an active drag. The
+    // persisted value is the width from the previous completed drag, so
+    // applying it here can snap the divider back mid-gesture and make the next
+    // sequential resize appear frozen. The active pointer owns the inline CSS
+    // width until pointer-up persists its final coordinate.
+    if (resizeStateRef.current) return;
     const rail = railRef.current;
     if (!rail) return;
     const wrapper = rail.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
@@ -666,16 +913,41 @@ function SidebarRail({
   }, [resolvedResizable]);
 
   React.useEffect(() => {
+    if (open) return;
+    const resizeState = resizeStateRef.current;
+    if (resizeState) {
+      suppressClickRef.current = resizeState.moved;
+      stopResize(resizeState.pointerId);
+    }
+  }, [open, stopResize]);
+
+  React.useEffect(() => {
+    const stopActiveResize = () => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) return;
+      suppressClickRef.current = resizeState.moved;
+      stopResize(resizeState.pointerId);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        stopActiveResize();
+      }
+    };
+    window.addEventListener("blur", stopActiveResize);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", stopActiveResize);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [stopResize]);
+
+  React.useEffect(() => {
     return () => {
       const resizeState = resizeStateRef.current;
-      if (resizeState?.rafId != null) {
-        window.cancelAnimationFrame(resizeState.rafId);
+      if (resizeState) {
+        suppressClickRef.current = resizeState.moved;
+        stopResizeRef.current(resizeState.pointerId);
       }
-      resizeState?.transitionTargets.forEach((element) => {
-        element.style.removeProperty("transition-duration");
-      });
-      document.body.style.removeProperty("cursor");
-      document.body.style.removeProperty("user-select");
     };
   }, []);
 
@@ -692,13 +964,16 @@ function SidebarRail({
                  never match (no [data-side] ancestor). Set the cursor directly:
                  `col-resize` (the ↔ handle) when resizing is available — matching the
                  body cursor used during the drag — else `pointer` for the toggle. */
-              "absolute inset-y-0 z-[25] hidden w-4 sm:flex",
+              "absolute inset-y-0 z-20 hidden w-4 sm:flex",
               canResize ? "cursor-col-resize" : "cursor-pointer",
-              side === "left" ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2",
+              // The center card clips its children at the border. Keep the
+              // full hit target inside that clip so the visible seam receives
+              // pointer-down instead of selecting conversation text.
+              side === "left" ? "left-0" : "right-0",
             ]
           : [
               /* Legacy: rail anchored to the sidebar shell (right dock, etc.). */
-              "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
+              "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-[1] hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
               "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
               "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
               "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full",
@@ -711,6 +986,7 @@ function SidebarRail({
       data-placement={placement}
       data-slot="sidebar-rail"
       onClick={handleClick}
+      onLostPointerCapture={handleLostPointerCapture}
       onPointerCancel={handlePointerCancel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
